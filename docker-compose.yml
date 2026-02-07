@@ -1,0 +1,42 @@
+version: '3.8'
+
+services:
+  trading-system:
+    build: .
+    container_name: paravant-trading
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./data:/app/data
+      - ./logs:/app/logs
+      - ./config:/app/config:ro
+    env_file:
+      - .env
+    environment:
+      - DATABASE_URL=sqlite:///data/trading.db
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+  # Optional: For development with hot reload
+  trading-system-dev:
+    build: .
+    container_name: paravant-trading-dev
+    ports:
+      - "8001:8000"
+    volumes:
+      - .:/app
+      - ./data:/app/data
+      - ./logs:/app/logs
+    env_file:
+      - .env
+    environment:
+      - DATABASE_URL=sqlite:///data/trading.db
+      - ENVIRONMENT=development
+    command: uvicorn src.api.main:app --host 0.0.0.0 --port 8000 --reload
+    profiles:
+      - dev
