@@ -1,0 +1,121 @@
+# RSI + Bollinger Bands Mean Reversion Strategy Template
+# Contrarian strategy for ranging markets
+#
+# Entry Logic: RSI oversold/overbought + BB touch
+# Exit Logic: RSI mean revert or BB middle band
+
+id: "rsi_bb_mean_reversion"
+name: "RSI + Bollinger Bands Mean Reversion"
+version: "1.0.0"
+type: "mean_reversion"
+description: >
+  Mean reversion strategy that combines RSI extremes with Bollinger
+  Band touches. Enters long when RSI is oversold and price touches
+  the lower BB. Exits when RSI returns to neutral or price reaches
+  BB middle band. Designed for ranging, consolidating markets with
+  low trend strength. Works best when ADX < 25.
+
+entry_logic: >
+  LONG: RSI < oversold_level AND price <= BB_lower + entry_buffer.
+  SHORT: RSI > overbought_level AND price >= BB_upper - entry_buffer.
+  Additional filter: ADX < adx_threshold (no strong trend).
+
+exit_logic: >
+  CLOSE LONG: RSI > rsi_exit_long OR price >= BB_middle.
+  CLOSE SHORT: RSI < rsi_exit_short OR price <= BB_middle.
+  Stop loss: Fixed percentage stop at stop_loss_pct from entry.
+
+parameters:
+  - name: "rsi_period"
+    type: "int"
+    min: 7
+    max: 21
+    default: 14
+    step: 1
+    description: "RSI calculation period"
+
+  - name: "rsi_oversold"
+    type: "float"
+    min: 15.0
+    max: 35.0
+    default: 25.0
+    step: 5.0
+    description: "RSI oversold threshold for long entry"
+
+  - name: "rsi_overbought"
+    type: "float"
+    min: 65.0
+    max: 85.0
+    default: 75.0
+    step: 5.0
+    description: "RSI overbought threshold for short entry"
+
+  - name: "rsi_exit_long"
+    type: "float"
+    min: 45.0
+    max: 60.0
+    default: 50.0
+    step: 5.0
+    description: "RSI level to exit long positions"
+
+  - name: "rsi_exit_short"
+    type: "float"
+    min: 40.0
+    max: 55.0
+    default: 50.0
+    step: 5.0
+    description: "RSI level to exit short positions"
+
+  - name: "bb_period"
+    type: "int"
+    min: 10
+    max: 30
+    default: 20
+    step: 5
+    description: "Bollinger Bands period"
+
+  - name: "bb_std_dev"
+    type: "float"
+    min: 1.5
+    max: 3.0
+    default: 2.0
+    step: 0.5
+    description: "Bollinger Bands standard deviation multiplier"
+
+  - name: "adx_threshold"
+    type: "float"
+    min: 20.0
+    max: 35.0
+    default: 25.0
+    step: 5.0
+    description: "Maximum ADX to allow entry (no strong trend)"
+
+  - name: "stop_loss_pct"
+    type: "float"
+    min: 1.0
+    max: 5.0
+    default: 2.5
+    step: 0.5
+    description: "Fixed stop loss percentage from entry"
+
+expected_performance:
+  min_sharpe: 1.1
+  max_drawdown_pct: 10.0
+  min_win_rate_pct: 55.0
+
+recommended_for:
+  - "ranging"
+
+not_recommended_for:
+  - "trending_up"
+  - "trending_down"
+  - "volatile"
+
+symbols:
+  - "BTCUSDT"
+  - "ETHUSDT"
+  - "BNBUSDT"
+
+timeframes:
+  - "15m"
+  - "1h"

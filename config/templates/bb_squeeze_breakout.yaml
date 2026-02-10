@@ -1,0 +1,112 @@
+# Bollinger Band Squeeze Breakout Strategy Template
+# Captures volatility expansion after periods of consolidation
+#
+# Entry Logic: BB squeeze detection followed by breakout
+# Exit Logic: BB band touch or momentum reversal
+
+id: "bb_squeeze_breakout"
+name: "Bollinger Band Squeeze Breakout"
+version: "1.0.0"
+type: "volatility_breakout"
+description: >
+  Identifies periods of low volatility (Bollinger Band squeeze) and
+  enters positions when price breaks out of the squeeze. Uses bandwidth
+  contraction as a setup signal and directional breakout as the trigger.
+  Designed for markets that cycle between consolidation and expansion.
+
+entry_logic: >
+  SETUP: BB bandwidth falls below squeeze_threshold (squeeze detected).
+  LONG: Price closes above upper BB after squeeze AND MACD histogram positive.
+  SHORT: Price closes below lower BB after squeeze AND MACD histogram negative.
+  Filter: Volume must be above volume_threshold * average volume.
+
+exit_logic: >
+  CLOSE LONG: Price touches opposite (lower) BB OR momentum reversal.
+  CLOSE SHORT: Price touches opposite (upper) BB OR momentum reversal.
+  Stop loss: Middle BB (SMA) as initial stop, trail to entry after 1R.
+
+parameters:
+  - name: "bb_period"
+    type: "int"
+    min: 10
+    max: 50
+    default: 20
+    step: 1
+    description: "Bollinger Bands lookback period"
+
+  - name: "bb_std_dev"
+    type: "float"
+    min: 1.0
+    max: 4.0
+    default: 2.0
+    step: 0.5
+    description: "Bollinger Bands standard deviation multiplier"
+
+  - name: "squeeze_threshold"
+    type: "float"
+    min: 0.01
+    max: 0.10
+    default: 0.04
+    step: 0.01
+    description: "BB bandwidth threshold to detect squeeze"
+
+  - name: "squeeze_lookback"
+    type: "int"
+    min: 5
+    max: 30
+    default: 10
+    step: 1
+    description: "Periods to look back for squeeze detection"
+
+  - name: "macd_fast"
+    type: "int"
+    min: 8
+    max: 16
+    default: 12
+    step: 1
+    description: "MACD fast EMA period"
+
+  - name: "macd_slow"
+    type: "int"
+    min: 20
+    max: 30
+    default: 26
+    step: 1
+    description: "MACD slow EMA period"
+
+  - name: "macd_signal"
+    type: "int"
+    min: 5
+    max: 15
+    default: 9
+    step: 1
+    description: "MACD signal line period"
+
+  - name: "volume_threshold"
+    type: "float"
+    min: 1.0
+    max: 3.0
+    default: 1.5
+    step: 0.25
+    description: "Volume multiplier above average for confirmation"
+
+expected_performance:
+  min_sharpe: 1.0
+  max_drawdown_pct: 15.0
+  min_win_rate_pct: 42.0
+
+recommended_for:
+  - "ranging"
+  - "volatile"
+
+not_recommended_for:
+  - "trending_up"
+  - "trending_down"
+
+symbols:
+  - "BTCUSDT"
+  - "ETHUSDT"
+
+timeframes:
+  - "15m"
+  - "1h"

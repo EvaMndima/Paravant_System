@@ -1,0 +1,91 @@
+# Paravant Trading System - Main Configuration
+system:
+  environment: "development"  # development | production
+  log_level: "INFO"
+  timezone: "UTC"
+  
+database:
+  url: "sqlite:///./data/trading.db"
+  echo: false  # Log SQL queries
+  pool_size: 5
+  max_overflow: 10
+
+api:
+  host: "0.0.0.0"
+  port: 8000
+  title: "Paravant Trading System API"
+  version: "v1"
+  cors_origins:
+    - "http://localhost:3000"
+    - "http://localhost:8000"
+
+brokers:
+  binance:
+    testnet: true
+    symbols: ["BTCUSDT", "ETHUSDT", "BNBUSDT"]
+    api_key: "${BINANCE_API_KEY}"
+    api_secret: "${BINANCE_SECRET_KEY}"
+
+risk:
+  global_max_drawdown_pct: 0.10  # 10%
+  daily_loss_limit_pct: 0.02     # 2%
+  max_leverage: 1.0              # 1x (Spot only for MVP)
+  kill_switch_enabled: true
+
+execution:
+  dry_run: true  # Simulates execution without sending to broker
+  timeout_seconds: 5
+  retry_attempts: 3
+
+# ---------------------------------------------------------------------------
+# Trading Configuration
+# ---------------------------------------------------------------------------
+trading:
+  default_symbols:
+    - "BTCUSDT"
+    - "ETHUSDT"
+    - "BNBUSDT"
+  default_timeframe: "1h"
+  allowed_timeframes:
+    - "1m"
+    - "5m"
+    - "15m"
+    - "1h"
+    - "4h"
+    - "1d"
+  paper_trading: true  # Enable paper trading mode by default
+
+# ---------------------------------------------------------------------------
+# Monitoring & Health Checks
+# ---------------------------------------------------------------------------
+monitoring:
+  health_check_interval_seconds: 60
+  heartbeat_interval_seconds: 30
+  metrics_retention_days: 30
+  latency_thresholds_ms:
+    database: 100
+    exchange_api: 1000
+    logging: 50
+    filesystem: 200
+
+# ---------------------------------------------------------------------------
+# Alerting Configuration
+# ---------------------------------------------------------------------------
+alerting:
+  enabled: true
+  channels:
+    - "telegram"
+  alert_levels:
+    - "critical"
+    - "error"
+    - "warning"
+
+# ---------------------------------------------------------------------------
+# Backup Configuration
+# ---------------------------------------------------------------------------
+backup:
+  enabled: true
+  daily_retention_days: 30
+  monthly_retention_months: 12
+  backup_path: "backups/"
+  schedule_utc_hour: 0  # Run daily backup at 00:00 UTC

@@ -1,0 +1,108 @@
+# SuperTrend + Volume + MACD Confluence Strategy Template
+# Multi-indicator trend confirmation strategy
+#
+# Entry Logic: SuperTrend + Volume surge + MACD alignment
+# Exit Logic: SuperTrend flip or MACD divergence
+
+id: "supertrend_volume_macd"
+name: "SuperTrend + Volume + MACD Confluence"
+version: "1.0.0"
+type: "trend_following"
+description: >
+  Advanced trend-following strategy requiring confluence of three
+  indicators: SuperTrend direction, volume confirmation, and MACD
+  momentum alignment. Enters long when all three align bullish.
+  Exits on SuperTrend flip or MACD bearish cross. Reduces false
+  signals through multi-indicator confirmation. Best for strong
+  trending markets with sustained directional moves.
+
+entry_logic: >
+  LONG: SuperTrend is bullish AND MACD > signal AND MACD > 0 AND
+        volume > volume_ma * volume_multiplier.
+  SHORT: SuperTrend is bearish AND MACD < signal AND MACD < 0 AND
+         volume > volume_ma * volume_multiplier.
+  All three conditions must be met simultaneously.
+
+exit_logic: >
+  CLOSE LONG: SuperTrend flips bearish OR MACD crosses below signal.
+  CLOSE SHORT: SuperTrend flips bullish OR MACD crosses above signal.
+  Trailing stop: SuperTrend value serves as dynamic trailing stop.
+
+parameters:
+  - name: "supertrend_period"
+    type: "int"
+    min: 7
+    max: 21
+    default: 10
+    step: 1
+    description: "SuperTrend ATR period"
+
+  - name: "supertrend_multiplier"
+    type: "float"
+    min: 1.0
+    max: 5.0
+    default: 3.0
+    step: 0.5
+    description: "SuperTrend ATR multiplier"
+
+  - name: "macd_fast"
+    type: "int"
+    min: 8
+    max: 16
+    default: 12
+    step: 1
+    description: "MACD fast EMA period"
+
+  - name: "macd_slow"
+    type: "int"
+    min: 20
+    max: 35
+    default: 26
+    step: 1
+    description: "MACD slow EMA period"
+
+  - name: "macd_signal"
+    type: "int"
+    min: 7
+    max: 11
+    default: 9
+    step: 1
+    description: "MACD signal line period"
+
+  - name: "volume_ma_period"
+    type: "int"
+    min: 10
+    max: 30
+    default: 20
+    step: 5
+    description: "Volume moving average period"
+
+  - name: "volume_multiplier"
+    type: "float"
+    min: 1.0
+    max: 2.5
+    default: 1.3
+    step: 0.1
+    description: "Required volume surge multiplier"
+
+expected_performance:
+  min_sharpe: 1.3
+  max_drawdown_pct: 13.0
+  min_win_rate_pct: 50.0
+
+recommended_for:
+  - "trending_up"
+  - "trending_down"
+
+not_recommended_for:
+  - "ranging"
+  - "volatile"
+
+symbols:
+  - "BTCUSDT"
+  - "ETHUSDT"
+  - "BNBUSDT"
+
+timeframes:
+  - "1h"
+  - "4h"

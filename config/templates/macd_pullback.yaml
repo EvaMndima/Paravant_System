@@ -1,0 +1,116 @@
+# MACD Trend + Pullback Entry Strategy Template
+# Enters on pullbacks within established trends using MACD confirmation
+#
+# Entry Logic: MACD trend detection + price pullback to EMA support
+# Exit Logic: MACD crossover reversal or profit target
+
+id: "macd_pullback"
+name: "MACD Trend + Pullback Entry"
+version: "1.0.0"
+type: "trend_continuation"
+description: >
+  Identifies the prevailing trend using MACD and enters on pullbacks
+  to a support EMA level. Waits for MACD histogram to confirm trend
+  direction before entering at a discounted price. Designed for
+  sustained trends where buying dips offers better risk-reward.
+
+entry_logic: >
+  LONG: MACD line above signal line (bullish trend) AND price pulls
+  back to touch or cross the pullback EMA AND MACD histogram positive
+  and increasing.
+  SHORT: MACD line below signal line (bearish trend) AND price rallies
+  to touch the pullback EMA AND MACD histogram negative and decreasing.
+
+exit_logic: >
+  CLOSE LONG: MACD line crosses below signal line OR price drops below
+  stop loss (pullback_ema - atr_stop * ATR).
+  CLOSE SHORT: MACD line crosses above signal line OR price rises above
+  stop loss.
+  Profit target: risk_reward_ratio * (entry - stop_loss) from entry.
+
+parameters:
+  - name: "macd_fast"
+    type: "int"
+    min: 8
+    max: 16
+    default: 12
+    step: 1
+    description: "MACD fast EMA period"
+
+  - name: "macd_slow"
+    type: "int"
+    min: 20
+    max: 30
+    default: 26
+    step: 1
+    description: "MACD slow EMA period"
+
+  - name: "macd_signal"
+    type: "int"
+    min: 5
+    max: 15
+    default: 9
+    step: 1
+    description: "MACD signal line period"
+
+  - name: "pullback_ema_period"
+    type: "int"
+    min: 10
+    max: 50
+    default: 21
+    step: 1
+    description: "EMA period for pullback support/resistance"
+
+  - name: "atr_period"
+    type: "int"
+    min: 7
+    max: 28
+    default: 14
+    step: 1
+    description: "ATR calculation period"
+
+  - name: "atr_stop_multiplier"
+    type: "float"
+    min: 1.0
+    max: 4.0
+    default: 1.5
+    step: 0.5
+    description: "ATR multiplier for stop loss distance"
+
+  - name: "risk_reward_ratio"
+    type: "float"
+    min: 1.0
+    max: 5.0
+    default: 2.0
+    step: 0.5
+    description: "Risk-reward ratio for profit target"
+
+  - name: "pullback_tolerance_pct"
+    type: "float"
+    min: 0.1
+    max: 2.0
+    default: 0.5
+    step: 0.1
+    description: "Percentage tolerance for pullback detection"
+
+expected_performance:
+  min_sharpe: 1.1
+  max_drawdown_pct: 10.0
+  min_win_rate_pct: 50.0
+
+recommended_for:
+  - "trending_up"
+  - "trending_down"
+
+not_recommended_for:
+  - "ranging"
+
+symbols:
+  - "BTCUSDT"
+  - "ETHUSDT"
+  - "BNBUSDT"
+
+timeframes:
+  - "1h"
+  - "4h"
+  - "1d"

@@ -1,0 +1,111 @@
+# VWAP Pullback + Volume Strategy Template
+# Intraday pullback strategy using VWAP as anchor
+#
+# Entry Logic: Pullback to VWAP with volume confirmation
+# Exit Logic: Distance from VWAP or momentum exhaustion
+
+id: "vwap_pullback_volume"
+name: "VWAP Pullback + Volume Confirmation"
+version: "1.0.0"
+type: "intraday_pullback"
+description: >
+  Intraday pullback strategy that uses VWAP as a dynamic support/
+  resistance level. Enters long when price pulls back to VWAP from
+  above with volume confirmation, expecting continuation. Exits when
+  price reaches target distance from VWAP or volume dries up. Designed
+  for intraday trending markets with clear directional bias. Resets
+  VWAP daily for session-based trading.
+
+entry_logic: >
+  LONG: Price was above VWAP, pulls back to within entry_buffer of VWAP,
+        and volume > volume_ma * volume_multiplier. Momentum (RSI) > 50.
+  SHORT: Price was below VWAP, rallies to within entry_buffer of VWAP,
+         and volume > volume_ma * volume_multiplier. Momentum (RSI) < 50.
+  Requires previous trend establishment before pullback.
+
+exit_logic: >
+  CLOSE LONG: Price reaches VWAP + (exit_distance_pct * VWAP) OR
+              volume falls below volume_ma * exit_volume_threshold OR
+              RSI < 40.
+  CLOSE SHORT: Price reaches VWAP - (exit_distance_pct * VWAP) OR
+               volume falls below volume_ma * exit_volume_threshold OR
+               RSI > 60.
+
+parameters:
+  - name: "entry_buffer_pct"
+    type: "float"
+    min: 0.1
+    max: 1.0
+    default: 0.3
+    step: 0.1
+    description: "Max distance from VWAP to trigger entry (as %)"
+
+  - name: "exit_distance_pct"
+    type: "float"
+    min: 0.5
+    max: 3.0
+    default: 1.5
+    step: 0.5
+    description: "Target profit distance from VWAP (as %)"
+
+  - name: "volume_ma_period"
+    type: "int"
+    min: 10
+    max: 30
+    default: 20
+    step: 5
+    description: "Volume moving average period"
+
+  - name: "volume_multiplier"
+    type: "float"
+    min: 1.0
+    max: 2.0
+    default: 1.2
+    step: 0.1
+    description: "Entry volume confirmation multiplier"
+
+  - name: "exit_volume_threshold"
+    type: "float"
+    min: 0.5
+    max: 1.0
+    default: 0.8
+    step: 0.1
+    description: "Exit when volume falls below this multiplier"
+
+  - name: "rsi_period"
+    type: "int"
+    min: 7
+    max: 21
+    default: 14
+    step: 1
+    description: "RSI period for momentum filter"
+
+  - name: "stop_loss_pct"
+    type: "float"
+    min: 0.5
+    max: 3.0
+    default: 1.5
+    step: 0.5
+    description: "Stop loss distance from entry (as %)"
+
+expected_performance:
+  min_sharpe: 1.2
+  max_drawdown_pct: 11.0
+  min_win_rate_pct: 52.0
+
+recommended_for:
+  - "trending_up"
+  - "trending_down"
+
+not_recommended_for:
+  - "ranging"
+  - "volatile"
+
+symbols:
+  - "BTCUSDT"
+  - "ETHUSDT"
+  - "BNBUSDT"
+
+timeframes:
+  - "15m"
+  - "1h"

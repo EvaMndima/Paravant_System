@@ -1,0 +1,97 @@
+# Donchian Channel + ATR Breakout Strategy Template
+# Breakout strategy with volatility-based position sizing
+#
+# Entry Logic: Price breaks Donchian channel with ATR expansion
+# Exit Logic: Opposite channel touch or ATR trailing stop
+
+id: "donchian_atr"
+name: "Donchian Channel + ATR Breakout"
+version: "1.0.0"
+type: "trend_breakout"
+description: >
+  Identifies breakout opportunities using Donchian Channels combined
+  with ATR volatility filtering. Enters long when price breaks above
+  the upper channel with expanding volatility (ATR). Exits on opposite
+  channel touch or ATR-based trailing stop. Best for ranging-to-trending
+  transitions and volatility expansion phases.
+
+entry_logic: >
+  LONG: Price closes above Donchian upper band AND ATR > atr_threshold.
+  SHORT: Price closes below Donchian lower band AND ATR > atr_threshold.
+  Additional filter: Volume > volume_ma * volume_multiplier (confirmation).
+
+exit_logic: >
+  CLOSE LONG: Price touches Donchian lower band OR trailing stop hit.
+  CLOSE SHORT: Price touches Donchian upper band OR trailing stop hit.
+  Trailing stop: Entry price - (atr_stop_multiplier * ATR) for longs.
+
+parameters:
+  - name: "donchian_period"
+    type: "int"
+    min: 10
+    max: 50
+    default: 20
+    step: 5
+    description: "Donchian channel lookback period"
+
+  - name: "atr_period"
+    type: "int"
+    min: 7
+    max: 28
+    default: 14
+    step: 1
+    description: "ATR calculation period"
+
+  - name: "atr_threshold"
+    type: "float"
+    min: 0.0001
+    max: 0.01
+    default: 0.003
+    step: 0.0005
+    description: "Minimum ATR value to allow entry (volatility filter)"
+
+  - name: "atr_stop_multiplier"
+    type: "float"
+    min: 1.0
+    max: 5.0
+    default: 2.5
+    step: 0.5
+    description: "ATR multiplier for trailing stop loss"
+
+  - name: "volume_ma_period"
+    type: "int"
+    min: 10
+    max: 50
+    default: 20
+    step: 5
+    description: "Volume moving average period"
+
+  - name: "volume_multiplier"
+    type: "float"
+    min: 1.0
+    max: 3.0
+    default: 1.2
+    step: 0.1
+    description: "Volume must exceed MA by this multiplier"
+
+expected_performance:
+  min_sharpe: 1.0
+  max_drawdown_pct: 15.0
+  min_win_rate_pct: 40.0
+
+recommended_for:
+  - "volatile"
+  - "trending_up"
+  - "trending_down"
+
+not_recommended_for:
+  - "ranging"
+
+symbols:
+  - "BTCUSDT"
+  - "ETHUSDT"
+  - "BNBUSDT"
+
+timeframes:
+  - "1h"
+  - "4h"

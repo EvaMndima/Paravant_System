@@ -1,0 +1,143 @@
+# PARAVANT Trading System - Risk Profiles
+# Defines risk management profiles for different trading styles
+
+# =============================================================================
+# RISK PROFILES
+# =============================================================================
+profiles:
+  # -------------------------------------------------------------------------
+  # CONSERVATIVE PROFILE
+  # -------------------------------------------------------------------------
+  conservative:
+    description: "Lower risk, steady returns - Focus on capital preservation"
+
+    # Position sizing
+    max_position_size_pct: 2.0  # Maximum 2% of capital per position
+    max_concentration_pct: 15.0  # Maximum 15% in any single symbol
+    max_open_positions: 5  # Maximum 5 concurrent positions
+
+    # Loss limits
+    daily_loss_limit_pct: 2.0  # Stop trading if down 2% for the day
+    weekly_loss_limit_pct: 5.0  # Circuit breaker if down 5% for the week
+    max_drawdown_pct: 8.0  # Kill switch if portfolio drops 8% from peak
+
+    # Leverage
+    max_leverage: 1.0  # No leverage (spot only)
+
+    # Volatility adjustments
+    volatility_multiplier: 0.5  # Reduce position size by 50% in high volatility
+
+    # Correlation limits
+    max_correlation: 0.7  # Avoid highly correlated positions
+
+    # Strategy limits
+    max_strategies_per_account: 3
+
+    # Regime-specific adjustments
+    regime_adjustments:
+      volatile: 0.3  # Reduce size to 30% in volatile regime
+      ranging: 0.7  # Reduce size to 70% in ranging markets
+      trending_up: 1.0  # Full size in uptrends
+      trending_down: 0.5  # Half size in downtrends
+      unknown: 0.5  # Cautious in unknown regime
+
+  # -------------------------------------------------------------------------
+  # BALANCED PROFILE
+  # -------------------------------------------------------------------------
+  balanced:
+    description: "Moderate risk, balanced approach - Default profile"
+
+    # Position sizing
+    max_position_size_pct: 3.0  # Maximum 3% of capital per position
+    max_concentration_pct: 20.0  # Maximum 20% in any single symbol
+    max_open_positions: 8  # Maximum 8 concurrent positions
+
+    # Loss limits
+    daily_loss_limit_pct: 3.0  # Stop trading if down 3% for the day
+    weekly_loss_limit_pct: 7.0  # Circuit breaker if down 7% for the week
+    max_drawdown_pct: 12.0  # Kill switch if portfolio drops 12% from peak
+
+    # Leverage
+    max_leverage: 1.5  # Modest leverage allowed
+
+    # Volatility adjustments
+    volatility_multiplier: 0.75  # Reduce position size by 25% in high volatility
+
+    # Correlation limits
+    max_correlation: 0.8  # Allow moderately correlated positions
+
+    # Strategy limits
+    max_strategies_per_account: 5
+
+    # Regime-specific adjustments
+    regime_adjustments:
+      volatile: 0.5  # Half size in volatile regime
+      ranging: 0.8  # 80% size in ranging markets
+      trending_up: 1.0  # Full size in uptrends
+      trending_down: 0.7  # 70% size in downtrends
+      unknown: 0.6  # Cautious in unknown regime
+
+  # -------------------------------------------------------------------------
+  # AGGRESSIVE PROFILE
+  # -------------------------------------------------------------------------
+  aggressive:
+    description: "Higher risk, higher potential returns - Use with caution"
+
+    # Position sizing
+    max_position_size_pct: 5.0  # Maximum 5% of capital per position
+    max_concentration_pct: 30.0  # Maximum 30% in any single symbol
+    max_open_positions: 10  # Maximum 10 concurrent positions
+
+    # Loss limits
+    daily_loss_limit_pct: 5.0  # Stop trading if down 5% for the day
+    weekly_loss_limit_pct: 10.0  # Circuit breaker if down 10% for the week
+    max_drawdown_pct: 15.0  # Kill switch if portfolio drops 15% from peak
+
+    # Leverage
+    max_leverage: 2.0  # Moderate leverage allowed
+
+    # Volatility adjustments
+    volatility_multiplier: 1.0  # No reduction in high volatility
+
+    # Correlation limits
+    max_correlation: 0.9  # Allow highly correlated positions
+
+    # Strategy limits
+    max_strategies_per_account: 7
+
+    # Regime-specific adjustments
+    regime_adjustments:
+      volatile: 0.7  # 70% size in volatile regime (not afraid)
+      ranging: 0.9  # 90% size in ranging markets
+      trending_up: 1.0  # Full size in uptrends
+      trending_down: 0.8  # 80% size in downtrends
+      unknown: 0.7  # Still fairly aggressive in unknown regime
+
+# =============================================================================
+# PROFILE VALIDATION RULES
+# =============================================================================
+validation:
+  # Ensure profiles don't exceed global limits
+  enforce_global_limits: true
+
+  # Warn if profile seems too risky
+  risk_warnings:
+    max_position_size_pct_threshold: 5.0
+    max_drawdown_pct_threshold: 15.0
+    max_leverage_threshold: 2.0
+
+# =============================================================================
+# DYNAMIC RISK ADJUSTMENT (V1 Feature - not implemented in MVP)
+# =============================================================================
+dynamic_adjustment:
+  enabled: false  # Will be enabled in V1
+
+  # Adjust risk based on recent performance
+  performance_based:
+    reduce_on_losses: true
+    increase_on_wins: false  # Conservative approach
+
+  # Adjust risk based on market volatility
+  volatility_based:
+    use_atr: true
+    lookback_days: 14
