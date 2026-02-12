@@ -9,6 +9,7 @@ from .pnl import PnLRecord, EquitySnapshot
 from .strategy_assignment import StrategyAssignment, AssignmentStatus
 from .system import SystemState, AuditLog
 from .signal import Signal, SignalDirection
+from .symbol import SymbolInfo
 
 __all__ = [
     # Base
@@ -46,4 +47,6 @@ __all__ = [
     # Signal
     "Signal",
     "SignalDirection",
+    # Symbol
+    "SymbolInfo",
 ]

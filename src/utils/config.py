@@ -6,7 +6,7 @@ from environment variables and YAML files.
 import os
 from pathlib import Path
 from typing import Any
-import yaml  # type: ignore
+import yaml
 
 
 def load_yaml_config(config_path: Path) -> dict[str, Any]:

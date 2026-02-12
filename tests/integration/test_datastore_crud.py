@@ -422,7 +422,7 @@ class TestDataStoreTransactions:
         """Test that failed transactions roll back properly."""
         store = DataStore()
         store.engine = test_db
-        
+
         try:
             with store.session() as session:
                 # Create account
@@ -434,7 +434,11 @@ class TestDataStoreTransactions:
                 )
                 session.add(account)
                 session.flush()
-                
+
+                # FIXED: Expunge the first account from session to avoid identity map conflict
+                # This prevents SAWarning when adding duplicate ID
+                session.expunge(account)
+
                 # Force an error (duplicate ID)
                 duplicate = Account(
                     id="acc_rollback",  # Same ID
@@ -446,7 +450,7 @@ class TestDataStoreTransactions:
                 session.commit()
         except Exception:
             pass  # Expected to fail
-        
+
         # Verify rollback - account should not exist
         retrieved = store.get_account("acc_rollback")
         assert retrieved is None

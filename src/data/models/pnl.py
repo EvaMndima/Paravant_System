@@ -5,16 +5,12 @@ This module provides models for tracking profit and loss at different time granu
 - EquitySnapshot: Intraday equity curve tracking
 """
 from datetime import datetime, date, timezone
-from typing import TYPE_CHECKING, Any, cast
+from typing import Any, cast
 
 from sqlalchemy import String, Float, ForeignKey, Date, DateTime, JSON, Integer
 from sqlalchemy.orm import Mapped, mapped_column
 
 from .base import Base, generate_id
-
-if TYPE_CHECKING:
-    from .account import Account
-    from .strategy import Strategy
 
 
 class PnLRecord(Base):

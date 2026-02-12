@@ -1,7 +1,7 @@
 """StrategyAssignment model linking strategies to accounts."""
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING, cast
 import enum
 
 from sqlalchemy import String, ForeignKey, Enum, JSON

@@ -18,8 +18,28 @@ class Base(DeclarativeBase):
         return cls.__name__.lower() + "s"
 
     def to_dict(self) -> dict[str, Any]:
-        """Convert model to dictionary."""
-        return {c.name: getattr(self, c.name) for c in self.__table__.columns}
+        """Convert model to dictionary with JSON-serializable values.
+
+        Automatically converts datetime objects to ISO 8601 strings for
+        JSON serialization compatibility.
+
+        Returns:
+            Dictionary with column names as keys and JSON-serializable values.
+
+        Example:
+            >>> account = Account(name="Test", balance_usdt=1000.0)
+            >>> data = account.to_dict()
+            >>> # datetime fields are now ISO strings: "2026-02-12T10:30:00+00:00"
+        """
+        result = {}
+        for c in self.__table__.columns:
+            value = getattr(self, c.name)
+            # FIXED LOW-001: Convert datetime to ISO 8601 string for JSON serialization
+            if isinstance(value, datetime):
+                result[c.name] = value.isoformat()
+            else:
+                result[c.name] = value
+        return result
 
 
 def _utc_now() -> datetime:

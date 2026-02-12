@@ -10,10 +10,10 @@ from datetime import date, datetime
 from typing import Generator, Any
 
 from sqlalchemy import select
-from sqlalchemy.orm import Session, selectinload, joinedload
+from sqlalchemy.orm import Session, selectinload
 
 from .database import engine
-from ..utils.logging import get_logger, LogContext
+from ..utils.logging import get_logger
 from .models import (
     Account,
     AccountStatus,
@@ -30,6 +30,7 @@ from .models import (
     AuditLog,
     StrategyAssignment,
     Signal,
+    SymbolInfo,
 )
 
 
@@ -281,16 +282,26 @@ class DataStore:
             return order
 
     def get_orders_by_status(self, status: OrderStatus) -> list[Order]:
-        """Get orders by status.
+        """Get orders by status with related data eagerly loaded.
+
+        FIXED LOW-003: Added eager loading to prevent N+1 queries.
 
         Args:
             status: The order status to filter by
 
         Returns:
-            List of orders with the given status
+            List of orders with the given status (account, strategy, trades loaded)
         """
         with self.session() as session:
-            stmt = select(Order).where(Order.status == status)
+            stmt = (
+                select(Order)
+                .where(Order.status == status)
+                .options(
+                    selectinload(Order.account),
+                    selectinload(Order.strategy),
+                    selectinload(Order.trades)
+                )
+            )
             orders = list(session.scalars(stmt).all())
             for order in orders:
                 session.expunge(order)  # Detach with loaded attributes
@@ -935,3 +946,119 @@ class DataStore:
             for signal in signals:
                 session.expunge(signal)  # Detach with loaded attributes
             return signals
+
+    # =========================================================================
+    # SYMBOL INFO OPERATIONS
+    # =========================================================================
+
+    def save_symbol_info(self, symbol_info: SymbolInfo) -> SymbolInfo:
+        """Save or update symbol information.
+
+        Decision: DEC-2026-02-08-002 - SQLAlchemy 2.0 with Mapped[T]
+
+        Args:
+            symbol_info: SymbolInfo instance to save.
+
+        Returns:
+            The saved symbol info with updated fields.
+
+        Example:
+            ```python
+            symbol_info = SymbolInfo(
+                symbol="BTCUSDT",
+                base_asset="BTC",
+                quote_asset="USDT",
+                min_quantity=0.00001,
+                step_size=0.00001,
+                tick_size=0.01,
+                min_notional=10.0
+            )
+            store.save_symbol_info(symbol_info)
+            ```
+        """
+        with self.session() as session:
+            session.add(symbol_info)
+            session.flush()
+            session.refresh(symbol_info)
+            self.logger.info(
+                "symbol_info_saved",
+                symbol=symbol_info.symbol,
+                base_asset=symbol_info.base_asset,
+                quote_asset=symbol_info.quote_asset,
+                is_trading=symbol_info.is_trading,
+            )
+            session.expunge(symbol_info)  # Detach with loaded attributes
+            return symbol_info
+
+    def get_symbol_info(self, symbol: str) -> SymbolInfo | None:
+        """Get symbol information by trading pair symbol.
+
+        Args:
+            symbol: Trading pair symbol (e.g., "BTCUSDT").
+
+        Returns:
+            SymbolInfo if found, None otherwise.
+
+        Example:
+            ```python
+            symbol_info = store.get_symbol_info("BTCUSDT")
+            if symbol_info:
+                print(f"Min quantity: {symbol_info.min_quantity}")
+                print(f"Tick size: {symbol_info.tick_size}")
+            ```
+        """
+        with self.session() as session:
+            stmt = select(SymbolInfo).where(SymbolInfo.symbol == symbol)
+            symbol_info = session.scalars(stmt).first()
+            if symbol_info:
+                session.expunge(symbol_info)  # Detach with loaded attributes
+            return symbol_info
+
+    def get_all_symbols(
+        self,
+        trading_only: bool = False,
+        quote_asset: str | None = None,
+    ) -> list[SymbolInfo]:
+        """Get all symbol information from database.
+
+        Args:
+            trading_only: If True, only return symbols where is_trading=True (default False).
+            quote_asset: Optional filter by quote asset (e.g., "USDT").
+
+        Returns:
+            List of SymbolInfo objects ordered by symbol name.
+
+        Example:
+            ```python
+            # Get all tradable USDT pairs
+            symbols = store.get_all_symbols(trading_only=True, quote_asset="USDT")
+            for symbol in symbols:
+                print(f"{symbol.symbol}: min_notional={symbol.min_notional}")
+            ```
+        """
+        with self.session() as session:
+            stmt = select(SymbolInfo)
+
+            # Filter by trading status
+            if trading_only:
+                stmt = stmt.where(SymbolInfo.is_trading.is_(True))
+
+            # Filter by quote asset
+            if quote_asset:
+                stmt = stmt.where(SymbolInfo.quote_asset == quote_asset)
+
+            # Order by symbol name
+            stmt = stmt.order_by(SymbolInfo.symbol)
+
+            symbols = list(session.scalars(stmt).all())
+            for symbol in symbols:
+                session.expunge(symbol)  # Detach with loaded attributes
+
+            self.logger.debug(
+                "symbols_retrieved",
+                count=len(symbols),
+                trading_only=trading_only,
+                quote_asset=quote_asset,
+            )
+
+            return symbols

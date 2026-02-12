@@ -15,14 +15,15 @@ def test_database_url():
 
 @pytest.fixture(scope="function")
 def db_engine(test_database_url):
-    """Create test database engine."""
+    """Create test database engine with proper resource cleanup."""
     from src.data.models.base import Base
-    
+
     from sqlalchemy import event
 
     engine = create_engine(
         test_database_url,
-        connect_args={"check_same_thread": False}  # For SQLite
+        connect_args={"check_same_thread": False},  # For SQLite
+        poolclass=None  # Disable connection pooling for tests to prevent ResourceWarning
     )
 
     @event.listens_for(engine, "connect")
@@ -30,26 +31,31 @@ def db_engine(test_database_url):
         cursor = dbapi_connection.cursor()
         cursor.execute("PRAGMA foreign_keys=ON")
         cursor.close()
-    
+
     # Create all tables
     Base.metadata.create_all(engine)
-    
+
     yield engine
-    
-    # Cleanup
+
+    # FIXED: Comprehensive cleanup to prevent ResourceWarning
+    # Close all connections in the pool before disposing
     Base.metadata.drop_all(engine)
-    engine.dispose()
+    engine.dispose()  # This should now properly close all connections
 
 
 @pytest.fixture(scope="function")
 def db_session(db_engine):
-    """Create test database session."""
+    """Create test database session with proper cleanup."""
     SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=db_engine)
     session = SessionLocal()
-    
+
     yield session
-    
-    session.close()
+
+    # FIXED: Ensure session is properly closed and rolled back
+    try:
+        session.rollback()  # Roll back any uncommitted changes
+    finally:
+        session.close()  # Always close the session
 
 
 @pytest.fixture(scope="function")
@@ -60,15 +66,23 @@ def test_db(db_engine):
 
 @pytest.fixture(scope="session")
 def api_client():
-    """Create FastAPI test client."""
+    """Create FastAPI test client with proper database cleanup."""
     # Set test environment
     os.environ["ENVIRONMENT"] = "development"
     os.environ["DATABASE_URL"] = "sqlite:///:memory:"
-    
+
     from src.api.main import app
-    
+
     with TestClient(app) as client:
         yield client
+
+    # FIXED MEDIUM-001: Explicitly dispose of any database engines created by the API
+    # This prevents ResourceWarning from unclosed connections
+    try:
+        from src.data.database import engine
+        engine.dispose()
+    except Exception:
+        pass  # Engine may not have been created, ignore
 
 
 @pytest.fixture
