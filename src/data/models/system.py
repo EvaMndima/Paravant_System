@@ -49,7 +49,9 @@ class SystemState(Base):
         nullable=False,
         default=False
     )
-    kill_switch_activated_at: Mapped[datetime | None] = mapped_column(DateTime)
+    kill_switch_activated_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True)
+    )
     kill_switch_reason: Mapped[str | None] = mapped_column(
         String(500)  # Why the kill switch was activated
     )
@@ -60,10 +62,14 @@ class SystemState(Base):
         nullable=False,
         default=True
     )
-    last_trade_at: Mapped[datetime | None] = mapped_column(DateTime)
+    last_trade_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True)
+    )
 
     # Health monitoring
-    last_health_check: Mapped[datetime | None] = mapped_column(DateTime)
+    last_health_check: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True)
+    )
     health_status: Mapped[str] = mapped_column(
         String(50),
         default="unknown"  # healthy/degraded/unhealthy/unknown
@@ -148,7 +154,7 @@ class AuditLog(Base):
 
     # When the action occurred
     timestamp: Mapped[datetime] = mapped_column(
-        DateTime,
+        DateTime(timezone=True),
         nullable=False,
         index=True,  # Index for time-based queries
         default=lambda: datetime.now(timezone.utc)

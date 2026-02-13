@@ -30,9 +30,17 @@ def init_db() -> None:
     Base.metadata.create_all(bind=engine)
 
 
+
 def drop_db() -> None:
     """Drop all database tables. WARNING: This will delete all data!"""
     Base.metadata.drop_all(bind=engine)
+
+
+def reset_db() -> None:
+    """Reset the database (drop and recreate tables)."""
+    drop_db()
+    init_db()
+
 
 
 @contextmanager

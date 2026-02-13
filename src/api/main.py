@@ -264,9 +264,13 @@ async def shutdown_event() -> None:
         logger.error("database_shutdown_error", error=str(e))
 
 
+# Register route modules
+from src.api.routes.risk import router as risk_router
+
+app.include_router(risk_router, prefix="/api/v1/risk", tags=["risk"])
+
 # Note: Additional route modules will be added in subsequent sections:
 # - Section 1.3: Configuration routes
-# - Section 3: Risk management routes
 # - Section 4: Execution routes
 # - Section 5: Strategy routes
 # - Section 6: Dashboard and monitoring routes

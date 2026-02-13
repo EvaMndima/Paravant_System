@@ -269,13 +269,21 @@ class BrokerConnectionError(ExecutionError):
         reason: Connection failure reason.
     """
 
+
     def __init__(
-        self, broker: str = "binance", reason: str = "Connection failed"
+        self,
+        broker: str = "binance",
+        reason: str = "Connection failed",
+        details: dict[str, Any] | None = None,
     ) -> None:
+        error_details = {"broker": broker, "reason": reason}
+        if details:
+            error_details.update(details)
+
         super().__init__(
             message=f"Broker connection error ({broker}): {reason}",
             code="BROKER_CONNECTION_ERROR",
-            details={"broker": broker, "reason": reason},
+            details=error_details,
         )
 
 
@@ -385,12 +393,19 @@ class MarketDataError(DataError):
     """
 
     def __init__(
-        self, symbol: str = "", reason: str = "Market data unavailable"
+        self,
+        symbol: str = "",
+        reason: str = "Market data unavailable",
+        details: dict[str, Any] | None = None,
     ) -> None:
+        error_details = {"symbol": symbol, "reason": reason}
+        if details:
+            error_details.update(details)
+
         super().__init__(
             message=f"Market data error for {symbol}: {reason}",
             code="MARKET_DATA_ERROR",
-            details={"symbol": symbol, "reason": reason},
+            details=error_details,
         )
 
 
