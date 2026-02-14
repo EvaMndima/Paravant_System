@@ -28,13 +28,13 @@ from __future__ import annotations
 
 import asyncio
 from datetime import datetime, timezone
-from typing import Any, Optional
+from typing import Optional, cast
 
 from src.brokers.binance.client import BinanceClient
 from src.core.exceptions import MarketDataError
 from src.data.cache import CacheManager, InMemoryCache
-from src.data.market_data import MarketDataFetcher, OHLCV, OHLCVSeries
-from src.data.validators import DataValidator, ValidationResult, ACTION_REJECT
+from src.data.market_data import MarketDataFetcher, OHLCVSeries
+from src.data.validators import ACTION_REJECT, DataValidator, ValidationResult
 from src.utils.logging import get_logger
 
 logger = get_logger(__name__)
@@ -240,7 +240,7 @@ class MarketDataService:
                     cached=True,
                 )
 
-                return result
+                return cast(tuple[OHLCVSeries, ValidationResult | None], result)
 
             else:
                 # Cache disabled or not requested - fetch directly
@@ -369,7 +369,7 @@ class MarketDataService:
                 )
                 failed.append(symbol)
             else:
-                data[symbol] = result
+                data[symbol] = cast(tuple[OHLCVSeries, ValidationResult | None], result)
 
         logger.info(
             "multiple_ohlcv_fetched",
@@ -587,7 +587,7 @@ class MarketDataService:
 
         # Access InMemoryCache backend for stats
         backend = self.cache_manager.backend
-        if hasattr(backend, "size") and hasattr(backend, "keys"):
+        if isinstance(backend, InMemoryCache):
             size = await backend.size()
             keys = await backend.keys()
 

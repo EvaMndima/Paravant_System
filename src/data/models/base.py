@@ -1,11 +1,13 @@
 """Base model with common functionality."""
 from __future__ import annotations
 
+import uuid
 from datetime import datetime, timezone
 from typing import Any
+
 from sqlalchemy import DateTime
-from sqlalchemy.orm import DeclarativeBase, declared_attr, Mapped, mapped_column
-import uuid
+from sqlalchemy.orm import (DeclarativeBase, Mapped, declared_attr,
+                            mapped_column)
 
 
 class Base(DeclarativeBase):

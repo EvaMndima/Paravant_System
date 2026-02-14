@@ -7,31 +7,17 @@ from __future__ import annotations
 
 from contextlib import contextmanager
 from datetime import date, datetime
-from typing import Generator, Any
+from typing import Any, Generator
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session, selectinload
 
-from .database import engine
 from ..utils.logging import get_logger
-from .models import (
-    Account,
-    AccountStatus,
-    Strategy,
-    StrategyStatus,
-    Order,
-    OrderStatus,
-    Position,
-    PositionStatus,
-    Trade,
-    PnLRecord,
-    EquitySnapshot,
-    SystemState,
-    AuditLog,
-    StrategyAssignment,
-    Signal,
-    SymbolInfo,
-)
+from .database import engine
+from .models import (Account, AccountStatus, AuditLog, EquitySnapshot, Order,
+                     OrderStatus, PnLRecord, Position, PositionStatus, Signal,
+                     Strategy, StrategyAssignment, StrategyStatus, SymbolInfo,
+                     SystemState, Trade)
 
 
 class DataStore:
@@ -351,6 +337,150 @@ class DataStore:
                 session.expunge(order)  # Detach with loaded attributes
             return orders
 
+    def update_order(self, order_id: str, **kwargs: Any) -> Order | None:
+        """Update specific fields on an existing order.
+
+        Uses session.get() + attribute assignment for safe partial updates.
+        Only allows updating known Order model columns.
+
+        Decision: DEC-2026-02-08-007 - Input validation at boundaries
+
+        Args:
+            order_id: The order ID to update.
+            **kwargs: Field names and values to update. Must be valid
+                Order model column names.
+
+        Returns:
+            Updated Order if found, None if order does not exist.
+
+        Raises:
+            ValueError: If an invalid field name is provided.
+
+        Example:
+            ```python
+            updated = store.update_order(
+                "ord_20260213_abc123",
+                status=OrderStatus.SUBMITTED,
+                external_id="12345",
+                submitted_at=datetime.now(timezone.utc),
+            )
+            ```
+        """
+        # Validate field names against Order model columns
+        valid_columns = {c.name for c in Order.__table__.columns}
+        invalid_fields = set(kwargs.keys()) - valid_columns
+        if invalid_fields:
+            raise ValueError(
+                f"Invalid Order fields: {invalid_fields}. "
+                f"Valid fields: {valid_columns}"
+            )
+
+        with self.session() as session:
+            order = session.get(Order, order_id)
+            if order is None:
+                self.logger.warning(
+                    "order_not_found_for_update",
+                    order_id=order_id,
+                )
+                return None
+
+            for field_name, value in kwargs.items():
+                setattr(order, field_name, value)
+
+            session.flush()
+            session.refresh(order)
+            self.logger.info(
+                "order_updated",
+                order_id=order_id,
+                updated_fields=list(kwargs.keys()),
+            )
+            session.expunge(order)
+            return order
+
+    def get_orders_by_account_and_status(
+        self,
+        account_id: str,
+        status: OrderStatus | None = None,
+    ) -> list[Order]:
+        """Get orders for an account, optionally filtered by status.
+
+        Args:
+            account_id: The account ID.
+            status: Optional order status filter.
+
+        Returns:
+            List of orders with related data eagerly loaded.
+        """
+        with self.session() as session:
+            stmt = (
+                select(Order)
+                .where(Order.account_id == account_id)
+                .options(
+                    selectinload(Order.strategy),
+                    selectinload(Order.trades),
+                )
+            )
+            if status is not None:
+                stmt = stmt.where(Order.status == status)
+            orders = list(session.scalars(stmt).all())
+            for order in orders:
+                session.expunge(order)
+            return orders
+
+    def count_open_orders(self, account_id: str) -> int:
+        """Count orders in active states for an account.
+
+        Active states are PENDING and SUBMITTED (not yet terminal).
+
+        Args:
+            account_id: The account ID.
+
+        Returns:
+            Count of active orders.
+        """
+        with self.session() as session:
+            stmt = (
+                select(func.count())
+                .select_from(Order)
+                .where(Order.account_id == account_id)
+                .where(
+                    Order.status.in_([
+                        OrderStatus.PENDING,
+                        OrderStatus.SUBMITTED,
+                        OrderStatus.PARTIALLY_FILLED,
+                    ])
+                )
+            )
+            result = session.execute(stmt).scalar_one()
+            return int(result)
+
+    def get_order_by_external_id(self, external_id: str) -> Order | None:
+        """Get an order by its exchange-assigned external ID.
+
+        Useful for reconciliation when Binance returns an order ID
+        that needs to be matched to an internal order.
+
+        Args:
+            external_id: The exchange order ID.
+
+        Returns:
+            Order if found, None otherwise.
+        """
+        with self.session() as session:
+            stmt = (
+                select(Order)
+                .where(Order.external_id == external_id)
+                .options(
+                    selectinload(Order.account),
+                    selectinload(Order.strategy),
+                    selectinload(Order.trades),
+                )
+            )
+            order = session.scalars(stmt).first()
+            if order:
+                session.expunge(order)
+            return order
+
     # =========================================================================
     # POSITION OPERATIONS
     # =========================================================================
@@ -457,6 +587,67 @@ class DataStore:
             for pos in positions:
                 session.expunge(pos)  # Detach with loaded attributes
             return positions
+
+    def update_position(self, position_id: str, **kwargs: Any) -> Position | None:
+        """Update specific fields on an existing position.
+
+        Uses session.get() + attribute assignment for safe partial updates.
+        Only allows updating known Position model columns.
+
+        Decision: DEC-2026-02-08-007 - Input validation at boundaries
+        Phase: 4B - Position Tracking
+
+        Args:
+            position_id: The position ID to update.
+            **kwargs: Field names and values to update. Must be valid
+                Position model column names.
+
+        Returns:
+            Updated Position if found, None if position does not exist.
+
+        Raises:
+            ValueError: If an invalid field name is provided.
+
+        Example:
+            ```python
+            updated = store.update_position(
+                "pos_20260213_abc123",
+                size=0.75,
+                entry_price=44500.0,
+                commission_paid=10.0,
+            )
+            ```
+        """
+        # Validate field names against Position model columns
+        valid_columns = {c.name for c in Position.__table__.columns}
+        invalid_fields = set(kwargs.keys()) - valid_columns
+        if invalid_fields:
+            raise ValueError(
+                f"Invalid Position fields: {invalid_fields}. "
+                f"Valid fields: {valid_columns}"
+            )
+
+        with self.session() as session:
+            position = session.get(Position, position_id)
+            if position is None:
+                self.logger.warning(
+                    "position_not_found_for_update",
+                    position_id=position_id,
+                )
+                return None
+
+            for field_name, value in kwargs.items():
+                setattr(position, field_name, value)
+
+            session.flush()
+            session.refresh(position)
+            self.logger.info(
+                "position_updated",
+                position_id=position_id,
+                updated_fields=list(kwargs.keys()),
+            )
+            session.expunge(position)
+            return position
 
     # =========================================================================
     # TRADE OPERATIONS

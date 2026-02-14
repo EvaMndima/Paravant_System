@@ -19,7 +19,7 @@ from __future__ import annotations
 import math
 from typing import Any, cast
 
-from sqlalchemy import Boolean, Float, JSON, String
+from sqlalchemy import JSON, Boolean, Float, String
 from sqlalchemy.orm import Mapped, mapped_column, validates
 
 from src.data.models.base import Base, TimestampMixin, generate_id

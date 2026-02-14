@@ -12,7 +12,7 @@ import threading
 from pathlib import Path
 from typing import Any  # HIGH-003: Any justified - YAML values can be any JSON type
 
-import yaml
+import yaml  # type: ignore[import-untyped]
 
 from .risk_profiles import RiskProfileManager
 from .settings import Settings, get_settings

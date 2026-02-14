@@ -44,6 +44,7 @@ PriorityLevel = Literal[
     "take_profit",
     "kill_switch",
     "new_entry",
+    "order_management",
     "data_fetch",
 ]
 
@@ -53,6 +54,7 @@ PRIORITY_ORDER: dict[PriorityLevel, int] = {
     "take_profit": 1,
     "kill_switch": 1,
     "new_entry": 2,       # Priority 2: Delayed during throttle
+    "order_management": 2, # Priority 2: Standard order operations
     "data_fetch": 3,      # Priority 3: Lowest priority
 }
 

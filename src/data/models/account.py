@@ -1,18 +1,18 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, cast
 import enum
-
-from sqlalchemy import String, Enum, Float, JSON
-from sqlalchemy.orm import Mapped, mapped_column, relationship, validates
 import math
+from typing import TYPE_CHECKING, Any, cast
+
+from sqlalchemy import JSON, Enum, Float, String
+from sqlalchemy.orm import Mapped, mapped_column, relationship, validates
 
 from .base import Base, TimestampMixin, generate_id
 
 if TYPE_CHECKING:
-    from .strategy_assignment import StrategyAssignment
-    from .position import Position
     from .order import Order
+    from .position import Position
+    from .strategy_assignment import StrategyAssignment
 
 
 class AccountStatus(str, enum.Enum):

@@ -150,10 +150,10 @@ class CircuitBreaker(ABC):
 
         # Check if cooldown has elapsed for already-triggered breaker
         if self._is_triggered and self._triggered_at is not None:
-            auto_reset_at = self._triggered_at + timedelta(
+            reset_threshold_time = self._triggered_at + timedelta(
                 minutes=self._cooldown_minutes
             )
-            if now >= auto_reset_at:
+            if now >= reset_threshold_time:
                 logger.info(
                     "circuit_breaker_auto_reset",
                     breaker=self.name,

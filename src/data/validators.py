@@ -25,7 +25,7 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from typing import Any
 
 from src.data.market_data import OHLCV, OHLCVSeries
@@ -34,7 +34,7 @@ from src.utils.logging import get_logger
 logger = get_logger(__name__)
 
 # PRD Feature H - Data Quality Validation thresholds
-DATA_QUALITY_THRESHOLDS = {
+DATA_QUALITY_THRESHOLDS: dict[str, float | int | str] = {
     "max_price_age_seconds": 10,      # Reject if price > 10s old
     "max_price_change_pct": 10.0,     # Flag if > 10% change in 1 candle
     "max_gap_candles": 3,             # Max missing candles before pause
@@ -101,7 +101,7 @@ class DataValidator:
 
     def __init__(self) -> None:
         """Initialize data validator with PRD Feature H thresholds."""
-        self.thresholds = DATA_QUALITY_THRESHOLDS.copy()
+        self.thresholds: dict[str, float | int | str] = DATA_QUALITY_THRESHOLDS.copy()
 
         logger.info(
             "data_validator_initialized",
@@ -280,7 +280,7 @@ class DataValidator:
         age = now - latest_candle.timestamp
         age_seconds = age.total_seconds()
 
-        is_stale = age_seconds > self.thresholds["max_price_age_seconds"]
+        is_stale = age_seconds > float(self.thresholds["max_price_age_seconds"])
 
         message = ""
         if is_stale:
@@ -322,7 +322,7 @@ class DataValidator:
             # Calculate percentage change
             change_pct = abs((curr_open - prev_close) / prev_close) * 100.0
 
-            if change_pct > self.thresholds["max_price_change_pct"]:
+            if change_pct > float(self.thresholds["max_price_change_pct"]):
                 outliers.append(
                     {
                         "index": i,

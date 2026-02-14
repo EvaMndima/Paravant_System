@@ -287,6 +287,181 @@ class BrokerConnectionError(ExecutionError):
         )
 
 
+class OrderSubmissionError(ExecutionError):
+    """Raised when order submission to the exchange fails.
+
+    Attributes:
+        order_id: The internal order identifier.
+        symbol: The trading pair symbol.
+        reason: Submission failure reason from the exchange.
+    """
+
+    def __init__(
+        self,
+        order_id: str = "",
+        symbol: str = "",
+        reason: str = "Order submission failed",
+        details: dict[str, Any] | None = None,
+    ) -> None:
+        error_details = {
+            "order_id": order_id,
+            "symbol": symbol,
+            "reason": reason,
+        }
+        if details:
+            error_details.update(details)
+
+        super().__init__(
+            message=f"Order submission failed for {symbol}: {reason}",
+            code="ORDER_SUBMISSION_ERROR",
+            details=error_details,
+        )
+
+
+class OrderNotFoundError(ExecutionError):
+    """Raised when an order cannot be found by ID.
+
+    Attributes:
+        order_id: The order identifier that was not found.
+    """
+
+    def __init__(
+        self,
+        order_id: str,
+        details: dict[str, Any] | None = None,
+    ) -> None:
+        error_details = {"order_id": order_id}
+        if details:
+            error_details.update(details)
+
+        super().__init__(
+            message=f"Order not found: {order_id}",
+            code="ORDER_NOT_FOUND",
+            details=error_details,
+        )
+
+
+class OrderTimeoutError(ExecutionError):
+    """Raised when order monitoring exceeds the maximum timeout.
+
+    Attributes:
+        order_id: The order that timed out.
+        timeout_seconds: The timeout threshold that was exceeded.
+    """
+
+    def __init__(
+        self,
+        order_id: str,
+        timeout_seconds: int = 1800,
+        details: dict[str, Any] | None = None,
+    ) -> None:
+        error_details = {
+            "order_id": order_id,
+            "timeout_seconds": timeout_seconds,
+        }
+        if details:
+            error_details.update(details)
+
+        super().__init__(
+            message=(
+                f"Order {order_id} timed out after "
+                f"{timeout_seconds}s"
+            ),
+            code="ORDER_TIMEOUT",
+            details=error_details,
+        )
+
+
+class PositionNotFoundError(ExecutionError):
+    """Raised when a position cannot be found by symbol or ID.
+
+    Attributes:
+        symbol: The symbol or ID that was not found.
+    """
+
+    def __init__(
+        self,
+        symbol: str,
+        details: dict[str, Any] | None = None,
+    ) -> None:
+        error_details = {"symbol": symbol}
+        if details:
+            error_details.update(details)
+
+        super().__init__(
+            message=f"Position not found: {symbol}",
+            code="POSITION_NOT_FOUND",
+            details=error_details,
+        )
+
+
+class PositionStorageError(ExecutionError):
+    """Raised when a position cannot be saved or updated in the database.
+
+    Attributes:
+        position_id: The position that failed to persist.
+        reason: Storage failure reason.
+    """
+
+    def __init__(
+        self,
+        position_id: str = "",
+        reason: str = "Position storage failed",
+        details: dict[str, Any] | None = None,
+    ) -> None:
+        error_details = {
+            "position_id": position_id,
+            "reason": reason,
+        }
+        if details:
+            error_details.update(details)
+
+        super().__init__(
+            message=f"Position storage error for {position_id}: {reason}",
+            code="POSITION_STORAGE_ERROR",
+            details=error_details,
+        )
+
+
+class InvalidStateTransitionError(ExecutionError):
+    """Raised when an order state transition violates the state machine.
+
+    The order state machine is strictly one-way:
+    PENDING -> SUBMITTED -> PARTIALLY_FILLED -> FILLED
+    PENDING -> SUBMITTED -> CANCELLED
+    PENDING -> REJECTED
+
+    Attributes:
+        order_id: The order with the invalid transition.
+        current_status: The current order status.
+        requested_status: The requested (invalid) status.
+    """
+
+    def __init__(
+        self,
+        order_id: str,
+        current_status: str,
+        requested_status: str,
+        details: dict[str, Any] | None = None,
+    ) -> None:
+        error_details = {
+            "order_id": order_id,
+            "current_status": current_status,
+            "requested_status": requested_status,
+        }
+        if details:
+            error_details.update(details)
+
+        super().__init__(
+            message=(
+                f"Invalid state transition for order {order_id}: "
+                f"{current_status} -> {requested_status}"
+            ),
+            code="INVALID_STATE_TRANSITION",
+            details=error_details,
+        )
+
+
 # ---------------------------------------------------------------------------
 # Strategy Errors
 # ---------------------------------------------------------------------------
@@ -462,6 +637,12 @@ ALL_EXCEPTION_CLASSES: list[type[TradingSystemError]] = [
     OrderRejectedError,
     InsufficientBalanceError,
     BrokerConnectionError,
+    OrderSubmissionError,
+    OrderNotFoundError,
+    OrderTimeoutError,
+    PositionNotFoundError,
+    PositionStorageError,
+    InvalidStateTransitionError,
     StrategyError,
     TemplateNotFoundError,
     InvalidParametersError,

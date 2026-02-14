@@ -1,13 +1,13 @@
 """Position model for tracking open and closed positions."""
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
-from datetime import datetime, timezone
 import enum
-
-from sqlalchemy import String, Float, ForeignKey, Enum, DateTime
-from sqlalchemy.orm import Mapped, mapped_column, relationship, validates
 import math
+from datetime import datetime, timezone
+from typing import TYPE_CHECKING
+
+from sqlalchemy import DateTime, Enum, Float, ForeignKey, String
+from sqlalchemy.orm import Mapped, mapped_column, relationship, validates
 
 from .base import Base, TimestampMixin, generate_id
 
@@ -50,6 +50,10 @@ class Position(Base, TimestampMixin):
     pnl_usdt: Mapped[float] = mapped_column(Float, default=0.0)
     pnl_pct: Mapped[float] = mapped_column(Float, default=0.0)
 
+    # Commission tracking (accumulated across all fills for this position)
+    # Decision: Session 4B - Required for accurate P&L calculations (invariant #3)
+    commission_paid: Mapped[float] = mapped_column(Float, default=0.0)
+
     # Status
     status: Mapped[PositionStatus] = mapped_column(Enum(PositionStatus), nullable=False, default=PositionStatus.OPEN)
     opened_at: Mapped[datetime] = mapped_column(
@@ -64,7 +68,7 @@ class Position(Base, TimestampMixin):
     account: Mapped["Account"] = relationship("Account", back_populates="positions")
     strategy: Mapped["Strategy | None"] = relationship("Strategy", back_populates="positions")
 
-    @validates("size", "entry_price", "current_price", "exit_price")
+    @validates("size", "entry_price", "current_price", "exit_price", "commission_paid")
     def validate_numeric_values(self, key: str, value: float | None) -> float | None:
         """Validate numeric values are positive and not NaN/Infinity.
 
@@ -79,15 +83,26 @@ class Position(Base, TimestampMixin):
             ValueError: If value is invalid
         """
         if value is None:
-            # Allow None for optional field (exit_price)
+            # Allow None for optional fields
             if key == "exit_price":
                 return value
+            # commission_paid defaults to 0.0 when None
+            if key == "commission_paid":
+                return 0.0
             raise ValueError(f"{key} cannot be None")
 
         if math.isnan(value):
             raise ValueError(f"{key} cannot be NaN")
         if math.isinf(value):
             raise ValueError(f"{key} cannot be Infinity")
+
+        # commission_paid and size allow zero (non-negative)
+        # size=0.0 is valid for fully closed positions
+        if key in ("commission_paid", "size"):
+            if value < 0:
+                raise ValueError(f"{key} must be non-negative, got {value}")
+            return value
+
         if value <= 0:
             raise ValueError(f"{key} must be positive, got {value}")
         return value

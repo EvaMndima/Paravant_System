@@ -266,11 +266,16 @@ async def shutdown_event() -> None:
 
 # Register route modules
 from src.api.routes.risk import router as risk_router
+from src.api.routes.orders import router as orders_router
+from src.api.routes.positions import router as positions_router
+from src.api.routes.execution import router as execution_router
 
 app.include_router(risk_router, prefix="/api/v1/risk", tags=["risk"])
+app.include_router(orders_router, prefix="/api/v1/orders", tags=["orders"])
+app.include_router(positions_router, prefix="/api/v1/positions", tags=["positions"])
+app.include_router(execution_router, prefix="/api/v1/execution", tags=["execution"])
 
 # Note: Additional route modules will be added in subsequent sections:
 # - Section 1.3: Configuration routes
-# - Section 4: Execution routes
 # - Section 5: Strategy routes
 # - Section 6: Dashboard and monitoring routes

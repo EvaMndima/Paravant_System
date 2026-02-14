@@ -1,20 +1,20 @@
 """Strategy model with full lifecycle tracking."""
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, cast
-from datetime import datetime, timezone
 import enum
+from datetime import datetime, timezone
+from typing import TYPE_CHECKING, Any, cast
 
-from sqlalchemy import String, Enum, JSON
+from sqlalchemy import JSON, Enum, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from .base import Base, TimestampMixin, generate_id
 
 if TYPE_CHECKING:
-    from .strategy_assignment import StrategyAssignment
-    from .position import Position
     from .order import Order
+    from .position import Position
     from .signal import Signal
+    from .strategy_assignment import StrategyAssignment
 
 
 class StrategyStatus(str, enum.Enum):

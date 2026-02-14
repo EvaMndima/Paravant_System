@@ -1,11 +1,11 @@
 """Signal model for tracking strategy signals."""
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any
-from datetime import datetime, timezone
 import enum
+from datetime import datetime, timezone
+from typing import TYPE_CHECKING, Any
 
-from sqlalchemy import String, Float, ForeignKey, Enum, DateTime, Boolean, JSON
+from sqlalchemy import JSON, Boolean, DateTime, Enum, Float, ForeignKey, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from .base import Base, TimestampMixin, generate_id

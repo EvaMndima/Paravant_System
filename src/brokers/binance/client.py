@@ -18,21 +18,16 @@ from __future__ import annotations
 
 import asyncio
 from datetime import datetime, timezone
-from typing import Any
+from typing import Any, cast
 
 from binance.client import Client
-from binance.exceptions import (
-    BinanceAPIException,
-    BinanceOrderException,
-    BinanceRequestException,
-)
+from binance.exceptions import (BinanceAPIException, BinanceOrderException,
+                                BinanceRequestException)
 
-from src.brokers.binance.exceptions import (
-    BinanceAPIError,
-    BinanceAuthenticationError,
-    BinanceConnectionError,
-    BinanceRateLimitError,
-)
+from src.brokers.binance.exceptions import (BinanceAPIError,
+                                            BinanceAuthenticationError,
+                                            BinanceConnectionError,
+                                            BinanceRateLimitError)
 from src.brokers.binance.rate_limiter import RateLimiter
 from src.core.config.settings import get_settings
 from src.core.exceptions import SymbolNotFoundError
@@ -135,7 +130,7 @@ class BinanceClient:
             result = await asyncio.to_thread(self.client.ping)
 
             logger.debug("binance_ping_success")
-            return result
+            return cast(dict[str, Any], result)
 
         except BinanceRequestException as e:
             logger.error(
@@ -340,13 +335,16 @@ class BinanceClient:
 
             # Wrap blocking call in thread
             if symbol:
-                result = await asyncio.to_thread(
+                result = cast(dict[str, Any] | None, await asyncio.to_thread(
                     self.client.get_symbol_info, symbol=symbol
-                )
+                ))
                 if result is None:
                     raise SymbolNotFoundError(symbol=symbol)
             else:
                 result = await asyncio.to_thread(self.client.get_exchange_info)
+            
+            # Cast result to expected type
+            result = cast(dict[str, Any], result)
 
             logger.info(
                 "exchange_info_fetched",
@@ -418,7 +416,7 @@ class BinanceClient:
             logger.info("fetching_account_info")
 
             # Wrap blocking call in thread
-            result = await asyncio.to_thread(self.client.get_account)
+            result = cast(dict[str, Any], await asyncio.to_thread(self.client.get_account))
 
             logger.info(
                 "account_info_fetched",
@@ -458,6 +456,416 @@ class BinanceClient:
             raise BinanceConnectionError(
                 reason="Failed to fetch account info",
                 details={"error": str(e)},
+            ) from e
+
+    # =========================================================================
+    # ORDER OPERATIONS (Phase 4A - Execution Infrastructure)
+    # =========================================================================
+
+    async def create_order(
+        self,
+        symbol: str,
+        side: str,
+        order_type: str,
+        quantity: float,
+        price: float | None = None,
+    ) -> dict[str, Any]:
+        """Submit a new order to Binance.
+
+        Decision: DEC-2026-02-10-001 - python-binance SDK wrapper
+        Decision: DEC-2026-02-08-008 - Structured logging
+
+        Args:
+            symbol: Trading pair (e.g., "BTCUSDT").
+            side: Order side ("BUY" or "SELL" - Binance format).
+            order_type: Order type ("MARKET", "LIMIT" - Binance format).
+            quantity: Order quantity in base asset.
+            price: Limit price (required for LIMIT orders, ignored for MARKET).
+
+        Returns:
+            Binance order response dictionary with keys:
+            - orderId (int): Exchange order ID
+            - symbol (str): Trading pair
+            - status (str): Order status (e.g., "FILLED", "NEW")
+            - executedQty (str): Filled quantity
+            - cummulativeQuoteQty (str): Total quote asset spent
+            - fills (list): List of fill details with price, qty, commission
+
+        Raises:
+            BinanceAuthenticationError: If API keys are missing or invalid.
+            BinanceAPIError: If Binance API returns an error.
+            BinanceRateLimitError: If rate limit is exceeded.
+            BinanceConnectionError: If the request fails.
+        """
+        if not self.api_key or not self.secret_key:
+            raise BinanceAuthenticationError(
+                reason="API key and secret required for order operations",
+            )
+
+        # Order operations get higher priority than data fetches
+        await self.rate_limiter.acquire(priority="order_management")
+
+        try:
+            logger.info(
+                "submitting_order",
+                symbol=symbol,
+                side=side,
+                order_type=order_type,
+                quantity=quantity,
+                has_price=price is not None,
+            )
+
+            # Build order parameters
+            order_params: dict[str, Any] = {
+                "symbol": symbol,
+                "side": side,
+                "type": order_type,
+                "quantity": str(quantity),
+            }
+            if price is not None and order_type != "MARKET":
+                order_params["price"] = str(price)
+                order_params["timeInForce"] = "GTC"
+
+            result = cast(dict[str, Any], await asyncio.to_thread(
+                self.client.create_order, **order_params
+            ))
+
+            logger.info(
+                "order_submitted",
+                symbol=symbol,
+                side=side,
+                order_id=result.get("orderId"),
+                status=result.get("status"),
+                executed_qty=result.get("executedQty"),
+            )
+
+            return result
+
+        except BinanceOrderException as e:
+            logger.error(
+                "order_submission_failed",
+                symbol=symbol,
+                side=side,
+                order_type=order_type,
+                quantity=quantity,
+                code=e.code,
+                message=e.message,
+                exc_info=True,
+            )
+
+            if e.code == -2010:
+                raise BinanceAPIError(
+                    symbol=symbol,
+                    api_code=e.code,
+                    api_message=e.message,
+                    details={"context": "insufficient_balance"},
+                ) from e
+
+            if e.code == -1013:
+                raise BinanceAPIError(
+                    symbol=symbol,
+                    api_code=e.code,
+                    api_message=e.message,
+                    details={"context": "invalid_quantity"},
+                ) from e
+
+            raise BinanceAPIError(
+                symbol=symbol,
+                api_code=e.code,
+                api_message=e.message,
+            ) from e
+
+        except BinanceAPIException as e:
+            logger.error(
+                "order_api_error",
+                symbol=symbol,
+                code=e.code,
+                message=e.message,
+                exc_info=True,
+            )
+
+            if e.code == -1121:
+                raise SymbolNotFoundError(symbol=symbol) from e
+
+            if e.code in (-1003, 429):
+                raise BinanceRateLimitError(
+                    limit_type="ORDER_RATE",
+                    retry_after=int(e.message.split("Retry-After: ")[1])
+                    if "Retry-After" in e.message
+                    else None,
+                ) from e
+
+            raise BinanceAPIError(
+                symbol=symbol,
+                api_code=e.code,
+                api_message=e.message,
+            ) from e
+
+        except BinanceRequestException as e:
+            logger.error(
+                "order_request_error",
+                symbol=symbol,
+                error=str(e),
+                exc_info=True,
+            )
+            raise BinanceConnectionError(
+                reason="Order submission request failed",
+                details={"symbol": symbol, "side": side, "error": str(e)},
+            ) from e
+
+    async def cancel_order(
+        self,
+        symbol: str,
+        order_id: int,
+    ) -> dict[str, Any]:
+        """Cancel an existing order on Binance.
+
+        Args:
+            symbol: Trading pair (e.g., "BTCUSDT").
+            order_id: Binance order ID (integer).
+
+        Returns:
+            Binance cancellation response dictionary.
+
+        Raises:
+            BinanceAuthenticationError: If API keys are missing.
+            BinanceAPIError: If order cannot be cancelled.
+            BinanceConnectionError: If the request fails.
+        """
+        if not self.api_key or not self.secret_key:
+            raise BinanceAuthenticationError(
+                reason="API key and secret required for order operations",
+            )
+
+        await self.rate_limiter.acquire(priority="order_management")
+
+        try:
+            logger.info(
+                "cancelling_order",
+                symbol=symbol,
+                order_id=order_id,
+            )
+
+            result = cast(dict[str, Any], await asyncio.to_thread(
+                self.client.cancel_order,
+                symbol=symbol,
+                orderId=order_id,
+            ))
+
+            logger.info(
+                "order_cancelled",
+                symbol=symbol,
+                order_id=order_id,
+                status=result.get("status"),
+            )
+
+            return result
+
+        except BinanceAPIException as e:
+            logger.error(
+                "order_cancel_failed",
+                symbol=symbol,
+                order_id=order_id,
+                code=e.code,
+                message=e.message,
+                exc_info=True,
+            )
+
+            if e.code == -2011:
+                raise BinanceAPIError(
+                    symbol=symbol,
+                    api_code=e.code,
+                    api_message=e.message,
+                    details={"context": "unknown_order", "order_id": order_id},
+                ) from e
+
+            raise BinanceAPIError(
+                symbol=symbol,
+                api_code=e.code,
+                api_message=e.message,
+            ) from e
+
+        except BinanceRequestException as e:
+            logger.error(
+                "order_cancel_request_error",
+                symbol=symbol,
+                order_id=order_id,
+                error=str(e),
+                exc_info=True,
+            )
+            raise BinanceConnectionError(
+                reason="Order cancellation request failed",
+                details={
+                    "symbol": symbol,
+                    "order_id": order_id,
+                    "error": str(e),
+                },
+            ) from e
+
+    async def get_order_status(
+        self,
+        symbol: str,
+        order_id: int,
+    ) -> dict[str, Any]:
+        """Get the current status of an order from Binance.
+
+        Args:
+            symbol: Trading pair (e.g., "BTCUSDT").
+            order_id: Binance order ID (integer).
+
+        Returns:
+            Order status dictionary with keys:
+            - orderId (int): Exchange order ID
+            - status (str): Current status ("NEW", "FILLED", "CANCELED", etc.)
+            - executedQty (str): Filled quantity
+            - cummulativeQuoteQty (str): Total quote asset spent
+
+        Raises:
+            BinanceAuthenticationError: If API keys are missing.
+            BinanceAPIError: If the query fails.
+            BinanceConnectionError: If the request fails.
+        """
+        if not self.api_key or not self.secret_key:
+            raise BinanceAuthenticationError(
+                reason="API key and secret required for order operations",
+            )
+
+        await self.rate_limiter.acquire(priority="order_management")
+
+        try:
+            logger.debug(
+                "fetching_order_status",
+                symbol=symbol,
+                order_id=order_id,
+            )
+
+            result = cast(dict[str, Any], await asyncio.to_thread(
+                self.client.get_order,
+                symbol=symbol,
+                orderId=order_id,
+            ))
+
+            logger.debug(
+                "order_status_fetched",
+                symbol=symbol,
+                order_id=order_id,
+                status=result.get("status"),
+                executed_qty=result.get("executedQty"),
+            )
+
+            return result
+
+        except BinanceAPIException as e:
+            logger.error(
+                "order_status_fetch_failed",
+                symbol=symbol,
+                order_id=order_id,
+                code=e.code,
+                message=e.message,
+                exc_info=True,
+            )
+
+            if e.code == -2013:
+                raise BinanceAPIError(
+                    symbol=symbol,
+                    api_code=e.code,
+                    api_message=e.message,
+                    details={"context": "order_not_found", "order_id": order_id},
+                ) from e
+
+            raise BinanceAPIError(
+                symbol=symbol,
+                api_code=e.code,
+                api_message=e.message,
+            ) from e
+
+        except BinanceRequestException as e:
+            logger.error(
+                "order_status_request_error",
+                symbol=symbol,
+                order_id=order_id,
+                error=str(e),
+                exc_info=True,
+            )
+            raise BinanceConnectionError(
+                reason="Order status request failed",
+                details={
+                    "symbol": symbol,
+                    "order_id": order_id,
+                    "error": str(e),
+                },
+            ) from e
+
+    async def get_open_orders(
+        self,
+        symbol: str | None = None,
+    ) -> list[dict[str, Any]]:
+        """Get all open orders, optionally filtered by symbol.
+
+        Args:
+            symbol: Optional trading pair to filter by.
+
+        Returns:
+            List of open order dictionaries.
+
+        Raises:
+            BinanceAuthenticationError: If API keys are missing.
+            BinanceAPIError: If the query fails.
+            BinanceConnectionError: If the request fails.
+        """
+        if not self.api_key or not self.secret_key:
+            raise BinanceAuthenticationError(
+                reason="API key and secret required for order operations",
+            )
+
+        await self.rate_limiter.acquire(priority="order_management")
+
+        try:
+            logger.info(
+                "fetching_open_orders",
+                symbol=symbol or "all",
+            )
+
+            kwargs: dict[str, Any] = {}
+            if symbol:
+                kwargs["symbol"] = symbol
+
+            result = await asyncio.to_thread(
+                self.client.get_open_orders, **kwargs
+            )
+
+            logger.info(
+                "open_orders_fetched",
+                symbol=symbol or "all",
+                count=len(result),
+            )
+
+            return cast(list[dict[str, Any]], result)
+
+        except BinanceAPIException as e:
+            logger.error(
+                "open_orders_fetch_failed",
+                symbol=symbol,
+                code=e.code,
+                message=e.message,
+                exc_info=True,
+            )
+            raise BinanceAPIError(
+                symbol=symbol or "all",
+                api_code=e.code,
+                api_message=e.message,
+            ) from e
+
+        except BinanceRequestException as e:
+            logger.error(
+                "open_orders_request_error",
+                symbol=symbol,
+                error=str(e),
+                exc_info=True,
+            )
+            raise BinanceConnectionError(
+                reason="Open orders request failed",
+                details={"symbol": symbol, "error": str(e)},
             ) from e
 
     def get_rate_limit_stats(self) -> dict[str, float | int]:

@@ -277,7 +277,7 @@ class OHLCVSeries:
         return np.array([c.volume for c in self.candles], dtype=np.float64)
 
     @property
-    def timestamps(self) -> np.ndarray:
+    def timestamps(self) -> NDArray[np.datetime64]:
         """Get timestamps as numpy array.
 
         Returns:
@@ -289,7 +289,7 @@ class OHLCVSeries:
         )
 
     @property
-    def hl2(self) -> np.ndarray:
+    def hl2(self) -> NDArray[np.float64]:
         """Get (High + Low) / 2 as numpy array.
 
         Returns:
@@ -298,7 +298,7 @@ class OHLCVSeries:
         return (self.highs + self.lows) / 2.0
 
     @property
-    def hlc3(self) -> np.ndarray:
+    def hlc3(self) -> NDArray[np.float64]:
         """Get (High + Low + Close) / 3 as numpy array.
 
         Returns:
@@ -307,7 +307,7 @@ class OHLCVSeries:
         return (self.highs + self.lows + self.closes) / 3.0
 
     @property
-    def ohlc4(self) -> np.ndarray:
+    def ohlc4(self) -> NDArray[np.float64]:
         """Get (Open + High + Low + Close) / 4 as numpy array.
 
         Returns:
@@ -316,7 +316,7 @@ class OHLCVSeries:
         return (self.opens + self.highs + self.lows + self.closes) / 4.0
 
     @property
-    def typical_price(self) -> np.ndarray:
+    def typical_price(self) -> NDArray[np.float64]:
         """Get typical price (HLC3) as numpy array.
 
         Alias for hlc3 property.

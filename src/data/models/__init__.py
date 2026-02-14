@@ -1,15 +1,17 @@
 """Database models package - exports all models."""
-from .base import Base, TimestampMixin, generate_id
 from .account import Account, AccountStatus, RiskProfile
-from .strategy import Strategy, StrategyStatus, StrategyType
-from .order import Order, OrderSide, OrderType, OrderStatus
+from .base import Base, TimestampMixin, generate_id
+from .fill_rate_record import FillRateRecord
+from .order import Order, OrderSide, OrderStatus, OrderType
+from .pnl import EquitySnapshot, PnLRecord
 from .position import Position, PositionSide, PositionStatus
-from .trade import Trade
-from .pnl import PnLRecord, EquitySnapshot
-from .strategy_assignment import StrategyAssignment, AssignmentStatus
-from .system import SystemState, AuditLog
 from .signal import Signal, SignalDirection
+from .slippage_record import SlippageRecord
+from .strategy import Strategy, StrategyStatus, StrategyType
+from .strategy_assignment import AssignmentStatus, StrategyAssignment
 from .symbol import SymbolInfo
+from .system import AuditLog, SystemState
+from .trade import Trade
 
 __all__ = [
     # Base
@@ -49,4 +51,7 @@ __all__ = [
     "SignalDirection",
     # Symbol
     "SymbolInfo",
+    # Execution Quality (Phase 4B)
+    "SlippageRecord",
+    "FillRateRecord",
 ]

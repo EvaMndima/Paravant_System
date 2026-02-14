@@ -1,10 +1,10 @@
 """StrategyAssignment model linking strategies to accounts."""
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, cast
 import enum
+from typing import TYPE_CHECKING, cast
 
-from sqlalchemy import String, ForeignKey, Enum, JSON
+from sqlalchemy import JSON, Enum, ForeignKey, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from .base import Base, TimestampMixin, generate_id

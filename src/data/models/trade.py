@@ -3,12 +3,12 @@
 This model tracks individual trade executions (fills) from orders.
 Each order can have multiple trades if it's partially filled.
 """
+import math
 from datetime import datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import String, Float, ForeignKey, Enum, DateTime
-from sqlalchemy.orm import relationship, Mapped, mapped_column, validates
-import math
+from sqlalchemy import DateTime, Enum, Float, ForeignKey, String
+from sqlalchemy.orm import Mapped, mapped_column, relationship, validates
 
 from .base import Base, TimestampMixin, generate_id
 from .order import OrderSide

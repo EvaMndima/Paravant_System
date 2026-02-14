@@ -1,13 +1,13 @@
 """Order model for tracking all orders."""
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
-from datetime import datetime
 import enum
-
-from sqlalchemy import String, Float, ForeignKey, Enum, DateTime
-from sqlalchemy.orm import Mapped, mapped_column, relationship, validates
 import math
+from datetime import datetime
+from typing import TYPE_CHECKING
+
+from sqlalchemy import DateTime, Enum, Float, ForeignKey, String
+from sqlalchemy.orm import Mapped, mapped_column, relationship, validates
 
 from .base import Base, TimestampMixin, generate_id
 
@@ -68,7 +68,8 @@ class Order(Base, TimestampMixin):
     status: Mapped[OrderStatus] = mapped_column(Enum(OrderStatus), nullable=False, default=OrderStatus.PENDING)
     filled_quantity: Mapped[float] = mapped_column(Float, default=0.0)
     filled_price: Mapped[float | None] = mapped_column(Float)
-    filled_at: Mapped[datetime | None] = mapped_column(DateTime)
+    filled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    submitted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
     # Rejection
     rejection_reason: Mapped[str | None] = mapped_column(String(500))

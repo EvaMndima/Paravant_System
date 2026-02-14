@@ -7,7 +7,7 @@ This module provides models for:
 from datetime import datetime, timezone
 from typing import Any, cast
 
-from sqlalchemy import String, DateTime, Boolean, JSON
+from sqlalchemy import JSON, Boolean, DateTime, String
 from sqlalchemy.orm import Mapped, mapped_column
 
 from .base import Base, generate_id
