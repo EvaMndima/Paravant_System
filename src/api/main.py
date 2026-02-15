@@ -269,13 +269,18 @@ from src.api.routes.risk import router as risk_router
 from src.api.routes.orders import router as orders_router
 from src.api.routes.positions import router as positions_router
 from src.api.routes.execution import router as execution_router
+from src.api.routes.strategies import router as strategies_router
+from src.api.routes.backtest import router as backtest_router
+from src.api.routes.paper_trading import router as paper_trading_router
 
 app.include_router(risk_router, prefix="/api/v1/risk", tags=["risk"])
 app.include_router(orders_router, prefix="/api/v1/orders", tags=["orders"])
 app.include_router(positions_router, prefix="/api/v1/positions", tags=["positions"])
 app.include_router(execution_router, prefix="/api/v1/execution", tags=["execution"])
+app.include_router(strategies_router, prefix="/api/v1/strategies", tags=["strategies"])
+app.include_router(backtest_router, prefix="/api/v1/strategies", tags=["backtest"])
+app.include_router(paper_trading_router, prefix="/api/v1/strategies", tags=["paper-trading"])
 
 # Note: Additional route modules will be added in subsequent sections:
 # - Section 1.3: Configuration routes
-# - Section 5: Strategy routes
 # - Section 6: Dashboard and monitoring routes
