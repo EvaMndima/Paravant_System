@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING, Any, cast
 
 from sqlalchemy import JSON, Enum, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy.orm.attributes import flag_modified
 
 from .base import Base, TimestampMixin, generate_id
 
@@ -91,13 +92,15 @@ class Strategy(Base, TimestampMixin):
     def add_lifecycle_event(self, from_status: str, to_status: str, reason: str) -> None:
         """
         Record a lifecycle status change.
-        
+
         Args:
             from_status: Previous status
             to_status: New status
             reason: Reason for status change
         """
-        # lifecycle always has a default value (empty list), so no None check needed
+        if self.lifecycle is None:
+            self.lifecycle = []
+
         self.lifecycle.append(
             {
                 "from": from_status,
@@ -106,3 +109,6 @@ class Strategy(Base, TimestampMixin):
                 "timestamp": datetime.now(timezone.utc).isoformat(),  # Timezone-aware timestamp
             }
         )
+        # Signal SQLAlchemy that the JSON column was mutated in-place
+        # Without this, in-place list mutations are not detected by the ORM
+        flag_modified(self, "lifecycle")

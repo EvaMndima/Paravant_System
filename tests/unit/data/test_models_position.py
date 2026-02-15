@@ -46,8 +46,8 @@ class TestPositionModel:
         # SQLite does not preserve tzinfo - just verify timestamp exists
         assert position.opened_at is not None
 
-    def test_position_size_must_be_positive(self, db_session):
-        """Test that size must be positive."""
+    def test_position_size_zero_allowed(self, db_session):
+        """Test that size=0.0 is allowed (for fully closed positions)."""
         from src.data.models import Account, Strategy
 
         account = Account(name="Test", broker="binance")
@@ -56,17 +56,20 @@ class TestPositionModel:
         db_session.add(strategy)
         db_session.commit()
 
-        with pytest.raises(ValueError, match="size must be positive"):
-            Position(
-                account_id=account.id,
-                strategy_id=strategy.id,
-                symbol="BTCUSDT",
-                side="long",
-                size=0.0,  # Invalid
-                entry_price=50000.0,
-                current_price=50000.0,
-                status="open",
-            )
+        # size=0.0 is now valid (for closed positions)
+        position = Position(
+            account_id=account.id,
+            strategy_id=strategy.id,
+            symbol="BTCUSDT",
+            side="long",
+            size=0.0,  # Valid for closed positions
+            entry_price=50000.0,
+            current_price=50000.0,
+            status="open",
+        )
+        db_session.add(position)
+        db_session.commit()
+        assert position.size == 0.0
 
     def test_position_negative_size_rejected(self, db_session):
         """Test that negative size is rejected."""
@@ -78,7 +81,7 @@ class TestPositionModel:
         db_session.add(strategy)
         db_session.commit()
 
-        with pytest.raises(ValueError, match="size must be positive"):
+        with pytest.raises(ValueError, match="size must be non-negative"):
             Position(
                 account_id=account.id,
                 strategy_id=strategy.id,

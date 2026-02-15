@@ -31,6 +31,7 @@ class Signal(Base, TimestampMixin):
 
     id: Mapped[str] = mapped_column(String, primary_key=True, default=lambda: generate_id("sig"))
     strategy_id: Mapped[str] = mapped_column(String, ForeignKey("strategies.id"), nullable=False)
+    symbol: Mapped[str] = mapped_column(String(20), nullable=False)
 
     # Signal details
     timestamp: Mapped[datetime] = mapped_column(

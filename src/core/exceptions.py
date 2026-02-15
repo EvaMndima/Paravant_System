@@ -20,6 +20,10 @@ Exception Hierarchy::
     |   +-- TemplateNotFoundError
     |   +-- InvalidParametersError
     |   +-- BacktestError
+    |   +-- PaperTradingError
+    |   +-- InvalidStatusTransitionError
+    |   +-- RegimeError
+    |   +-- SignalGenerationError
     +-- DataError
     |   +-- MarketDataError
     |   +-- SymbolNotFoundError
@@ -539,6 +543,121 @@ class BacktestError(StrategyError):
         )
 
 
+class PaperTradingError(StrategyError):
+    """Raised when a paper trading operation fails.
+
+    Attributes:
+        strategy_id: The strategy that failed paper trading.
+        reason: Paper trading failure reason.
+    """
+
+    def __init__(
+        self, strategy_id: str = "", reason: str = "Paper trading failed"
+    ) -> None:
+        super().__init__(
+            message=f"Paper trading error: {reason}",
+            code="PAPER_TRADING_ERROR",
+            details={
+                "strategy_id": strategy_id,
+                "reason": reason,
+            },
+        )
+
+
+class InvalidStatusTransitionError(StrategyError):
+    """Raised when a strategy status transition violates the state machine.
+
+    The strategy lifecycle state machine enforces valid transitions:
+    DRAFT -> BACKTEST -> SIMULATED_PAPER -> LIVE_PAPER -> PENDING_APPROVAL -> LIVE
+    With lateral transitions: LIVE -> PAUSED, UNDERPERFORMING, RETIRED
+
+    Attributes:
+        strategy_id: The strategy with the invalid transition.
+        current_status: The current strategy status.
+        requested_status: The requested (invalid) status.
+    """
+
+    def __init__(
+        self,
+        strategy_id: str,
+        current_status: str,
+        requested_status: str,
+        details: dict[str, Any] | None = None,
+    ) -> None:
+        error_details = {
+            "strategy_id": strategy_id,
+            "current_status": current_status,
+            "requested_status": requested_status,
+        }
+        if details:
+            error_details.update(details)
+
+        super().__init__(
+            message=(
+                f"Invalid status transition for strategy {strategy_id}: "
+                f"{current_status} -> {requested_status}"
+            ),
+            code="INVALID_STATUS_TRANSITION",
+            details=error_details,
+        )
+
+
+class RegimeError(StrategyError):
+    """Raised when market regime operations fail.
+
+    Attributes:
+        symbol: The symbol associated with the regime error.
+        reason: Failure reason.
+    """
+
+    def __init__(
+        self,
+        symbol: str = "",
+        reason: str = "Regime operation failed",
+        details: dict[str, Any] | None = None,
+    ) -> None:
+        error_details = {"symbol": symbol, "reason": reason}
+        if details:
+            error_details.update(details)
+
+        super().__init__(
+            message=f"Regime error for {symbol}: {reason}",
+            code="REGIME_ERROR",
+            details=error_details,
+        )
+
+
+class SignalGenerationError(StrategyError):
+    """Raised when signal generation fails.
+
+    Attributes:
+        strategy_id: The strategy that failed signal generation.
+        template_id: The template used for signal generation.
+        reason: Failure reason.
+    """
+
+    def __init__(
+        self,
+        strategy_id: str = "",
+        template_id: str = "",
+        reason: str = "Signal generation failed",
+        details: dict[str, Any] | None = None,
+    ) -> None:
+        error_details = {
+            "strategy_id": strategy_id,
+            "template_id": template_id,
+            "reason": reason,
+        }
+        if details:
+            error_details.update(details)
+
+        super().__init__(
+            message=f"Signal generation error: {reason}",
+            code="SIGNAL_GENERATION_ERROR",
+            details=error_details,
+        )
+
+
 # ---------------------------------------------------------------------------
 # Data Errors
 # ---------------------------------------------------------------------------
@@ -647,6 +766,10 @@ ALL_EXCEPTION_CLASSES: list[type[TradingSystemError]] = [
     TemplateNotFoundError,
     InvalidParametersError,
     BacktestError,
+    PaperTradingError,
+    InvalidStatusTransitionError,
+    RegimeError,
+    SignalGenerationError,
     DataError,
     MarketDataError,
     SymbolNotFoundError,
