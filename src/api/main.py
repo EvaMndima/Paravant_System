@@ -72,6 +72,10 @@ app.add_middleware(
     allow_headers=["Content-Type", "Authorization", "X-Request-ID"],  # Explicit headers
 )
 
+# Request logging middleware (after CORS so CORS headers are already set)
+from src.api.middleware.request_logger import RequestLoggerMiddleware
+app.add_middleware(RequestLoggerMiddleware)
+
 
 # Application startup time for uptime calculation
 startup_time = datetime.now(timezone.utc)
@@ -178,6 +182,58 @@ async def readiness_check() -> JSONResponse:
     )
 
 
+@app.get("/health/detailed", status_code=status.HTTP_200_OK)
+async def detailed_health_check() -> JSONResponse:
+    """
+    Detailed health check with component-level breakdown.
+
+    Returns per-component health status for monitoring dashboards.
+    """
+    from sqlalchemy import text
+    from src.data.database import engine
+
+    components: Dict[str, Any] = {}
+    all_healthy = True
+
+    # Database
+    try:
+        with engine.connect() as conn:
+            conn.execute(text("SELECT 1"))
+            conn.commit()
+        components["database"] = {"status": "healthy"}
+    except Exception as e:
+        components["database"] = {"status": "unhealthy", "error": str(e)}
+        all_healthy = False
+
+    # EventBus
+    try:
+        from src.core.event_bus import get_event_bus
+        bus = get_event_bus()
+        import asyncio
+        sub_count = await bus.get_subscriber_count()
+        components["event_bus"] = {"status": "healthy", "subscribers": sub_count}
+    except RuntimeError:
+        components["event_bus"] = {"status": "not_initialized"}
+    except Exception as e:
+        components["event_bus"] = {"status": "unhealthy", "error": str(e)}
+        all_healthy = False
+
+    # API
+    uptime = (datetime.now(timezone.utc) - startup_time).total_seconds()
+    components["api"] = {"status": "healthy", "uptime_seconds": uptime}
+
+    overall = "healthy" if all_healthy else "degraded"
+
+    return JSONResponse(
+        status_code=status.HTTP_200_OK if all_healthy else status.HTTP_503_SERVICE_UNAVAILABLE,
+        content={
+            "status": overall,
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "components": components,
+        }
+    )
+
+
 @app.get("/", status_code=status.HTTP_200_OK)
 async def root() -> Dict[str, Any]:
     """
@@ -231,6 +287,30 @@ async def startup_event() -> None:
             environment=ENVIRONMENT
         )
 
+    # Initialize EventBus for SSE real-time streaming
+    from src.core.event_bus import init_event_bus
+    event_bus = init_event_bus()
+    app.state.event_bus = event_bus
+    logger.info("event_bus_initialized_in_startup")
+
+    # Initialize DataStore for route dependency injection
+    from src.data.store import DataStore
+    store = DataStore()
+    app.state.store = store
+
+    # Initialize route dependencies
+    from src.api.routes.system import init_system_routes
+    from src.api.routes.dashboard import init_dashboard_routes
+    from src.api.routes.accounts import init_account_routes
+    from src.api.routes.pnl import init_pnl_routes
+    from src.api.routes.events import init_event_routes
+
+    init_system_routes(store=store, event_bus=event_bus)
+    init_dashboard_routes(store=store)
+    init_account_routes(store=store)
+    init_pnl_routes(store=store)
+    init_event_routes(event_bus=event_bus)
+
     logger.info(
         "api_startup_details",
         environment=ENVIRONMENT,
@@ -238,6 +318,8 @@ async def startup_event() -> None:
         log_level=LOG_LEVEL,
         startup_time=startup_time.isoformat()
     )
+
+    logger.info("api_routes_initialized")
 
 
 @app.on_event("shutdown")
@@ -272,6 +354,11 @@ from src.api.routes.execution import router as execution_router
 from src.api.routes.strategies import router as strategies_router
 from src.api.routes.backtest import router as backtest_router
 from src.api.routes.paper_trading import router as paper_trading_router
+from src.api.routes.system import router as system_router
+from src.api.routes.dashboard import router as dashboard_router
+from src.api.routes.accounts import router as accounts_router
+from src.api.routes.pnl import router as pnl_router
+from src.api.routes.events import router as events_router
 
 app.include_router(risk_router, prefix="/api/v1/risk", tags=["risk"])
 app.include_router(orders_router, prefix="/api/v1/orders", tags=["orders"])
@@ -280,7 +367,8 @@ app.include_router(execution_router, prefix="/api/v1/execution", tags=["executio
 app.include_router(strategies_router, prefix="/api/v1/strategies", tags=["strategies"])
 app.include_router(backtest_router, prefix="/api/v1/strategies", tags=["backtest"])
 app.include_router(paper_trading_router, prefix="/api/v1/strategies", tags=["paper-trading"])
-
-# Note: Additional route modules will be added in subsequent sections:
-# - Section 1.3: Configuration routes
-# - Section 6: Dashboard and monitoring routes
+app.include_router(system_router, prefix="/api/v1/system", tags=["system"])
+app.include_router(dashboard_router, prefix="/api/v1/dashboard", tags=["dashboard"])
+app.include_router(accounts_router, prefix="/api/v1/accounts", tags=["accounts"])
+app.include_router(pnl_router, prefix="/api/v1/pnl", tags=["pnl"])
+app.include_router(events_router, prefix="/api/v1/events", tags=["events"])
