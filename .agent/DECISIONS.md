@@ -1196,6 +1196,618 @@ These decisions are **LOCKED** per MVP scope control rules until specified revie
 
 ---
 
-**Last Updated:** 2026-02-12
-**Total Decisions:** 40 active, 0 superseded, 5 locked
-**Next Decision ID:** DEC-2026-02-12-014
+## PHASE 4A: EXECUTION INFRASTRUCTURE
+
+### DEC-2026-02-13-001: Order Submission Flow Sequence
+**Decision:** Risk checks MUST run BEFORE database persistence, and orders MUST be persisted to database BEFORE submission to exchange
+
+**Context:** Order submission has specific ordering requirements for data integrity and recoverability. The sequence of operations determines what happens on failures at each step.
+
+**Rationale:**
+- Risk checks are memory-only with no side effects, must run first to avoid creating orphaned records for rejected orders
+- Database persistence BEFORE API submission ensures order safety - if API fails, we have a record to mark as REJECTED
+- If order submitted to exchange but DB update fails, we lose synchronization between our records and exchange state
+- Monitoring spawned as background task doesn't block submission completion
+
+**Alternatives Considered:**
+- Submit to exchange first: Rejected, could lose track of order if DB fails after successful submission
+- Risk check after DB persist: Rejected, creates orphaned records for rejected orders, wastes DB operations
+- No strict ordering: Rejected, race conditions and data integrity issues
+
+**Status:** ACTIVE
+**Date Decided:** 2026-02-13
+**Implemented By:** Phase 4A, Task 4.2.2
+**Affected Files:**
+  - `src/core/execution/order_manager.py` - submit_order() method implements 7-step sequence
+**References:** SESSION_4A_IMPLEMENTATION_PROMPT.md lines 830-1032
+
+**Implementation Details:**
+```
+STRICT SEQUENCE (CANNOT SKIP STEPS):
+1. Risk Check    (memory, no side effects)
+2. Create Record (memory only)
+3. Persist DB    (first irreversible step)
+4. Submit API    (can fail, but we have record)
+5. Update DB     (persist submission)
+6. Start Monitor (background tracking)
+
+Key invariant: Order exists in DB before going to exchange
+```
+
+---
+
+### DEC-2026-02-13-002: Order Status Polling with Exponential Backoff
+**Decision:** Order monitoring uses three-tier exponential backoff: 1s (0-30s), 5s (30-300s), 10s (300s+), with max 1000 polls (~30 minutes)
+
+**Context:** Market orders fill within seconds while limit orders may take minutes or hours. Need responsive polling without API spam or excessive costs.
+
+**Rationale:**
+- Fast detection critical for market orders which typically fill in 1-3 seconds
+- Reasonable load for limit orders waiting for price targets
+- Clean exit after 30 minutes prevents infinite polling on stuck orders
+- Give up after 3 consecutive errors handles network issues gracefully
+- Balances API rate limits, responsiveness, and server load
+
+**Alternatives Considered:**
+- Fixed 5s polling: Rejected, too slow for market orders (poor UX), too fast for long-waiting limits (API waste)
+- No max poll limit: Rejected, could poll forever on stuck/forgotten orders
+- WebSocket status updates: Deferred to V2, out of MVP scope
+- Fibonacci backoff: Rejected, unnecessary complexity, linear tiers sufficient
+
+**Status:** ACTIVE
+**Date Decided:** 2026-02-13
+**Implemented By:** Phase 4A, Task 4.2.3
+**Affected Files:**
+  - `src/core/execution/order_manager.py` - _monitor_order() method
+**References:** SESSION_4A_IMPLEMENTATION_PROMPT.md lines 1094-1261
+
+**Implementation Details:**
+```
+Polling timeline:
+0-30s:     Every 1 second (fast feedback for immediate fills)
+30-300s:   Every 5 seconds (normal execution phase)
+300s+:     Every 10 seconds (slow for limit orders waiting)
+Max: 1000 polls (~30 minutes total) then give up
+```
+
+---
+
+### DEC-2026-02-13-003: Bracket Order Atomic Submission
+**Decision:** Bracket orders (entry + stop loss + take profit) submit as three separate API calls but are logically linked via parent_order_id field
+
+**Context:** Binance Spot API doesn't support true OCO (One-Cancels-Other) bracket orders. Must submit individually and manage relationships in application layer.
+
+**Rationale:**
+- Binance Spot API limitation: No native bracket order support (Futures has it, but out of MVP scope)
+- Must track parent-child relationship in application layer using parent_order_id foreign key
+- On entry fill, SL/TP orders become active and start monitoring
+- On SL or TP fill, system must cancel the other leg to prevent double exit
+- Three separate submissions allow individual error handling per leg
+
+**Alternatives Considered:**
+- Wait for entry fill before submitting SL/TP: Rejected, exposes position to risk gap between fill and protective order placement
+- Use Futures API which has native brackets: Rejected, out of MVP scope (crypto spot only)
+- Single API call with manual OCO logic: Not possible with Binance Spot API
+- Submit SL/TP as conditional orders: Rejected, adds complexity, not materially better
+
+**Status:** ACTIVE
+**Date Decided:** 2026-02-13
+**Implemented By:** Phase 4A, Task 4.2.5
+**Affected Files:**
+  - `src/core/execution/order_manager.py` - submit_bracket_order() method
+  - `src/data/models.py` - Order.parent_order_id field
+**References:** SESSION_4A_IMPLEMENTATION_PROMPT.md lines 1393-1487, TRADING_SYSTEM_PRD.md Section 3.4.3
+
+---
+
+### DEC-2026-02-13-004: Binance API Testnet vs Mainnet Switching
+**Decision:** BinanceExecutionAdapter switches between testnet and mainnet via explicit `use_testnet: bool` constructor parameter, defaulting to testnet for safety
+
+**Context:** Development requires testnet for safe testing, production requires mainnet for real trading. Must be explicit and validated to prevent accidental mainnet usage during development.
+
+**Rationale:**
+- Explicit flag prevents accidental mainnet usage during development (could lose real money)
+- Defaults to testnet for safety - requires conscious choice to use mainnet
+- Fail-fast on initialization if connection fails, making environment issues immediately visible
+- Clear in logs which environment is active
+- Simple boolean better than multiple environment strings
+
+**Alternatives Considered:**
+- Environment variable: Rejected, too implicit, easy to forget to set or misconfigure
+- Separate classes (BinanceTestnetAdapter, BinanceMainnetAdapter): Rejected, unnecessary code duplication
+- Auto-detect from API keys: Rejected, unclear behavior, API keys don't indicate environment
+- Default to mainnet: Rejected, too dangerous for development
+
+**Status:** ACTIVE
+**Date Decided:** 2026-02-13
+**Implemented By:** Phase 4A, Task 4.1.1
+**Affected Files:**
+  - `src/brokers/binance/execution.py` - BinanceExecutionAdapter.__init__()
+**References:** SESSION_4A_IMPLEMENTATION_PROMPT.md lines 323-351
+
+**Implementation Details:**
+```python
+def __init__(
+    self,
+    binance_client: BinanceClient,
+    symbol_manager: SymbolManager,
+    use_testnet: bool = True  # Defaults to testnet for safety
+):
+    self.use_testnet = use_testnet
+    self.base_url = TESTNET_URL if use_testnet else MAINNET_URL
+```
+
+---
+
+### DEC-2026-02-13-005: Quantity and Price Rounding Strategy - Always Round Down
+**Decision:** Always round DOWN quantity to step_size and price to tick_size (never round up) to avoid exceeding intended order size or available balance
+
+**Context:** Binance enforces step size (quantity precision) and tick size (price precision). Rounding errors could exceed available balance or intended risk limits.
+
+**Rationale:**
+- Rounding UP quantity could exceed available balance, causing order rejection
+- Rounding UP price on BUY orders gets worse fill; on SELL orders violates user expectations
+- Rounding DOWN is consistently conservative across all scenarios
+- Small rounding errors accumulate toward safety, not risk
+- Prevents "insufficient balance" errors from rounding up
+- Aligns with risk management principle: never take more risk than intended
+
+**Alternatives Considered:**
+- Round to nearest: Rejected, could round up and exceed limits or balances
+- Round up: Rejected, violates conservative risk management, could exceed balance
+- Banker's rounding (round to even): Rejected, too complex, no clear benefit, still rounds up 50% of the time
+- No rounding (rely on exchange): Rejected, exchange rejects orders with wrong precision
+
+**Status:** ACTIVE
+**Date Decided:** 2026-02-13
+**Implemented By:** Phase 4A, Task 4.1.2
+**Affected Files:**
+  - `src/brokers/binance/execution.py` - _round_quantity(), _round_price()
+**References:** SESSION_4A_IMPLEMENTATION_PROMPT.md lines 364-416
+
+**Implementation Details:**
+```python
+# Round down to step size (quantity)
+rounded_qty = (quantity // step_size) * step_size
+
+# Round down to tick size (price)
+rounded_price = (price // tick_size) * tick_size
+```
+
+---
+
+## PHASE 4B: POSITION TRACKING & EXECUTION QUALITY
+
+### DEC-2026-02-13-006: Position P&L Commission Handling
+**Decision:** Commission is SUBTRACTED from unrealized P&L calculations to accurately reflect net profit/loss
+
+**Context:** Binance charges commission on both entry and exit trades. P&L must account for all trading costs to provide accurate performance metrics.
+
+**Rationale:**
+- Commission is real cost that reduces net profit and must be included for accurate tracking
+- Exit commission should be estimated and included in unrealized P&L (not just realized upon close)
+- Both entry and exit commission reduce final realized P&L
+- Overstating P&L by ignoring commission leads to false performance metrics
+- Critical for strategy evaluation and risk management decisions
+
+**Alternatives Considered:**
+- Ignore commission: Rejected, leads to systematically overstated performance, false profit signals
+- Only account on close (realized P&L): Rejected, unrealized P&L would be too optimistic, misleads operators
+- Separate commission tracking: Rejected, P&L should be net of all costs for decision-making
+- Estimate average commission rate: Considered but unnecessary, can get exact values from exchange
+
+**Status:** ACTIVE
+**Date Decided:** 2026-02-13
+**Implemented By:** Phase 4B, Task 4.3.2
+**Affected Files:**
+  - `src/core/execution/position_tracker.py` - calculate_unrealized_pnl(), calculate_realized_pnl()
+**References:** SESSION_4B_IMPLEMENTATION_PROMPT.md lines 196-324
+
+**Implementation Details:**
+```python
+# Unrealized P&L formula
+unrealized_pnl = (current_price - entry_price) * quantity - total_commission_paid
+
+# Example: Long position
+# Entry: Bought 0.5 BTC @ $45,000 = $22,500 investment
+# Entry commission: $5
+# Current price: $46,000
+# Estimated exit commission: $5
+# Calculation:
+#   unrealized = (46000 - 45000) * 0.5 - 5 - 5
+#   unrealized = 500 - 10 = $490
+```
+
+---
+
+### DEC-2026-02-13-007: Position Staleness Monitoring with Profitable Extension
+**Decision:** Position staleness thresholds extended by 50% (1.5x multiplier) for profitable positions to "let winners run"
+
+**Context:** PRD Feature K requires position staleness monitoring with different thresholds by strategy type. Need to balance closing stale positions while allowing profitable trades to develop.
+
+**Rationale:**
+- Winners should be given more time to develop (trading maxim: "let winners run")
+- Losers should be reviewed/closed more aggressively (cut losses quickly)
+- 50% extension is material but not excessive (balance between rules and flexibility)
+- Profitable positions earning money justify longer hold time
+- Prevents premature exit from strong trending positions
+- Unprofitable positions signal strategy failure, warrant faster review
+
+**Alternatives Considered:**
+- No extension: Rejected, forces early exit of profitable trades, leaves money on the table
+- 2x extension (100%): Rejected, too loose, positions could stay open too long even if trending
+- Different thresholds per regime: Rejected, adds complexity without clear benefit
+- Disable staleness monitoring for profitable: Rejected, still need maximum hold checks
+
+**Status:** ACTIVE
+**Date Decided:** 2026-02-13
+**Implemented By:** Phase 4B, Task 4.3.5a
+**Affected Files:**
+  - `src/core/execution/position_tracker.py` - PositionStalenessMonitor.check_staleness()
+**References:** SESSION_4B_IMPLEMENTATION_PROMPT.md lines 497-583, TRADING_SYSTEM_PRD.md Feature K
+
+**Implementation Details:**
+```python
+THRESHOLDS = {
+    'day_trading': {
+        'warning_hours': 24,
+        'max_hold_hours': 72
+    },
+    'swing_trading': {
+        'warning_days': 7,
+        'max_hold_days': 30
+    }
+}
+
+# Profitable Position Extension:
+if position.unrealized_pnl > 0:
+    threshold *= 1.5  # Extend by 50%
+```
+
+---
+
+### DEC-2026-02-13-008: Pre-Trade Slippage Estimation Model
+**Decision:** Slippage estimated as sum of four components: base (0.05%), size factor, volatility factor, and spread factor, with thresholds at 0.3% (warn) and 1.0% (block)
+
+**Context:** PRD Feature F requires pre-trade slippage estimation to warn or block orders with excessive expected slippage. Need accurate model that adapts to market conditions.
+
+**Rationale:**
+- Base slippage (0.05%) accounts for minimum market impact on any market order
+- Size factor penalizes large orders relative to average volume (prevents market moving orders)
+- Volatility factor adjusts for current market conditions (ATR-based)
+- Spread incorporated directly (empirically, average slippage is approximately half the spread)
+- Conservative thresholds prevent excessive slippage: 0.3% material warning, 1.0% blocks order
+- Multi-component model more accurate than single fixed estimate
+
+**Alternatives Considered:**
+- Fixed slippage estimate (e.g., 0.1%): Rejected, ignores order size and market conditions, inaccurate
+- Historical average only: Rejected, doesn't adapt to current volatility or order size
+- Machine learning model: Deferred to V2, out of MVP scope, requires training data
+- Volume-weighted only: Rejected, misses volatility and spread components
+
+**Status:** ACTIVE
+**Date Decided:** 2026-02-13
+**Implemented By:** Phase 4B, Task 4.4.1
+**Affected Files:**
+  - `src/core/execution/quality.py` - SlippageEstimator.estimate_slippage()
+**References:** SESSION_4B_IMPLEMENTATION_PROMPT.md lines 745-798, TRADING_SYSTEM_PRD.md Feature F
+
+**Implementation Details:**
+```
+Components:
+- base_slippage = 0.05% (minimum for market orders)
+- size_factor = (order_size / avg_daily_volume) * 0.5%
+- volatility_factor = (current_ATR / avg_ATR) * 0.1%
+- spread_factor = current_spread / 2
+
+Total estimated slippage = base + size + volatility + spread
+
+Thresholds:
+- WARN if > 0.3% (material but acceptable)
+- BLOCK if > 1.0% (excessive, likely to regret)
+```
+
+---
+
+### DEC-2026-02-13-009: Position Sync via Balance Reconciliation
+**Decision:** Position synchronization on Binance Spot done via balance comparison (not position API, which doesn't exist for Spot) to detect external trades or discrepancies
+
+**Context:** Binance Spot doesn't have native "positions" like Futures. Must reconcile positions via asset balances to detect manual trades or system errors.
+
+**Rationale:**
+- Spot trading: positions = asset balances (no separate position tracking in exchange)
+- No dedicated position query API for Spot (unlike Futures)
+- Balance is source of truth from exchange perspective
+- Must reconcile regularly to catch external trades (manual trading) or system errors
+- Detects quantity mismatches, missing positions, or unexpected holdings
+
+**Alternatives Considered:**
+- Trust local state only: Rejected, loses sync if manual trades or system errors occur
+- Query trade history and reconstruct: Rejected, expensive API calls, complex logic, pagination issues
+- Use Futures API positions: Rejected, out of MVP scope (Spot only)
+- No synchronization: Rejected, could diverge significantly from reality
+
+**Status:** ACTIVE
+**Date Decided:** 2026-02-13
+**Implemented By:** Phase 4B, Task 4.3.5
+**Affected Files:**
+  - `src/core/execution/position_tracker.py` - sync_positions()
+**References:** SESSION_4B_IMPLEMENTATION_PROMPT.md lines 448-494
+
+**Implementation Details:**
+```
+For each open position in local state:
+1. Get exchange balance for position.symbol (base asset)
+2. Expected balance = position.quantity
+3. Actual balance = exchange.get_balance(symbol)
+4. If mismatch:
+   - Log discrepancy warning
+   - Update position.quantity = actual_balance
+   - Mark position for operator review
+```
+
+---
+
+## PHASE 5A: STRATEGY FOUNDATION
+
+### DEC-2026-02-14-001: Strategy Status Lifecycle State Machine
+**Decision:** Strategy status transitions follow strict state machine with only forward progression (except BACKTEST → DRAFT on failure), enforcing validation phases before live trading
+
+**Context:** Strategies must progress through validation phases (backtest → paper trading → live) before risking real capital. Need to prevent skipping safety checks.
+
+**Rationale:**
+- Enforces validation progression: backtest → paper → live (no shortcuts)
+- Prevents skipping safety checks which could lead to untested strategies trading live
+- RETIRED is terminal state (can't un-retire) for audit trail integrity
+- Only BACKTEST can go backward (to DRAFT for fixes) - reasonable iteration cycle
+- Clear state progression makes behavior predictable and enforceable
+- Operator can pause at any stage but can't skip forward
+
+**Alternatives Considered:**
+- Allow skipping validation phases: Rejected, too risky, undermines safety philosophy
+- Allow backward transitions generally: Rejected, unclear semantics, audit trail issues
+- No state machine (free-form status): Rejected, too easy to misuse, no enforcement
+- Allow RETIRED → DRAFT reuse: Rejected, name reuse could confuse audit trails
+
+**Status:** ACTIVE
+**Date Decided:** 2026-02-14
+**Implemented By:** Phase 5A, Task 5.1.2
+**Affected Files:**
+  - `src/core/strategy/engine.py` - transition_status() with validation logic
+  - `src/data/models.py` - StrategyStatus enum
+**References:** SESSION_5A_IMPLEMENTATION_PROMPT.md lines 38-576, TRADING_SYSTEM_PRD.md Section 3.3
+
+**Implementation Details:**
+```
+State Machine Allowed Transitions:
+DRAFT → BACKTEST → SIMULATED_PAPER → LIVE_PAPER → PENDING_APPROVAL → LIVE
+                ↓
+              DRAFT (backtest failure only)
+
+Any state → PAUSED (manual/auto)
+LIVE → UNDERPERFORMING (auto-detected)
+Any state → RETIRED (terminal, irreversible)
+
+DISALLOWED:
+- BACKTEST → LIVE (skip paper trading)
+- DRAFT → LIVE (skip all validation)
+- RETIRED → Any (terminal state)
+- Any backward moves except BACKTEST → DRAFT
+```
+
+---
+
+### DEC-2026-02-14-002: Strategy Similarity Threshold (70%)
+**Decision:** Reject new strategies that are >70% similar to existing active strategies using weighted similarity scoring across template, parameters, symbols, and entry logic
+
+**Context:** PRD Feature D prevents strategy cloning which doesn't add diversification and could amplify correlated losses.
+
+**Rationale:**
+- 70% threshold balances avoiding clones while allowing reasonable variations
+- Template type most important (40% weight) - different templates have fundamentally different behavior
+- Parameters second (30% weight) - allows tuning same template with different risk profiles
+- Symbol overlap (20% weight) - trading same assets increases correlation
+- Entry logic least weighted (10%) - mostly covered by template matching
+- Prevents running 5 nearly-identical EMA strategies on BTC (concentrates risk)
+- Forces genuine diversification across templates, symbols, or parameters
+
+**Alternatives Considered:**
+- 50% threshold: Rejected, too strict, blocks reasonable variations of same template
+- 90% threshold: Rejected, too loose, allows near-clones that don't add diversification
+- No similarity check: Rejected, violates PRD Feature D, allows dangerous concentration
+- Only check template ID: Rejected, same template with different params can be very different
+
+**Status:** ACTIVE
+**Date Decided:** 2026-02-14
+**Implemented By:** Phase 5A, Task 5.1.2
+**Affected Files:**
+  - `src/core/strategy/engine.py` - StrategySimilarityChecker class
+**References:** SESSION_5A_IMPLEMENTATION_PROMPT.md lines 248-490, TRADING_SYSTEM_PRD.md Feature D
+
+**Implementation Details:**
+```
+Similarity Score = weighted_sum of:
+- same_template_id: +40% (most important)
+- param_distance < 20%: +30% (second most important)
+- symbol_overlap > 50%: +20% (correlation factor)
+- same_entry_conditions: +10% (least important)
+
+REJECTION RULE: Reject if total_similarity > 70%
+```
+
+---
+
+### DEC-2026-02-14-003: Market Regime Manual Tagging with Size Reduction
+**Decision:** Market regime set manually by operator via API/dashboard. On regime mismatch (not in strategy.preferred_regimes), reduce position size by 50%. Block trading if in strategy.avoid_regimes.
+
+**Context:** PRD Feature B requires manual regime tagging with strategy adaptation. Operators have market expertise to classify regimes, strategies perform differently in different regimes.
+
+**Rationale:**
+- 50% size reduction is material enough to reduce risk without fully blocking trading
+- Operator control leverages human expertise (automated detection is V2 feature)
+- Simple three-way logic: preferred (1.0x), mismatch (0.5x), avoid (0.0x)
+- Persists across restarts (DB-backed) for consistency
+- Allows strategies to continue in suboptimal conditions but with reduced risk
+- Complete block on avoid_regimes prevents strategies from trading in their worst conditions
+
+**Alternatives Considered:**
+- Automated regime detection: Deferred to V2, out of MVP scope, requires ML/indicators
+- 25% size reduction: Rejected, not material enough to meaningfully reduce risk
+- 75% size reduction: Rejected, too severe, nearly equivalent to blocking
+- Block on mismatch: Rejected, too restrictive, strategies should adapt not stop
+- No size adjustment: Rejected, violates PRD Feature B adaptation requirement
+
+**Status:** ACTIVE
+**Date Decided:** 2026-02-14
+**Implemented By:** Phase 5A, Task 5.1.3
+**Affected Files:**
+  - `src/core/strategy/regime.py` - MarketRegimeManager class
+  - `src/data/models.py` - MarketRegime enum, Strategy.preferred_regimes, Strategy.avoid_regimes
+**References:** SESSION_5A_IMPLEMENTATION_PROMPT.md lines 589-827, TRADING_SYSTEM_PRD.md Feature B
+
+**Implementation Details:**
+```python
+MISMATCH_SIZE_REDUCTION = 0.5  # 50% reduction
+
+class MarketRegime(Enum):
+    TRENDING_UP = "trending_up"
+    TRENDING_DOWN = "trending_down"
+    RANGING = "ranging"
+    VOLATILE = "volatile"
+    UNKNOWN = "unknown"
+
+Logic:
+- If current in strategy.avoid_regimes: size_multiplier = 0.0 (block)
+- Elif current in strategy.preferred_regimes: size_multiplier = 1.0 (full)
+- Elif UNKNOWN: size_multiplier = 1.0 (operator aware, allow)
+- Else (mismatch): size_multiplier = 0.5 (reduce)
+```
+
+---
+
+### DEC-2026-02-14-004: Template Parameter Validation with Cross-Field Rules
+**Decision:** Strategy parameters validated against template specification including type, bounds, step size, enums, AND cross-parameter validation rules (e.g., slow_ma > fast_ma + 5)
+
+**Context:** Invalid parameters lead to runtime errors or nonsensical strategies. Need comprehensive validation before strategy creation or backtesting.
+
+**Rationale:**
+- Type checking prevents runtime errors from wrong types (str instead of int)
+- Bounds validation prevents nonsensical values (negative periods, >100% allocations)
+- Step size ensures UI increment logic matches backend validation
+- Enum validation ensures only allowed choices (prevents typos)
+- Cross-field rules catch logical conflicts (slow MA faster than fast MA)
+- Validates BEFORE expensive operations like backtest (fail fast principle)
+
+**Alternatives Considered:**
+- Validation at runtime only: Rejected, fails too late, wastes computation on invalid configs
+- No cross-field validation: Rejected, allows logical conflicts like slow_ma=20, fast_ma=50 (backward)
+- Pydantic models for all parameters: Considered for V1, YAML + explicit validation sufficient for MVP
+- Lenient validation (warnings only): Rejected, invalid parameters should be hard errors
+
+**Status:** ACTIVE
+**Date Decided:** 2026-02-14
+**Implemented By:** Phase 5A, Task 5.1.1
+**Affected Files:**
+  - `src/core/strategy/engine.py` - _validate_parameters() method
+  - `config/templates/*.yaml` - validation_rules section in each template
+**References:** SESSION_5A_IMPLEMENTATION_PROMPT.md lines 156-245
+
+**Implementation Details:**
+```yaml
+# In template YAML:
+validation_rules:
+  - "fast_ema_period < slow_ema_period"  # Cross-field
+  - "min_difference: slow_ema_period - fast_ema_period >= 5"  # Computed
+
+parameters:
+  fast_ema_period:
+    type: "integer"    # Type validation
+    min: 5            # Bounds validation
+    max: 20
+    step: 1           # Step size validation
+    
+  entry_mode:
+    type: "enum"      # Enum validation
+    choices: ["aggressive", "conservative"]
+```
+
+---
+
+### DEC-2026-02-15-001: Synchronous Simulation for Paper Trading
+- **Decision:** PaperTradingEngine runs synchronously for SIMULATED mode (historical replay) but uses async polling for LIVE mode
+- **Context:** Paper trading has two modes: SIMULATED (replays historical data) and LIVE (polls real-time data). The execution model should match the workload type.
+- **Rationale:** Simulating 21 days of historical data asynchronously would be unnecessarily slow. CPU-bound sequential replay should be blocking/synchronous to maximize throughput. LIVE mode genuinely benefits from async I/O for polling.
+- **Alternatives Considered:**
+  - Fully async for both modes: Rejected - async overhead on CPU-bound replay is wasteful
+  - Fully sync for both modes: Rejected - LIVE mode needs non-blocking I/O for polling
+- **Status:** ACTIVE
+- **Date Decided:** 2026-02-15
+- **Implemented By:** Phase 5B - Paper Trading Engine
+- **Affected Files:** `src/core/strategy/paper/`
+- **References:** TRADING_SYSTEM_PRD.md Feature J (Paper Trading)
+
+---
+
+### DEC-2026-02-15-002: Regime Persistence via SystemState JSON Field
+- **Decision:** Market regimes are stored in `SystemState.circuit_breakers["market_regimes"]` JSON field
+- **Context:** The MarketRegimeManager needs to persist regime state per symbol across restarts. DEC-2026-02-14-003 established manual regime tagging but did not specify the persistence mechanism.
+- **Rationale:** Using the existing SystemState singleton's `circuit_breakers` JSON field avoids schema migration for MVP. The field already exists, is JSON-typed, and the SystemState singleton pattern ensures single-writer consistency.
+- **Alternatives Considered:**
+  - New database column on Account model: Rejected - requires schema migration
+  - New RegimeState table: Rejected - over-engineering for MVP (only 3 symbols)
+  - Config file: Rejected - not suitable for runtime updates
+- **Status:** ACTIVE
+- **Date Decided:** 2026-02-15
+- **Implemented By:** Phase 5B - Market Regime Manager
+- **Affected Files:** `src/core/strategy/regime.py`, `src/data/models/system.py`
+- **References:** DEC-2026-02-14-003 (Manual Regime Tagging)
+
+---
+
+**End of Decisions Log**
+
+**Total Decisions:** 55 active, 0 superseded, 5 locked
+**Last Updated:** 2026-02-15
+**Next Decision ID:** DEC-2026-02-15-003
+
+## Phase 5 Decisions (Backtesting & Simulation)
+
+### DEC-2026-02-15-001: Synchronous Simulation (Paper Trading)
+- **Decision:** PaperTradingEngine runs synchronously for SIMULATED mode, and asynchronously for LIVE mode
+- **Context:** Historical replay backtesting is CPU-bound and blocks the event loop if run in the main thread. Asyncio is designed for I/O-bound operations, not CPU-bound simulation.
+- **Rationale:**
+  - **CPU-bound workload:** Processing 1 year of 1-minute candles (525k bars) is pure computation
+  - **Simplicity:** Synchronous simulation is easier to debug and reason about
+  - **Performance:** Avoids asyncio overhead for tight loops in simulation
+  - **Dual-mode engine:** Engine supports both modes while sharing signal generation logic
+- **Alternatives Considered:**
+  - **Async simulation:** Rejected due to event loop blocking and unnecessary complexity
+  - **Separate engines:** Rejected to ensure simulation matches live behavior exactly (same code paths)
+  - **Multiprocessing:** Rejected as over-engineering for MVP data volumes
+- **Status:** ACTIVE
+- **Date Decided:** 2026-02-15
+- **Implemented By:** Phase 5b Implementation
+- **Affected Files:**
+  - `src/paper/engine.py`
+  - `src/backtest/engine.py`
+- **References:** PRD Section 5.2
+
+### DEC-2026-02-15-002: Regime Persistence Mechanism
+- **Decision:** Market regimes are stored in `SystemState.circuit_breakers["market_regimes"]` JSON field
+- **Context:** Need to persist detected market regimes (bullish, bearish, volatile) without modifying the database schema for MVP.
+- **Rationale:**
+  - **Schema stability:** Avoids complex Alembic migrations for MVP
+  - **JSON flexibility:** Can store regime data per symbol/timeframe easily
+  - **Centralized state:** SystemState is already the source of truth for system-wide flags
+  - **Persistence:** SystemState is persisted to SQLite/PostgreSQL
+- **Alternatives Considered:**
+  - **New MarketRegime table:** Rejected to avoid schema changes
+  - **File-based storage:** Rejected due to lack of transactional integrity associated with SystemState
+  - **In-memory only:** Rejected, need to persist across restarts
+- **Status:** ACTIVE
+- **Date Decided:** 2026-02-15
+- **Implemented By:** Phase 5b Implementation
+- **Affected Files:**
+  - `src/core/risk/regime.py`
+  - `src/data/models/system.py`
+- **References:** PRD Section 5.3

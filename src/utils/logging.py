@@ -178,7 +178,6 @@ def setup_logging(
         mask_sensitive_data,
         # Add exception info if present
         structlog.processors.StackInfoRenderer(),
-        structlog.processors.format_exc_info,
         # Add callsite info (filename, function, line number)
         structlog.processors.CallsiteParameterAdder(
             parameters=[
@@ -199,8 +198,17 @@ def setup_logging(
         renderer = structlog.dev.ConsoleRenderer(colors=True)
 
     # Configure structlog
+    processors = shared_processors.copy()
+    if json_format:
+        # Add format_exc_info for JSON output to include stack traces
+        processors.append(structlog.processors.format_exc_info)
+        processors.append(renderer)
+    else:
+        # ConsoleRenderer handles exception formatting itself
+        processors.append(renderer)
+
     structlog.configure(
-        processors=shared_processors + [renderer],
+        processors=processors,
         wrapper_class=structlog.stdlib.BoundLogger,
         context_class=dict,
         logger_factory=structlog.stdlib.LoggerFactory(),

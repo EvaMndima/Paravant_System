@@ -741,6 +741,94 @@ class ConfigurationError(TradingSystemError):
 
 
 # ---------------------------------------------------------------------------
+# Orchestrator Errors
+# ---------------------------------------------------------------------------
+
+
+class OrchestratorError(TradingSystemError):
+    """Base class for orchestrator-related errors.
+
+    Raised when the trading system orchestrator encounters a failure
+    during startup, shutdown, or main loop execution.
+    """
+
+    def __init__(
+        self,
+        message: str,
+        code: str = "ORCHESTRATOR_ERROR",
+        details: dict[str, Any] | None = None,
+    ) -> None:
+        super().__init__(message=message, code=code, details=details)
+
+
+class SystemStartupError(OrchestratorError):
+    """Raised when the startup checklist fails.
+
+    The system MUST NOT start trading if any startup check fails.
+    This exception halts the startup sequence and alerts the operator.
+
+    Attributes:
+        failed_check: Name of the check that failed.
+        reason: Why the check failed.
+    """
+
+    def __init__(
+        self,
+        failed_check: str,
+        reason: str = "Startup check failed",
+        details: dict[str, Any] | None = None,
+    ) -> None:
+        error_details = {
+            "failed_check": failed_check,
+            "reason": reason,
+        }
+        if details:
+            error_details.update(details)
+
+        super().__init__(
+            message=f"Startup check failed: {failed_check} - {reason}",
+            code="SYSTEM_STARTUP_ERROR",
+            details=error_details,
+        )
+
+
+# ---------------------------------------------------------------------------
+# Alert Errors
+# ---------------------------------------------------------------------------
+
+
+class AlertDeliveryError(TradingSystemError):
+    """Raised when an alert cannot be delivered to a channel.
+
+    Channel delivery failures are non-fatal: they are logged and
+    the system continues operating. Other channels may still succeed.
+
+    Attributes:
+        channel: The channel that failed delivery.
+        reason: Why delivery failed.
+    """
+
+    def __init__(
+        self,
+        channel: str = "",
+        reason: str = "Alert delivery failed",
+        details: dict[str, Any] | None = None,
+    ) -> None:
+        error_details = {
+            "channel": channel,
+            "reason": reason,
+        }
+        if details:
+            error_details.update(details)
+
+        super().__init__(
+            message=f"Alert delivery failed via {channel}: {reason}",
+            code="ALERT_DELIVERY_ERROR",
+            details=error_details,
+        )
+
+
+# ---------------------------------------------------------------------------
 # Exception code registry (for uniqueness verification)
 # ---------------------------------------------------------------------------
 
@@ -774,4 +862,7 @@ ALL_EXCEPTION_CLASSES: list[type[TradingSystemError]] = [
     MarketDataError,
     SymbolNotFoundError,
     ConfigurationError,
+    OrchestratorError,
+    SystemStartupError,
+    AlertDeliveryError,
 ]
