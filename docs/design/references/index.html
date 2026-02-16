@@ -1,0 +1,210 @@
+
+<!DOCTYPE html>
+<html lang="en" class="light">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>PARAVANT | AI Trading Cockpit</title>
+    
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;500;600;700&family=Inter:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Tailwind Config -->
+    <script>
+      tailwind.config = {
+        darkMode: 'class',
+        theme: {
+          extend: {
+            colors: {
+              // Dynamic Theme Colors (Mapped to CSS Variables)
+              'turquoise': {
+                DEFAULT: 'rgb(var(--accent-primary) / <alpha-value>)',
+                mist: 'rgb(var(--accent-primary) / <alpha-value>)',
+                bright: 'rgb(var(--accent-highlight) / <alpha-value>)',
+                dim: 'rgb(var(--accent-dim) / <alpha-value>)',
+                glow: 'rgba(var(--accent-primary), 0.4)',
+              },
+              'deep-teal': {
+                DEFAULT: 'rgb(var(--accent-secondary) / <alpha-value>)',
+                800: 'rgb(var(--accent-secondary) / <alpha-value>)',
+                900: 'rgb(var(--accent-dark) / <alpha-value>)',
+                // Keep static shades for neutrals if needed, or map them too
+                50: '#E8F4F4', 100: '#C5E0E0', 200: '#9ECBCB', 300: '#77B5B5',
+                400: '#509F9F', 500: '#2A9D8F', 600: '#1F7A6D', 700: '#15574C',
+                950: '#051415',
+              },
+              'obsidian': {
+                DEFAULT: 'rgb(var(--bg-dark) / <alpha-value>)',
+                300: 'rgb(var(--bg-card-dark) / <alpha-value>)', 
+                400: 'rgb(var(--bg-dark) / <alpha-value>)',
+              },
+              'paper': {
+                DEFAULT: 'rgb(var(--bg-light) / <alpha-value>)',
+                100: 'rgb(var(--bg-light) / <alpha-value>)',
+                50: '#FDFCFB', 200: '#F0EBE6', 300: '#E5DDD5', 400: '#D9CFC4', 500: '#C9BAA8',
+              },
+              // Semantic
+              'gain': '#2ECC71',
+              'loss': '#E74C3C',
+              'warning': '#F39C12',
+              'info': '#3498DB',
+            },
+            fontFamily: {
+              'display': ['Cinzel', 'Playfair Display', 'serif'],
+              'sans': ['Inter', 'system-ui', 'sans-serif'],
+              'mono': ['JetBrains Mono', 'Fira Code', 'monospace'],
+            },
+            animation: {
+              'fade-in': 'fadeIn 0.5s ease-out forwards',
+              'slide-up': 'slideUp 0.5s ease-out forwards',
+            },
+            keyframes: {
+              fadeIn: {
+                '0%': { opacity: '0' },
+                '100%': { opacity: '1' },
+              },
+              slideUp: {
+                '0%': { opacity: '0', transform: 'translateY(20px)' },
+                '100%': { opacity: '1', transform: 'translateY(0)' },
+              }
+            }
+          }
+        }
+      }
+    </script>
+
+    <!-- Global Styles & Theme Variables -->
+    <style type="text/tailwindcss">
+      @layer base {
+        :root {
+          /* --- OCEAN (Default) --- */
+          /* #2A9D8F */ --accent-primary: 42 157 143; 
+          /* #3DB9A9 */ --accent-highlight: 61 185 169;
+          /* #1F7A6D */ --accent-dim: 31 122 109;
+          
+          /* #0F3D3E */ --accent-secondary: 15 61 62;
+          /* #0A2829 */ --accent-dark: 10 40 41;
+
+          /* #F8F5F2 */ --bg-light: 248 245 242;
+          /* #101413 */ --bg-dark: 16 20 19;
+          /* #161918 */ --bg-card-dark: 22 25 24;
+        }
+
+        /* --- SAPPHIRE (Blue) --- */
+        [data-theme="sapphire"] {
+          /* #3B82F6 */ --accent-primary: 59 130 246;
+          /* #172554 */ --accent-secondary: 23 37 84;
+        }
+        html.dark[data-theme="sapphire"] {
+          /* #60A5FA (Blue 400 - Brighter) */ --accent-primary: 96 165 250; 
+          /* #020617 */ --bg-dark: 2 6 23;
+          /* #0F172A */ --bg-card-dark: 15 23 42;
+        }
+
+        /* --- EMERALD (Green) --- */
+        [data-theme="emerald"] {
+          /* #10B981 */ --accent-primary: 16 185 129;
+          /* #064E3B */ --accent-secondary: 6 78 59;
+        }
+        html.dark[data-theme="emerald"] {
+          /* #34D399 (Emerald 400 - Brighter) */ --accent-primary: 52 211 153;
+          /* #022C22 */ --bg-dark: 2 44 34;
+          /* #064E3B */ --bg-card-dark: 6 78 59;
+        }
+
+        /* --- ONYX (Gold/Black) --- */
+        [data-theme="onyx"] {
+          /* #D4AF37 (Gold) */ --accent-primary: 212 175 55;
+          /* #18181B (Zinc 900) */ --accent-secondary: 24 24 27;
+        }
+        html.dark[data-theme="onyx"] {
+          /* #FCD34D (Amber 300 - High Viz Gold) */ --accent-primary: 252 211 77; 
+          /* #000000 */ --bg-dark: 0 0 0;
+          /* #0A0A0A */ --bg-card-dark: 10 10 10;
+          /* #27272A */ --accent-secondary: 39 39 42;
+        }
+
+        /* --- AMETHYST (Purple) --- */
+        [data-theme="amethyst"] {
+          /* #8B5CF6 */ --accent-primary: 139 92 246;
+          /* #2E1065 */ --accent-secondary: 46 16 101;
+        }
+        html.dark[data-theme="amethyst"] {
+          /* #A78BFA (Violet 400) */ --accent-primary: 167 139 250;
+          /* #19052F */ --bg-dark: 25 5 47;
+          /* #2E1065 */ --bg-card-dark: 46 16 101;
+        }
+
+        body {
+          @apply bg-paper-100 text-obsidian-400 antialiased font-sans transition-colors duration-300;
+        }
+        html.dark body {
+          @apply bg-obsidian-400 text-paper-100;
+        }
+        
+        /* Compact Mode Overrides */
+        body.compact {
+          font-size: 0.95em;
+        }
+        body.compact .p-6 {
+          padding: 1rem !important;
+        }
+        body.compact .gap-6 {
+          gap: 1rem !important;
+        }
+        
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar {
+          width: 8px;
+          height: 8px;
+        }
+        ::-webkit-scrollbar-track {
+          @apply bg-transparent;
+        }
+        ::-webkit-scrollbar-thumb {
+          @apply bg-deep-teal-800/20 rounded-full;
+        }
+        html.dark ::-webkit-scrollbar-thumb {
+          @apply bg-white/10;
+        }
+      }
+
+      @layer utilities {
+        .glass-panel-light {
+          @apply bg-paper-100/80 backdrop-blur-xl border border-deep-teal-800/10 shadow-lg;
+        }
+        .glass-panel-dark {
+          @apply bg-obsidian-300/60 backdrop-blur-xl border border-white/10 shadow-2xl;
+        }
+        .glass-panel {
+          @apply glass-panel-light dark:glass-panel-dark;
+        }
+      }
+    </style>
+  <script type="importmap">
+{
+  "imports": {
+    "react": "https://esm.sh/react@18.3.1",
+    "react/": "https://esm.sh/react@18.3.1/",
+    "react-dom": "https://esm.sh/react-dom@18.3.1",
+    "react-dom/": "https://esm.sh/react-dom@18.3.1/",
+    "lucide-react": "https://esm.sh/lucide-react@0.368.0?deps=react@18.3.1,react-dom@18.3.1",
+    "clsx": "https://esm.sh/clsx@2.1.0",
+    "framer-motion": "https://esm.sh/framer-motion@11.0.24?deps=react@18.3.1,react-dom@18.3.1",
+    "tailwind-merge": "https://esm.sh/tailwind-merge@2.2.2",
+    "recharts": "https://esm.sh/recharts@2.12.7?deps=react@18.3.1,react-dom@18.3.1"
+  }
+}
+</script>
+<link rel="stylesheet" href="/index.css">
+</head>
+  <body>
+    <div id="root"></div>
+  <script type="module" src="/index.tsx"></script>
+</body>
+</html>
