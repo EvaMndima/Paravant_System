@@ -147,6 +147,7 @@ class TestDataStoreSignals:
         for direction, executed in signals_data:
             signal = Signal(
                 strategy_id=sample_strategy.id,
+                symbol="BTCUSDT",
                 direction=direction,
                 price=50000.0,
                 timestamp=datetime.now(timezone.utc),

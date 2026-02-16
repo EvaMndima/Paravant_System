@@ -76,6 +76,7 @@ class TestTradingWorkflow:
         # 4. Generate Signal
         signal = Signal(
             strategy_id=strategy.id,
+            symbol="BTCUSDT",
             direction=SignalDirection.LONG,
             price=50000.0,
             indicators={"ma_fast": 49500, "ma_slow": 48000},

@@ -7,8 +7,7 @@ Tests:
 - StrategyAssignment model
 - Mutable defaults for regime_filter
 """
-import pytest
-from datetime import datetime, timezone
+from typing import Any
 
 from src.data.models import Signal, SignalDirection, StrategyAssignment, AssignmentStatus
 
@@ -16,7 +15,7 @@ from src.data.models import Signal, SignalDirection, StrategyAssignment, Assignm
 class TestSignalModel:
     """Test Signal model validation and behavior."""
 
-    def test_create_signal_valid(self, db_session):
+    def test_create_signal_valid(self, db_session: Any) -> None:
         """Test creating a valid signal."""
         from src.data.models import Strategy
 
@@ -26,6 +25,7 @@ class TestSignalModel:
 
         signal = Signal(
             strategy_id=strategy.id,
+            symbol="BTCUSDT",
             direction=SignalDirection.LONG,
             price=50000.0,
             indicators={"rsi": 65, "ma_cross": "bullish"},
@@ -38,7 +38,7 @@ class TestSignalModel:
         assert signal.timestamp is not None  # SQLite may not preserve tzinfo  # Timezone-aware
         assert signal.executed is False  # Default
 
-    def test_signal_direction_enum(self, db_session):
+    def test_signal_direction_enum(self, db_session: Any) -> None:
         """Test all SignalDirection enum values."""
         from src.data.models import Strategy
 
@@ -49,6 +49,7 @@ class TestSignalModel:
         for direction in SignalDirection:
             signal = Signal(
                 strategy_id=strategy.id,
+                symbol="BTCUSDT",
                 direction=direction,
                 price=50000.0,
             )
@@ -57,7 +58,7 @@ class TestSignalModel:
             assert signal.direction == direction
             db_session.rollback()
 
-    def test_signal_indicators_optional(self, db_session):
+    def test_signal_indicators_optional(self, db_session: Any) -> None:
         """Test that indicators JSON is optional."""
         from src.data.models import Strategy
 
@@ -67,6 +68,7 @@ class TestSignalModel:
 
         signal = Signal(
             strategy_id=strategy.id,
+            symbol="BTCUSDT",
             direction="long",
             price=50000.0,
             indicators=None,  # Optional
@@ -76,7 +78,7 @@ class TestSignalModel:
 
         assert signal.indicators is None
 
-    def test_signal_repr(self, db_session):
+    def test_signal_repr(self, db_session: Any) -> None:
         """Test __repr__() method."""
         from src.data.models import Strategy
 
@@ -86,6 +88,7 @@ class TestSignalModel:
 
         signal = Signal(
             strategy_id=strategy.id,
+            symbol="BTCUSDT",
             direction="long",
             price=50000.0,
         )
@@ -101,7 +104,7 @@ class TestSignalModel:
 class TestStrategyAssignmentModel:
     """Test StrategyAssignment model validation and behavior."""
 
-    def test_create_assignment_valid(self, db_session):
+    def test_create_assignment_valid(self, db_session: Any) -> None:
         """Test creating a valid strategy assignment."""
         from src.data.models import Account, Strategy
 
@@ -126,7 +129,7 @@ class TestStrategyAssignmentModel:
         assert assignment.status == AssignmentStatus.ACTIVE
         assert len(assignment.regime_filter) == 2
 
-    def test_assignment_default_regime_filter(self, db_session):
+    def test_assignment_default_regime_filter(self, db_session: Any) -> None:
         """Test default value for regime_filter."""
         from src.data.models import Account, Strategy
 
@@ -148,7 +151,7 @@ class TestStrategyAssignmentModel:
 
         assert assignment.regime_filter == []  # Default empty list
 
-    def test_assignment_mutable_default_isolation(self, db_session):
+    def test_assignment_mutable_default_isolation(self, db_session: Any) -> None:
         """Test that regime_filter list is not shared between instances."""
         from src.data.models import Account, Strategy
 
@@ -174,12 +177,12 @@ class TestStrategyAssignmentModel:
             timeframe="1h",
             status=AssignmentStatus.ACTIVE,
         )
+        db_session.add(assignment1)
+        db_session.add(assignment2)
+        db_session.flush()
 
-        if assignment1.regime_filter is None:
-            assignment1.regime_filter = []
         assignment1.regime_filter.append("trending_up")
-        if assignment2.regime_filter is None:
-            assignment2.regime_filter = []
+
         assignment2.regime_filter.append("ranging")
 
         assert "trending_up" in assignment1.regime_filter
@@ -187,7 +190,7 @@ class TestStrategyAssignmentModel:
         assert "ranging" in assignment2.regime_filter
         assert "ranging" not in assignment1.regime_filter
 
-    def test_assignment_status_enum(self, db_session):
+    def test_assignment_status_enum(self, db_session: Any) -> None:
         """Test all AssignmentStatus enum values."""
         from src.data.models import Account, Strategy
 
