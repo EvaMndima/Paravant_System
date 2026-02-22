@@ -1764,11 +1764,48 @@ parameters:
 
 ---
 
+## Phase 6 Gap-Fix Decisions (PRD Completeness Pass — 2026-02-22)
+
+### DEC-2026-02-22-001: Portfolio Correlation Limits via Pre-Trade Check Function
+- **Decision:** Portfolio-level asset exposure limits (BTC 40%, ETH 30%, total correlated long 60%) are enforced as a pure pre-trade check function `check_portfolio_correlation()` in `checks.py`, and as a stateful `CorrelationCircuitBreaker` in `circuit_breakers.py`.
+- **Context:** PRD §2.2.1 Feature A requires cross-strategy exposure caps. The previous `CorrelationCircuitBreaker` only checked for duplicate symbols, not actual percentage exposure.
+- **Rationale:**
+  - Pure function approach matches the existing checks.py pattern (no side effects, composable, testable).
+  - Stateful circuit breaker provides auto-trip/reset semantics for sustained limit breaches.
+  - Running both gives defense-in-depth: pre-trade blocks orders; circuit breaker halts the symbol if sustained.
+- **Alternatives Considered:**
+  - Circuit breaker only: Rejected — circuit breakers are stateful and persist; pre-trade check needed for per-order accuracy.
+  - Pre-trade check only: Rejected — no persistent alert if sustained overexposure builds up.
+- **Status:** ACTIVE
+- **Date Decided:** 2026-02-22
+- **Implemented By:** PRD Gap Fix Session (checks.py + circuit_breakers.py)
+- **Affected Files:** `src/core/risk/checks.py`, `src/core/risk/circuit_breakers.py`, `src/core/risk/controller.py`
+- **References:** PRD §2.2.1 Feature A
+
+### DEC-2026-02-22-002: Underperformance Auto-Transition Stored in live_results JSON
+- **Decision:** The underperformance condition tracking timestamps (when each PRD §3.5 condition was first detected) are stored in `strategy.live_results["underperformance_tracking"]` JSON field rather than a dedicated database column.
+- **Context:** PRD §3.5 requires automatic transition to UNDERPERFORMING when win rate drops 15%+ for 14 days, Sharpe < 0.5 for 30 days, or expectancy < 50% of backtest for 21 days. Tracking "how long has this been failing" requires persisting timestamps.
+- **Rationale:**
+  - `live_results` is already a flexible JSON column on Strategy that is written/read by the orchestrator.
+  - Adding a new database column would require an Alembic migration with enum changes.
+  - The tracking data is only meaningful while the strategy is LIVE — JSON co-location with other live metrics is natural.
+  - The `underperformance_tracking` sub-dict is ephemeral metadata, not a first-class domain concept.
+- **Alternatives Considered:**
+  - New `underperformance_tracking` database columns: Rejected — migration risk, premature schema expansion.
+  - Separate `UnderperformanceRecord` table: Rejected — over-engineering for MVP.
+- **Status:** ACTIVE
+- **Date Decided:** 2026-02-22
+- **Implemented By:** PRD Gap Fix Session (engine.py + orchestrator.py)
+- **Affected Files:** `src/core/strategy/engine.py`, `src/core/orchestrator.py`, `src/data/models/strategy.py`
+- **References:** PRD §3.5
+
+---
+
 **End of Decisions Log**
 
-**Total Decisions:** 55 active, 0 superseded, 5 locked
-**Last Updated:** 2026-02-15
-**Next Decision ID:** DEC-2026-02-15-003
+**Total Decisions:** 57 active, 0 superseded, 5 locked
+**Last Updated:** 2026-02-22
+**Next Decision ID:** DEC-2026-02-22-003
 
 ## Phase 5 Decisions (Backtesting & Simulation)
 
