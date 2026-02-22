@@ -242,6 +242,47 @@ def _get_time_range_start(time_range: str) -> datetime:
 
 
 # ---------------------------------------------------------------------------
+# Risk metric helpers
+# ---------------------------------------------------------------------------
+
+
+def _compute_daily_loss_used_pct(
+    daily_pnl: float,
+    equity: float,
+    account: Any,
+) -> float:
+    """Compute how much of the configured daily loss limit has been consumed.
+
+    Per PRD §4.4, this is expressed as a fraction of the account's configured
+    daily_loss_limit_pct, NOT as a fraction of total equity.
+
+    Formula: abs(daily_loss) / (equity * daily_limit_pct / 100) * 100
+
+    Args:
+        daily_pnl: Today's realized P&L (negative when losing).
+        equity: Current account equity in USDT.
+        account: Account ORM object with risk_config dict.
+
+    Returns:
+        Percentage of configured daily loss limit consumed (0–100+).
+        Returns 0.0 if no loss today or limit configuration is missing.
+    """
+    if daily_pnl >= 0:
+        return 0.0
+
+    risk_config: dict[str, Any] = {}
+    if hasattr(account, "risk_config") and isinstance(account.risk_config, dict):
+        risk_config = account.risk_config
+
+    daily_limit_pct: float = float(risk_config.get("daily_loss_limit_pct", 0.0))
+    if daily_limit_pct <= 0:
+        return 0.0
+
+    daily_loss_limit_usdt = equity * daily_limit_pct / 100.0
+    return _safe_pct(abs(daily_pnl), daily_loss_limit_usdt)
+
+
+# ---------------------------------------------------------------------------
 # Endpoints
 # ---------------------------------------------------------------------------
 
@@ -360,7 +401,9 @@ async def get_dashboard_summary() -> DashboardSummaryResponse:
         max_drawdown_30d=max_drawdown_30d,
         risk_status=risk_status,
         current_drawdown_pct=current_drawdown_pct,
-        daily_loss_used_pct=_safe_pct(abs(daily_change), portfolio_value) if daily_change < 0 else 0.0,
+        # PRD §4.4: fraction of configured daily loss limit consumed, not fraction of equity.
+        # Formula: abs(daily_loss) / (equity * daily_limit_pct / 100) * 100
+        daily_loss_used_pct=_compute_daily_loss_used_pct(daily_change, portfolio_value, account),
         current_regime=account.regime or "unknown",
         equity_sparkline=equity_sparkline,
         timestamp=now.isoformat(),

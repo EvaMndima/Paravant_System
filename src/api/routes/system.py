@@ -493,6 +493,67 @@ async def set_regime(request: SetRegimeRequest) -> RegimeResponse:
 
 
 @router.get(
+    "/health/strategies",
+    status_code=status.HTTP_200_OK,
+    summary="Get per-strategy health",
+    description="Returns health status for every active strategy (PRD §2.2.2).",
+)
+async def get_health_strategies() -> dict[str, Any]:
+    """Return per-strategy health metrics.
+
+    Reads active strategies from DataStore and enriches with
+    monitoring state from the orchestrator when available.
+
+    Returns:
+        Dict with ``strategies`` list and ``total`` count.
+        Each strategy entry contains:
+        - strategy_id
+        - status
+        - last_evaluation_time
+        - consecutive_errors
+        - current_drawdown
+    """
+    store = get_store()
+    active_strategies = store.get_active_strategies()
+
+    # Pull monitoring state from orchestrator if available
+    monitoring_state: dict[str, Any] = {}
+    if _orchestrator is not None and hasattr(_orchestrator, "get_monitoring_state"):
+        try:
+            monitoring_state = _orchestrator.get_monitoring_state() or {}
+        except Exception:
+            pass  # Orchestrator may not have state yet; degrade gracefully
+
+    strategy_health: list[dict[str, Any]] = []
+    for strat in active_strategies:
+        strat_id = strat.id
+        mon = monitoring_state.get(strat_id, {})
+
+        last_eval = mon.get("last_evaluation_time")
+        if hasattr(last_eval, "isoformat"):
+            last_eval = last_eval.isoformat()
+
+        strategy_health.append({
+            "strategy_id": strat_id,
+            "status": strat.status.value if hasattr(strat.status, "value") else str(strat.status),
+            "last_evaluation_time": last_eval,
+            "consecutive_errors": mon.get("consecutive_errors", 0),
+            "current_drawdown": mon.get("current_drawdown", 0.0),
+        })
+
+    logger.info(
+        "health_strategies_queried",
+        strategy_count=len(strategy_health),
+    )
+
+    return {
+        "strategies": strategy_health,
+        "total": len(strategy_health),
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+    }
+
+
+@router.get(
     "/regime/history",
     response_model=RegimeHistoryResponse,
     status_code=status.HTTP_200_OK,

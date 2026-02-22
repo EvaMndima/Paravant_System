@@ -19,6 +19,7 @@ from typing import Any
 
 from src.brokers.binance.client import BinanceClient
 from src.brokers.binance.exceptions import BinanceAPIError
+from src.brokers.binance.rate_limiter import RateLimiter
 from src.core.exceptions import (InsufficientBalanceError, OrderNotFoundError,
                                  OrderRejectedError, OrderSubmissionError)
 from src.core.execution.interface import Balance, ExecutionEngine, OrderResult
@@ -80,6 +81,7 @@ class BinanceExecutionAdapter(ExecutionEngine):
         self,
         client: BinanceClient,
         symbol_manager: SymbolManager | None = None,
+        rate_limiter: RateLimiter | None = None,
     ) -> None:
         """Initialize the Binance execution adapter.
 
@@ -87,14 +89,19 @@ class BinanceExecutionAdapter(ExecutionEngine):
             client: BinanceClient instance for API calls.
             symbol_manager: Optional SymbolManager for quantity/price rounding.
                 If not provided, quantities are submitted as-is.
+            rate_limiter: Optional RateLimiter to enforce Binance request limits.
+                If not provided, rate limiting is skipped (use only in tests).
         """
         self.client = client
         self.symbol_manager = symbol_manager
+        # Decision: DEC-2026-02-10-001 - Rate limiter optional for test compatibility
+        self._rate_limiter = rate_limiter
 
         logger.info(
             "binance_execution_adapter_initialized",
             testnet=client.testnet,
             has_symbol_manager=symbol_manager is not None,
+            has_rate_limiter=rate_limiter is not None,
         )
 
     async def submit_order(self, request: OrderRequest) -> OrderResult:
@@ -156,6 +163,11 @@ class BinanceExecutionAdapter(ExecutionEngine):
                 )
 
         try:
+            if self._rate_limiter:
+                await self._rate_limiter.acquire(
+                    priority="new_entry", is_order=True
+                )
+
             logger.info(
                 "adapter_submitting_order",
                 symbol=symbol,
@@ -208,6 +220,11 @@ class BinanceExecutionAdapter(ExecutionEngine):
             OrderNotFoundError: If order does not exist on exchange.
         """
         try:
+            if self._rate_limiter:
+                await self._rate_limiter.acquire(
+                    priority="order_management", is_order=True
+                )
+
             logger.info(
                 "adapter_cancelling_order",
                 order_id=order_id,
@@ -253,6 +270,11 @@ class BinanceExecutionAdapter(ExecutionEngine):
             OrderNotFoundError: If order does not exist on exchange.
         """
         try:
+            if self._rate_limiter:
+                await self._rate_limiter.acquire(
+                    priority="order_management", is_order=True
+                )
+
             logger.debug(
                 "adapter_checking_order_status",
                 order_id=order_id,

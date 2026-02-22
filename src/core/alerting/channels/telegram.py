@@ -59,21 +59,30 @@ class TelegramChannel:
     def __init__(self, bot_token: str, chat_id: str) -> None:
         """Initialize Telegram channel.
 
+        If bot_token or chat_id is missing/empty, the channel enters disabled
+        mode: all send() calls are no-ops with a warning log. This allows the
+        system to start in dev/staging without Telegram credentials without
+        crashing the AlertManager.
+
         Args:
             bot_token: Telegram Bot API token.
             chat_id: Target chat ID for alerts.
-
-        Raises:
-            ValueError: If bot_token or chat_id is empty.
         """
-        if not bot_token or not bot_token.strip():
-            raise ValueError("bot_token cannot be empty")
-        if not chat_id or not chat_id.strip():
-            raise ValueError("chat_id cannot be empty")
+        self._session: aiohttp.ClientSession | None = None
 
+        if not bot_token or not bot_token.strip() or not chat_id or not chat_id.strip():
+            self._disabled = True
+            self.bot_token = ""
+            self.chat_id = ""
+            logger.warning(
+                "telegram_channel_disabled",
+                reason="bot_token or chat_id not configured — alerts will not be sent via Telegram",
+            )
+            return
+
+        self._disabled = False
         self.bot_token = bot_token
         self.chat_id = chat_id
-        self._session: aiohttp.ClientSession | None = None
 
         # Log initialization (bot_token is masked by logging utility)
         logger.info(
@@ -94,6 +103,14 @@ class TelegramChannel:
         Raises:
             AlertDeliveryError: If delivery fails after retries.
         """
+        if self._disabled:
+            logger.debug(
+                "telegram_send_skipped",
+                alert_id=alert.alert_id,
+                reason="telegram_channel_disabled",
+            )
+            return
+
         message = self._format_message(alert)
         url = f"https://api.telegram.org/bot{self.bot_token}/sendMessage"
         payload = {
