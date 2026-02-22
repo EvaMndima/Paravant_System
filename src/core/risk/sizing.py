@@ -17,6 +17,7 @@ Decision: DEC-2026-02-08-008 - Structured logging
 from __future__ import annotations
 
 import math
+from typing import Any
 
 from src.core.config.risk_profiles import RiskProfileConfig
 from src.core.risk.types import PortfolioState, PositionSizeResult
@@ -376,6 +377,92 @@ def validate_allocation(
         )
 
     return True, "OK"
+
+
+# ---------------------------------------------------------------------------
+# Capital graduation (PRD §2.2.1 Feature G)
+# ---------------------------------------------------------------------------
+
+
+def compute_is_proven(strategy: Any) -> bool:
+    """Determine if a strategy qualifies for the proven-strategy allocation tier.
+
+    A strategy is "proven" when it meets ALL three criteria (PRD §2.2.1 Feature G):
+      1. Has been in LIVE status for at least GRADUATION_DAYS (30) calendar days.
+      2. Has completed at least GRADUATION_MIN_TRADES (20) trades.
+      3. Has a positive total P&L in its live_results record.
+
+    This function is synchronous and pure — it reads only from the Strategy
+    object. No database queries are performed; live_results must be populated
+    externally by the position tracker or orchestrator.
+
+    Args:
+        strategy: Strategy model instance to evaluate.
+
+    Returns:
+        True if all graduation criteria are met, False otherwise.
+    """
+    from datetime import datetime, timezone
+
+    # Only LIVE strategies can be proven
+    from src.data.models.strategy import StrategyStatus
+    if strategy.status != StrategyStatus.LIVE:
+        return False
+
+    # --- Criterion 1: 30+ calendar days in LIVE status ---
+    live_since: datetime | None = None
+    for event in (strategy.lifecycle or []):
+        if event.get("to") == StrategyStatus.LIVE.value:
+            try:
+                live_since = datetime.fromisoformat(event["timestamp"])
+            except (KeyError, ValueError):
+                pass
+            # Take the MOST RECENT transition to LIVE (re-activations count)
+
+    if live_since is None:
+        return False
+
+    now = datetime.now(timezone.utc)
+    days_live = (now - live_since).total_seconds() / 86400.0
+    if days_live < GRADUATION_DAYS:
+        logger.debug(
+            "graduation_days_not_met",
+            strategy_id=strategy.id,
+            days_live=round(days_live, 1),
+            required=GRADUATION_DAYS,
+        )
+        return False
+
+    # --- Criteria 2 & 3: 20+ trades AND positive P&L from live_results ---
+    live_results = strategy.live_results or {}
+    total_trades = int(live_results.get("total_trades", 0))
+    total_pnl = float(live_results.get("total_pnl", 0.0))
+
+    if total_trades < GRADUATION_MIN_TRADES:
+        logger.debug(
+            "graduation_trades_not_met",
+            strategy_id=strategy.id,
+            total_trades=total_trades,
+            required=GRADUATION_MIN_TRADES,
+        )
+        return False
+
+    if total_pnl <= 0:
+        logger.debug(
+            "graduation_pnl_not_positive",
+            strategy_id=strategy.id,
+            total_pnl=total_pnl,
+        )
+        return False
+
+    logger.info(
+        "strategy_graduation_qualified",
+        strategy_id=strategy.id,
+        days_live=round(days_live, 1),
+        total_trades=total_trades,
+        total_pnl=total_pnl,
+    )
+    return True
 
 
 # ---------------------------------------------------------------------------

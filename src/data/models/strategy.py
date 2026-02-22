@@ -29,6 +29,7 @@ class StrategyStatus(str, enum.Enum):
     LIVE = "live"
     PAUSED = "paused"
     UNDERPERFORMING = "underperforming"
+    OPTIMIZATION = "optimization"
     RETIRED = "retired"
 
 

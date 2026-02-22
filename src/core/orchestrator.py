@@ -36,8 +36,11 @@ from typing import TYPE_CHECKING, Any
 import psutil
 
 from src.core.alerting.manager import AlertManager
+from src.core.alerting.scheduler import AlertScheduler
 from src.core.alerting.triggers import AlertTriggers
 from src.core.exceptions import SystemStartupError
+from src.core.monitoring.service import MonitoringService
+from src.core.risk.dead_mans_switch import DeadMansSwitch
 from src.utils.logging import get_logger
 
 if TYPE_CHECKING:
@@ -1210,6 +1213,8 @@ class Orchestrator:
 
     MAIN_LOOP_INTERVAL_SECONDS = 5  # Main loop cycle time
     HEALTH_CHECK_INTERVAL_CYCLES = 12  # Every 60 seconds (12 * 5s)
+    # PRD §3.5 underperformance conditions use day/week durations — hourly check is sufficient
+    UNDERPERFORMANCE_CHECK_INTERVAL_CYCLES = 720  # Every 60 minutes (720 * 5s)
 
     def __init__(
         self,
@@ -1274,6 +1279,26 @@ class Orchestrator:
         # Degradation manager
         self._degradation_manager = DegradationManager(triggers=self._triggers)
 
+        # GAP-01: Monitoring service — owns daily PnL record writes and equity snapshots
+        # Decision: DEC-2026-02-26-001 - MonitoringService owns PnL record writes
+        self._monitoring_service = MonitoringService(data_store=data_store)
+
+        # GAP-03: Dead man's switch — triggers kill switch if system becomes unresponsive
+        # PRD Feature C: heartbeat() called every cycle, check() called every health interval
+        self._dead_mans_switch = DeadMansSwitch(
+            store=data_store,
+            kill_switch=risk_controller.kill_switch,
+            interval_minutes=5,   # Matches MAIN_LOOP_INTERVAL_SECONDS * HEALTH_CHECK_INTERVAL_CYCLES / 60
+            max_missed=6,         # 30 minutes of silence triggers halt
+        )
+
+        # GAP-4: Scheduled Telegram summaries (PRD §8.5-8.6)
+        # Fires daily at 00:00 UTC and weekly on Sunday 00:00 UTC.
+        self._alert_scheduler = AlertScheduler(
+            alert_manager=alert_manager,
+            data_store=data_store,
+        )
+
         # Signal handlers
         signal.signal(signal.SIGTERM, self._handle_signal)
         signal.signal(signal.SIGINT, self._handle_signal)
@@ -1288,6 +1313,9 @@ class Orchestrator:
                 "position_tracker",
                 "strategy_engine",
                 "alert_manager",
+                "monitoring_service",
+                "dead_mans_switch",
+                "alert_scheduler",
             ],
         )
 
@@ -1339,6 +1367,9 @@ class Orchestrator:
                 strategies_loaded=len(self._data_store.get_active_strategies()),
             )
 
+            # Start scheduled Telegram summaries (daily + weekly, PRD §8.5-8.6)
+            self._alert_scheduler.start()
+
             # Start main loop
             self._status = SystemStatus.RUNNING
             self._running = True
@@ -1377,6 +1408,10 @@ class Orchestrator:
             cycle_count += 1
 
             try:
+                # GAP-03: Dead man's switch heartbeat — proves system is alive every cycle
+                # Placed before kill switch check so watchdog records activity even during halt
+                self._dead_mans_switch.heartbeat()
+
                 # Step 1: Kill switch check (FIRST - CRITICAL)
                 if self._risk_controller.kill_switch.is_active():
                     logger.warning("kill_switch_active_skipping_cycle")
@@ -1387,10 +1422,17 @@ class Orchestrator:
                 # Circuit breakers are checked within risk controller validate_order()
                 # No additional check needed here - they're enforced at order submission
 
-                # Step 3: Degradation mode check
+                # Step 3: Degradation mode check + dead man's switch watchdog (every 60s)
                 if cycle_count % self.HEALTH_CHECK_INTERVAL_CYCLES == 0:
                     health = await self._health_checker.check_health()
                     await self._degradation_manager.check_degradation(health)
+
+                    # GAP-03: Check whether watchdog has missed too many heartbeats
+                    if not self._dead_mans_switch.check():
+                        logger.critical(
+                            "dead_mans_switch_triggered_kill_switch_activated",
+                            cycle=cycle_count,
+                        )
 
                     # Handle memory pressure if detected
                     for check in health.checks:
@@ -1414,11 +1456,31 @@ class Orchestrator:
                 if degradation_mode == DegradationMode.NORMAL:
                     await self._process_entry_queue()
 
+                # GAP-05: Order reconciliation — verify exchange state matches DB state (every 60s)
+                if cycle_count % self.HEALTH_CHECK_INTERVAL_CYCLES == 0:
+                    await self._reconcile_orders()
+
                 # Step 6: Update positions and P&L
                 positions = await self._position_tracker.get_all_positions()
                 self._metrics.strategies_processed += len(
                     await asyncio.to_thread(self._data_store.get_active_strategies)
                 )
+
+                # GAP-01: Write daily PnL records and intraday equity snapshots
+                await self._monitoring_service.run_cycle(cycle_count=cycle_count)
+
+                # GAP-08: Position staleness check — alert on positions open >24h
+                if positions:
+                    stale = self._monitoring_service.check_stale_positions(positions)
+                    for s in stale:
+                        await self._triggers.on_health_check_failed(
+                            check_name="position_staleness",
+                            reason=(
+                                f"Position {s['position_id']} ({s['symbol']}) "
+                                f"has been open for {s['open_hours']}h "
+                                f"(threshold: {s['open_hours']} > 24h)"
+                            ),
+                        )
 
                 # Step 7: Health check (every 60 seconds)
                 if cycle_count % self.HEALTH_CHECK_INTERVAL_CYCLES == 0:
@@ -1431,6 +1493,10 @@ class Orchestrator:
 
                 # Step 8: Check escalations
                 await self._alert_manager.check_escalations()
+
+                # Step 8b: Underperformance monitoring (hourly, PRD §3.5)
+                if cycle_count % self.UNDERPERFORMANCE_CHECK_INTERVAL_CYCLES == 0:
+                    await self._check_strategy_underperformance()
 
                 # Step 9: Log cycle metrics
                 cycle_duration = (time.monotonic() - cycle_start) * 1000
@@ -1508,6 +1574,57 @@ class Orchestrator:
                 exc_info=True,
             )
 
+    async def _check_strategy_underperformance(self) -> None:
+        """Evaluate PRD §3.5 underperformance conditions for all LIVE strategies.
+
+        Called hourly from the main loop. For each LIVE strategy, delegates to
+        StrategyEngine.evaluate_and_apply_underperformance() which checks win
+        rate, Sharpe, and expectancy conditions. Auto-transitions any strategy
+        that has breached conditions for the required duration.
+
+        Decision: DEC-2026-02-22-002 - Underperformance auto-transition (PRD §3.5)
+        """
+        if self._strategy_engine is None:
+            return
+
+        try:
+            from src.data.models.strategy import StrategyStatus
+
+            live_strategies = await asyncio.to_thread(
+                self._data_store.get_all_strategies
+            )
+            live_only = [s for s in live_strategies if s.status == StrategyStatus.LIVE]
+
+            transitioned_count = 0
+            for strategy in live_only:
+                try:
+                    transitioned = await asyncio.to_thread(
+                        self._strategy_engine.evaluate_and_apply_underperformance,
+                        strategy.id,
+                    )
+                    if transitioned:
+                        transitioned_count += 1
+                except Exception as e:
+                    logger.error(
+                        "underperformance_check_error",
+                        strategy_id=strategy.id,
+                        error=str(e),
+                        exc_info=True,
+                    )
+
+            logger.info(
+                "underperformance_check_complete",
+                live_strategies_checked=len(live_only),
+                transitioned_count=transitioned_count,
+            )
+
+        except Exception as e:
+            logger.error(
+                "underperformance_check_failed",
+                error=str(e),
+                exc_info=True,
+            )
+
     async def _process_entry_queue(self) -> None:
         """Process pending entries from entry coordinator.
 
@@ -1551,6 +1668,73 @@ class Orchestrator:
                 exc_info=True,
             )
 
+    async def _reconcile_orders(self) -> None:
+        """Reconcile pending/submitted orders against exchange state.
+
+        GAP-05: PRD §4.2.3 requires reconciliation of DB order state with
+        the broker's real state every health check cycle.  For MVP (market-only
+        orders with synchronous execution) orders should be terminal within
+        seconds.  Any PENDING/SUBMITTED order older than 5 min is an anomaly.
+
+        This method:
+        1. Fetches all non-terminal orders from the DataStore.
+        2. Logs a WARNING for any order stale > 5 min.
+        3. Fires an alert so the operator can investigate.
+
+        Does NOT cancel orders (cancellation is V1; MVP market orders fill
+        immediately so a stale order means something external went wrong).
+
+        Decision: DEC-2026-02-22-003 - MVP reconciliation is audit-only
+        """
+        import asyncio
+        from datetime import timedelta
+
+        STALE_ORDER_MINUTES = 5
+
+        try:
+            pending_orders = await asyncio.to_thread(
+                self._data_store.get_pending_orders
+            )
+        except Exception as exc:
+            logger.error("reconcile_orders_fetch_error", error=str(exc), exc_info=True)
+            return
+
+        if not pending_orders:
+            return
+
+        now = datetime.now(timezone.utc)
+        stale_threshold = timedelta(minutes=STALE_ORDER_MINUTES)
+
+        for order in pending_orders:
+            # Use submitted_at if available, fall back to created_at
+            created_at = getattr(order, "submitted_at", None) or getattr(
+                order, "created_at", None
+            )
+            if created_at is None:
+                continue
+            if created_at.tzinfo is None:
+                created_at = created_at.replace(tzinfo=timezone.utc)
+
+            age = now - created_at
+            if age >= stale_threshold:
+                age_minutes = round(age.total_seconds() / 60, 1)
+                logger.warning(
+                    "reconcile_stale_order_detected",
+                    order_id=order.id,
+                    status=getattr(order, "status", "unknown"),
+                    external_id=getattr(order, "external_id", None),
+                    age_minutes=age_minutes,
+                )
+                await self._triggers.on_health_check_failed(
+                    check_name="order_reconciliation",
+                    reason=(
+                        f"Order {order.id} has been in state "
+                        f"'{getattr(order, 'status', 'unknown')}' for "
+                        f"{age_minutes} minutes — "
+                        "manual review required (MVP does not auto-cancel)"
+                    ),
+                )
+
     async def stop(self) -> None:
         """Stop the orchestrator gracefully.
 
@@ -1564,6 +1748,9 @@ class Orchestrator:
         self._running = False
 
         try:
+            # Stop scheduled summaries before shutdown alert
+            await self._alert_scheduler.stop()
+
             # Cancel pending orders
             await self._order_manager.shutdown()
 

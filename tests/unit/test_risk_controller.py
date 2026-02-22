@@ -1075,7 +1075,7 @@ class TestRiskControllerPipeline:
         )
         results = controller.validate_order(order)
         assert all(r.approved for r in results)
-        assert len(results) == 7  # All 7 checks ran
+        assert len(results) == 8  # All 8 checks ran (includes portfolio_correlation)
 
     def test_kill_switch_short_circuits(
         self,

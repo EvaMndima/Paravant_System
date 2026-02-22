@@ -30,8 +30,8 @@ from typing import Any
 from src.core.config.risk_profiles import RiskProfileConfig, RiskProfileManager
 from src.core.risk.checks import (check_concentration, check_daily_loss_limit,
                                   check_kill_switch, check_max_drawdown,
-                                  check_max_positions, check_position_size,
-                                  check_weekly_loss_limit)
+                                  check_max_positions, check_portfolio_correlation,
+                                  check_position_size, check_weekly_loss_limit)
 from src.core.risk.circuit_breakers import (CircuitBreakerManager,
                                             CircuitBreakerResult)
 from src.core.risk.event_filter import EventFilter, EventFilterResult
@@ -291,6 +291,19 @@ class RiskController:
                 account_id=request.account_id,
                 symbol=request.symbol,
                 reason=ps_result.rejection_reason,
+            )
+            return results
+
+        # 12. Portfolio correlation limits (PRD §2.2.1 Feature A)
+        # Cross-strategy check: total BTC<=40%, ETH<=30%, long<=60% of equity
+        pc_result = check_portfolio_correlation(request, portfolio)
+        results.append(pc_result)
+        if not pc_result.approved:
+            logger.warning(
+                "order_rejected_portfolio_correlation",
+                account_id=request.account_id,
+                symbol=request.symbol,
+                reason=pc_result.rejection_reason,
             )
             return results
 

@@ -17,7 +17,8 @@ Decision: DEC-2026-02-08-008 - Structured logging
 from __future__ import annotations
 
 import math
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from typing import Any
 
 from src.core.strategy.backtest.types import BacktestConfig, EquityPoint, TradeRecord
 from src.utils.logging import get_logger
@@ -37,29 +38,38 @@ class BacktestMetrics:
 
     Attributes:
         total_return_pct: Total return as percentage.
-        annualized_return_pct: Annualized return percentage.
-        sharpe_ratio: Risk-adjusted return (annualized).
+        annualized_return_pct: Annualized return percentage (CAGR).
+        sharpe_ratio: Risk-adjusted return (annualized). Gate: >= 1.0 per PRD §3.6.
         sortino_ratio: Downside risk-adjusted return (annualized).
+        calmar_ratio: Annualized return / max drawdown. Measures return per
+            unit of drawdown risk. Gate: typically >= 0.5 per PRD §3.6.
         max_drawdown_pct: Maximum peak-to-trough drawdown percentage.
         max_drawdown_duration_days: Duration of longest drawdown in days.
-        total_trades: Total number of completed trades.
+        total_trades: Total number of completed trades. Gate: >= 100 per PRD §3.6.
         winning_trades: Number of profitable trades.
         losing_trades: Number of unprofitable trades.
-        win_rate_pct: Percentage of winning trades.
-        profit_factor: Ratio of gross profit to gross loss.
+        win_rate_pct: Percentage of winning trades. Gate: >= 50% per PRD §3.6.
+        profit_factor: Ratio of gross profit to gross loss. Gate: >= 1.3 per PRD §3.6.
         avg_win_pct: Average winning trade return percentage.
         avg_loss_pct: Average losing trade return percentage.
-        expectancy: Expected value per trade in USDT.
+        expectancy: Expected value per trade in USDT. Gate: > 0 per PRD §3.6.
         largest_win: Largest single winning trade P&L in USDT.
         largest_loss: Largest single losing trade P&L in USDT (negative).
         avg_trade_duration_hours: Average trade duration in hours.
         max_trade_duration_hours: Maximum trade duration in hours.
+        monthly_returns: Ordered tuple of monthly return percentages.
+            Each element is a percentage return for one calendar month,
+            chronological order. Empty if fewer than 30 days of data.
+        per_symbol_breakdown: Per-symbol performance breakdown as a tuple of
+            dicts, each with keys: symbol, total_trades, win_rate_pct,
+            total_return_pct, max_drawdown_pct. Required by PRD §3.2.
     """
 
     total_return_pct: float
     annualized_return_pct: float
     sharpe_ratio: float
     sortino_ratio: float
+    calmar_ratio: float
     max_drawdown_pct: float
     max_drawdown_duration_days: float
     total_trades: int
@@ -74,8 +84,10 @@ class BacktestMetrics:
     largest_loss: float
     avg_trade_duration_hours: float
     max_trade_duration_hours: float
+    monthly_returns: tuple[float, ...] = field(default=())
+    per_symbol_breakdown: tuple[dict[str, Any], ...] = field(default=())
 
-    def to_dict(self) -> dict:
+    def to_dict(self) -> dict[str, Any]:
         """Serialize to dictionary for JSON storage.
 
         Returns:
@@ -86,6 +98,7 @@ class BacktestMetrics:
             "annualized_return_pct": round(self.annualized_return_pct, 4),
             "sharpe_ratio": round(self.sharpe_ratio, 4),
             "sortino_ratio": round(self.sortino_ratio, 4),
+            "calmar_ratio": round(self.calmar_ratio, 4),
             "max_drawdown_pct": round(self.max_drawdown_pct, 4),
             "max_drawdown_duration_days": round(self.max_drawdown_duration_days, 2),
             "total_trades": self.total_trades,
@@ -100,6 +113,8 @@ class BacktestMetrics:
             "largest_loss": round(self.largest_loss, 4),
             "avg_trade_duration_hours": round(self.avg_trade_duration_hours, 2),
             "max_trade_duration_hours": round(self.max_trade_duration_hours, 2),
+            "monthly_returns": [round(r, 4) for r in self.monthly_returns],
+            "per_symbol_breakdown": list(self.per_symbol_breakdown),
         }
 
 
@@ -224,11 +239,19 @@ class BacktestMetricsCalculator:
         avg_duration = sum(durations) / len(durations) if durations else 0.0
         max_duration = max(durations) if durations else 0.0
 
+        # Extended metrics (PRD §3.2)
+        calmar = BacktestMetricsCalculator._compute_calmar_ratio(
+            annualized_return_pct, max_dd_pct
+        )
+        monthly_returns = BacktestMetricsCalculator._compute_monthly_returns(equity_points)
+        per_symbol = BacktestMetricsCalculator._compute_per_symbol_breakdown(trades)
+
         return BacktestMetrics(
             total_return_pct=total_return_pct,
             annualized_return_pct=annualized_return_pct,
             sharpe_ratio=sharpe,
             sortino_ratio=sortino,
+            calmar_ratio=calmar,
             max_drawdown_pct=max_dd_pct,
             max_drawdown_duration_days=max_dd_duration,
             total_trades=total,
@@ -243,6 +266,8 @@ class BacktestMetricsCalculator:
             largest_loss=largest_loss,
             avg_trade_duration_hours=avg_duration,
             max_trade_duration_hours=max_duration,
+            monthly_returns=monthly_returns,
+            per_symbol_breakdown=per_symbol,
         )
 
     @staticmethod
@@ -257,6 +282,7 @@ class BacktestMetricsCalculator:
             annualized_return_pct=0.0,
             sharpe_ratio=0.0,
             sortino_ratio=0.0,
+            calmar_ratio=0.0,
             max_drawdown_pct=0.0,
             max_drawdown_duration_days=0.0,
             total_trades=0,
@@ -424,3 +450,129 @@ class BacktestMetricsCalculator:
             max_dd_duration = max(max_dd_duration, duration)
 
         return max_dd, max_dd_duration
+
+    @staticmethod
+    def _compute_calmar_ratio(
+        annualized_return_pct: float,
+        max_drawdown_pct: float,
+    ) -> float:
+        """Compute Calmar ratio: annualized return divided by max drawdown.
+
+        A higher Calmar ratio means better risk-adjusted performance —
+        more return per unit of drawdown risk. Typical good values > 0.5.
+
+        Args:
+            annualized_return_pct: CAGR in percentage points (e.g., 25.0 = 25%).
+            max_drawdown_pct: Max drawdown as positive percentage (e.g., 10.0 = 10%).
+
+        Returns:
+            Calmar ratio, 0.0 if drawdown is zero and return is non-positive,
+            or float('inf') if drawdown is zero but return is positive.
+        """
+        if max_drawdown_pct <= 0:
+            # No drawdown: inf if profitable, 0.0 otherwise
+            return float("inf") if annualized_return_pct > 0 else 0.0
+        return annualized_return_pct / max_drawdown_pct
+
+    @staticmethod
+    def _compute_monthly_returns(
+        equity_points: list[EquityPoint],
+    ) -> tuple[float, ...]:
+        """Compute month-over-month return percentages from equity curve.
+
+        Groups equity snapshots by calendar month and computes the percentage
+        change from the prior month-end to the current month-end.
+
+        Args:
+            equity_points: Ordered equity snapshots (must be chronological).
+
+        Returns:
+            Tuple of monthly return percentages in chronological order.
+            Empty tuple if fewer than 2 calendar months of data.
+        """
+        if len(equity_points) < 2:
+            return ()
+
+        # Group by YYYY-MM, retaining first and last equity per month
+        month_first: dict[str, float] = {}
+        month_last: dict[str, float] = {}
+        for point in equity_points:
+            key = point.timestamp.strftime("%Y-%m")
+            if key not in month_first:
+                month_first[key] = point.equity
+            month_last[key] = point.equity
+
+        sorted_months = sorted(month_first.keys())
+        if len(sorted_months) < 2:
+            return ()
+
+        returns: list[float] = []
+        for i, month in enumerate(sorted_months):
+            if i == 0:
+                # First month: return within the month itself
+                start_val = month_first[month]
+            else:
+                # Subsequent months: from prior month-end
+                start_val = month_last[sorted_months[i - 1]]
+
+            end_val = month_last[month]
+            if start_val > 0:
+                monthly_ret = ((end_val - start_val) / start_val) * 100.0
+                returns.append(monthly_ret)
+
+        return tuple(returns)
+
+    @staticmethod
+    def _compute_per_symbol_breakdown(
+        trades: list[TradeRecord],
+    ) -> tuple[dict[str, Any], ...]:
+        """Compute per-symbol performance breakdown.
+
+        Groups trades by symbol and computes key metrics for each.
+        Required by PRD §3.2.
+
+        Args:
+            trades: All completed trade records.
+
+        Returns:
+            Tuple of dicts sorted by symbol name. Each dict contains:
+            symbol, total_trades, win_rate_pct, total_return_pct,
+            profit_factor.
+        """
+        if not trades:
+            return ()
+
+        # Group trades by symbol
+        symbol_trades: dict[str, list[TradeRecord]] = {}
+        for trade in trades:
+            if trade.symbol not in symbol_trades:
+                symbol_trades[trade.symbol] = []
+            symbol_trades[trade.symbol].append(trade)
+
+        breakdown: list[dict[str, Any]] = []
+        for symbol in sorted(symbol_trades):
+            sym_trades = symbol_trades[symbol]
+            n = len(sym_trades)
+            wins = [t for t in sym_trades if t.realized_pnl > 0]
+            losses = [t for t in sym_trades if t.realized_pnl <= 0]
+
+            gross_profit = sum(t.realized_pnl for t in wins)
+            gross_loss = abs(sum(t.realized_pnl for t in losses))
+
+            if gross_loss > 0:
+                pf = gross_profit / gross_loss
+            else:
+                pf = float("inf") if gross_profit > 0 else 0.0
+
+            win_rate = (len(wins) / n) * 100.0
+            total_return = sum(t.return_pct for t in sym_trades)
+
+            breakdown.append({
+                "symbol": symbol,
+                "total_trades": n,
+                "win_rate_pct": round(win_rate, 2),
+                "total_return_pct": round(total_return, 4),
+                "profit_factor": round(pf, 4) if math.isfinite(pf) else pf,
+            })
+
+        return tuple(breakdown)

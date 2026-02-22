@@ -20,7 +20,7 @@ def _make_result(
     max_dd: float = 10.0,
     win_rate: float = 55.0,
     profit_factor: float = 1.5,
-    total_trades: int = 50,
+    total_trades: int = 100,
 ) -> BacktestResult:
     """Create a BacktestResult with the specified metrics."""
     metrics = BacktestMetrics(
@@ -28,6 +28,7 @@ def _make_result(
         annualized_return_pct=42.5,
         sharpe_ratio=sharpe,
         sortino_ratio=sharpe * 1.2,
+        calmar_ratio=42.5 / max(max_dd, 0.001),
         max_drawdown_pct=max_dd,
         max_drawdown_duration_days=5.0,
         total_trades=total_trades,
@@ -66,13 +67,13 @@ class TestValidationThresholds:
     """Tests for ValidationThresholds."""
 
     def test_default_values(self) -> None:
-        """Default thresholds should match PHASE_5_IMPLEMENTATION_GUIDE."""
+        """Default thresholds should match PRD §3.6 validation gates."""
         t = ValidationThresholds()
-        assert t.min_sharpe_ratio == 0.5
+        assert t.min_sharpe_ratio == 1.0      # PRD §3.6: sharpe >= 1.0
         assert t.max_drawdown_pct == 15.0
-        assert t.min_win_rate_pct == 35.0
-        assert t.min_profit_factor == 1.0
-        assert t.min_num_trades == 30
+        assert t.min_win_rate_pct == 50.0     # PRD §3.6: win_rate >= 50%
+        assert t.min_profit_factor == 1.3     # PRD §3.6: profit_factor >= 1.3
+        assert t.min_num_trades == 100        # PRD §3.6: trades >= 100
 
     def test_custom_values(self) -> None:
         """Custom thresholds should be accepted."""
@@ -108,7 +109,7 @@ class TestBacktestValidator:
             max_dd=10.0,
             win_rate=55.0,
             profit_factor=1.5,
-            total_trades=50,
+            total_trades=100,
         )
         passed, errors = BacktestValidator.validate(result)
         assert passed is True
@@ -164,7 +165,7 @@ class TestBacktestValidator:
 
     def test_custom_thresholds(self) -> None:
         """Custom thresholds should override defaults."""
-        result = _make_result(sharpe=0.3)  # would fail default (0.5)
+        result = _make_result(sharpe=0.3)  # would fail default threshold (1.0)
         thresholds = ValidationThresholds(min_sharpe_ratio=0.2)
         passed, _ = BacktestValidator.validate(result, thresholds)
         assert passed is True

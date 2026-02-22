@@ -524,57 +524,65 @@ class TestConsecutiveLossCircuitBreaker:
 
 
 class TestCorrelationCircuitBreaker:
-    """Tests for CorrelationCircuitBreaker."""
+    """Tests for CorrelationCircuitBreaker (PRD §2.2.1 Feature A).
 
-    def test_not_triggered_no_duplicate_symbols(
+    Checks portfolio-level asset exposure limits:
+      - BTC long exposure: max 40% of total equity
+      - ETH long exposure: max 30% of total equity
+      - Total correlated long exposure: max 60% of total equity
+    """
+
+    def _make_long_pos(self, symbol: str, size: float, price: float) -> MagicMock:
+        """Build a mock long position."""
+        pos = MagicMock()
+        pos.symbol = symbol
+        pos.size = size
+        pos.current_price = price
+        pos.side = MagicMock()
+        pos.side.value = "long"
+        return pos
+
+    def test_not_triggered_low_exposure(
         self,
         balanced_profile: RiskProfileConfig,
         fixed_now: datetime,
     ) -> None:
-        """Breaker does not trip when each symbol has 1 position."""
-        pos1 = MagicMock()
-        pos1.symbol = "BTCUSDT"
-        pos2 = MagicMock()
-        pos2.symbol = "ETHUSDT"
+        """Breaker does not trip when per-asset and total exposure are under limits."""
+        # BTC: 20% of $10k equity, ETH: 15% — total 35% (all under limits)
+        btc_pos = self._make_long_pos("BTCUSDT", size=0.05, price=40_000.0)  # $2000 = 20%
+        eth_pos = self._make_long_pos("ETHUSDT", size=0.5, price=3_000.0)   # $1500 = 15%
 
         portfolio = PortfolioState(
             account_id="acc_001",
-            total_equity=10000.0,
-            cash_balance=6000.0,
-            positions_value=4000.0,
-            open_positions=(pos1, pos2),
+            total_equity=10_000.0,
+            cash_balance=6_500.0,
+            positions_value=3_500.0,
+            open_positions=(btc_pos, eth_pos),
         )
-        breaker = CorrelationCircuitBreaker(
-            max_per_symbol=1, cooldown_minutes=60
-        )
+        breaker = CorrelationCircuitBreaker(cooldown_minutes=60)
         result = breaker.check(portfolio, balanced_profile, fixed_now)
         assert result.is_triggered is False
 
-    def test_triggered_on_duplicate_symbol_positions(
+    def test_triggered_on_btc_exposure_over_40pct(
         self,
         balanced_profile: RiskProfileConfig,
         fixed_now: datetime,
     ) -> None:
-        """Breaker trips when a symbol has more positions than allowed."""
-        pos1 = MagicMock()
-        pos1.symbol = "BTCUSDT"
-        pos2 = MagicMock()
-        pos2.symbol = "BTCUSDT"
+        """Breaker trips when BTC long exposure exceeds 40% of total equity."""
+        # BTC: $5000 out of $10k equity = 50% > 40% limit
+        btc_pos = self._make_long_pos("BTCUSDT", size=0.125, price=40_000.0)  # $5000 = 50%
 
         portfolio = PortfolioState(
             account_id="acc_001",
-            total_equity=10000.0,
-            cash_balance=6000.0,
-            positions_value=4000.0,
-            open_positions=(pos1, pos2),
+            total_equity=10_000.0,
+            cash_balance=5_000.0,
+            positions_value=5_000.0,
+            open_positions=(btc_pos,),
         )
-        breaker = CorrelationCircuitBreaker(
-            max_per_symbol=1, cooldown_minutes=60
-        )
+        breaker = CorrelationCircuitBreaker(cooldown_minutes=60)
         result = breaker.check(portfolio, balanced_profile, fixed_now)
         assert result.is_triggered is True
-        assert "BTCUSDT" in result.message
-        assert "2 positions" in result.message
+        assert "BTC" in result.message
 
     def test_not_triggered_with_no_positions(
         self,
@@ -583,9 +591,7 @@ class TestCorrelationCircuitBreaker:
         fixed_now: datetime,
     ) -> None:
         """Breaker does not trip with empty positions."""
-        breaker = CorrelationCircuitBreaker(
-            max_per_symbol=1, cooldown_minutes=60
-        )
+        breaker = CorrelationCircuitBreaker(cooldown_minutes=60)
         result = breaker.check(healthy_portfolio, balanced_profile, fixed_now)
         assert result.is_triggered is False
 

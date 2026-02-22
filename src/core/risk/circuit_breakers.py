@@ -468,28 +468,36 @@ class ConsecutiveLossCircuitBreaker(CircuitBreaker):
 
 
 class CorrelationCircuitBreaker(CircuitBreaker):
-    """Trips when too many positions exist in the same symbol.
+    """Monitors portfolio-level asset exposure against PRD limits.
 
-    For MVP, this performs a simple duplicate-symbol check rather
-    than computing a full correlation matrix. The threshold is
-    the maximum allowed positions per symbol (default 1).
+    Trips when any single asset or total correlated long exposure
+    exceeds defined thresholds. This is a stateful, portfolio-level
+    monitor that fires even when no new order is being placed.
 
-    A full correlation matrix implementation is planned for V1.
+    Checks (per PRD §2.2.1 Feature A - Portfolio Correlation Limits):
+      - BTC long exposure > 40% of total equity
+      - ETH long exposure > 30% of total equity
+      - Total correlated long exposure > 60% of total equity
+
+    Decision: DEC-2026-02-22-001 - Replace duplicate-symbol check with
+    actual percentage-based exposure monitoring per PRD requirements.
     """
 
-    def __init__(
-        self,
-        max_per_symbol: int = 1,
-        cooldown_minutes: int = 60,
-    ) -> None:
-        """Initialize with max positions per symbol.
+    # Asset-specific long exposure limits
+    _ASSET_LIMITS: dict[str, float] = {
+        "BTC": 40.0,
+        "ETH": 30.0,
+    }
+    # Total correlated (all long positions) exposure limit
+    _CORRELATED_LIMIT: float = 60.0
+
+    def __init__(self, cooldown_minutes: int = 60) -> None:
+        """Initialize the correlation circuit breaker.
 
         Args:
-            max_per_symbol: Max concurrent positions in one symbol.
-            cooldown_minutes: Minutes before auto-reset.
+            cooldown_minutes: Minutes before auto-reset after triggering.
         """
         super().__init__(cooldown_minutes=cooldown_minutes)
-        self._max_per_symbol: int = max_per_symbol
 
     @property
     def name(self) -> str:
@@ -501,33 +509,80 @@ class CorrelationCircuitBreaker(CircuitBreaker):
         portfolio: PortfolioState,
         profile: RiskProfileConfig,
     ) -> tuple[bool, float, float, str]:
-        """Evaluate position concentration per symbol.
+        """Evaluate portfolio-level asset exposure against limits.
+
+        Calculates long exposure per base asset and total correlated
+        long exposure as percentages of total equity.
+
+        Args:
+            portfolio: Current portfolio state snapshot.
+            profile: Risk profile configuration (unused — limits are fixed).
 
         Returns:
-            Tuple of (should_trigger, max_count, threshold, message).
+            Tuple of (should_trigger, max_exposure_pct, limit_pct, message).
         """
-        threshold = float(self._max_per_symbol)
+        if portfolio.total_equity <= 0:
+            return (True, 0.0, 0.0, "Zero or negative equity")
 
-        # Count positions per symbol
-        symbol_counts: dict[str, int] = {}
-        for position in portfolio.open_positions:
-            symbol = position.symbol
-            symbol_counts[symbol] = symbol_counts.get(symbol, 0) + 1
+        # Tally long exposure by base asset
+        asset_long_exposure: dict[str, float] = {}
+        total_long_exposure: float = 0.0
 
-        if not symbol_counts:
-            return (False, 0.0, threshold, "")
-
-        max_count = max(symbol_counts.values())
-        max_symbol = max(symbol_counts, key=symbol_counts.get)  # type: ignore[arg-type]
-
-        if max_count > self._max_per_symbol:
-            message = (
-                f"{max_symbol} has {max_count} positions "
-                f"(max: {self._max_per_symbol})"
+        for pos in portfolio.open_positions:
+            if pos.side.value != "long":
+                continue
+            base = _extract_base_asset_from_symbol(pos.symbol)
+            pos_value = pos.size * pos.current_price
+            asset_long_exposure[base] = (
+                asset_long_exposure.get(base, 0.0) + pos_value
             )
-            return (True, float(max_count), threshold, message)
+            total_long_exposure += pos_value
 
-        return (False, float(max_count), threshold, "")
+        # Check per-asset limits first
+        for asset, limit_pct in self._ASSET_LIMITS.items():
+            exposure = asset_long_exposure.get(asset, 0.0)
+            exposure_pct = (exposure / portfolio.total_equity) * 100
+            if exposure_pct > limit_pct:
+                message = (
+                    f"{asset} long exposure {exposure_pct:.2f}% "
+                    f"exceeds limit {limit_pct:.1f}%"
+                )
+                return (True, exposure_pct, limit_pct, message)
+
+        # Check total correlated exposure
+        total_pct = (total_long_exposure / portfolio.total_equity) * 100
+        if total_pct > self._CORRELATED_LIMIT:
+            message = (
+                f"Total correlated long exposure {total_pct:.2f}% "
+                f"exceeds limit {self._CORRELATED_LIMIT:.1f}%"
+            )
+            return (True, total_pct, self._CORRELATED_LIMIT, message)
+
+        # Report the highest single-asset pct for observability
+        max_pct = 0.0
+        if asset_long_exposure and portfolio.total_equity > 0:
+            max_pct = max(
+                (v / portfolio.total_equity * 100)
+                for v in asset_long_exposure.values()
+            )
+
+        return (False, max_pct, self._CORRELATED_LIMIT, "")
+
+
+def _extract_base_asset_from_symbol(symbol: str) -> str:
+    """Extract base asset from a USDT-quoted symbol for circuit breaker use.
+
+    Args:
+        symbol: Trading pair symbol (e.g., "BTCUSDT").
+
+    Returns:
+        Base asset string (e.g., "BTC").
+    """
+    symbol_upper = symbol.upper()
+    for quote in ("USDT", "BUSD"):
+        if symbol_upper.endswith(quote) and len(symbol_upper) > len(quote):
+            return symbol_upper[: -len(quote)]
+    return symbol_upper
 
 
 # ---------------------------------------------------------------------------

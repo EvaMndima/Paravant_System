@@ -31,11 +31,11 @@ class ValidationThresholds:
         min_num_trades: Minimum number of completed trades.
     """
 
-    min_sharpe_ratio: float = 0.5
+    min_sharpe_ratio: float = 1.0
     max_drawdown_pct: float = 15.0
-    min_win_rate_pct: float = 35.0
-    min_profit_factor: float = 1.0
-    min_num_trades: int = 30
+    min_win_rate_pct: float = 50.0
+    min_profit_factor: float = 1.3
+    min_num_trades: int = 100
 
 
 class BacktestValidator:

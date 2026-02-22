@@ -15,6 +15,7 @@ Decision: DEC-2026-02-08-010 - Lambda functions for mutable defaults
 """
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from typing import Any
 
 from src.core.config.templates import TemplateManager
@@ -45,9 +46,15 @@ VALID_TRANSITIONS: dict[StrategyStatus, set[StrategyStatus]] = {
     },
     StrategyStatus.PAUSED: {StrategyStatus.LIVE, StrategyStatus.RETIRED},
     StrategyStatus.UNDERPERFORMING: {
+        StrategyStatus.OPTIMIZATION,
         StrategyStatus.PAUSED,
         StrategyStatus.RETIRED,
         StrategyStatus.LIVE,
+    },
+    StrategyStatus.OPTIMIZATION: {
+        StrategyStatus.LIVE,
+        StrategyStatus.PAUSED,
+        StrategyStatus.RETIRED,
     },
     StrategyStatus.RETIRED: set(),  # Terminal state
 }
@@ -527,3 +534,161 @@ class StrategyEngine:
             )
 
         return check_similarity(candidate, existing_list)
+
+    def check_underperformance_conditions(
+        self,
+        strategy: "Strategy",
+    ) -> list[dict[str, Any]]:
+        """Evaluate PRD §3.5 underperformance conditions against live metrics.
+
+        Compares live performance data stored in strategy.live_results against
+        backtest benchmarks from strategy.backtest_results. Tracks how long
+        each failing condition has been active in live_results.underperformance_tracking.
+
+        PRD §3.5 Triggers (all durations use calendar days):
+          1. Win rate drops 15%+ below backtest for 14+ days.
+          2. Sharpe ratio < 0.5 for 30+ days.
+          3. Performance vs expectation < 50% for 21+ days.
+
+        Args:
+            strategy: Strategy to evaluate (must be LIVE status).
+
+        Returns:
+            List of active condition dicts. Each has keys:
+            condition (str), duration_days (float), threshold_days (int).
+            Empty list means no underperformance detected.
+        """
+        if strategy.status != StrategyStatus.LIVE:
+            return []
+
+        backtest = strategy.backtest_results or {}
+        live = strategy.live_results or {}
+
+        if not backtest or not live:
+            return []
+
+        now = datetime.now(timezone.utc)
+        tracking: dict[str, Any] = live.get("underperformance_tracking", {})
+        active_conditions: list[dict[str, Any]] = []
+
+        # --- Condition 1: Win rate 15%+ below backtest for 14+ days ---
+        bt_win_rate = float(backtest.get("win_rate_pct", 0.0))
+        live_win_rate = float(live.get("win_rate_pct", bt_win_rate))
+        win_rate_drop = bt_win_rate - live_win_rate
+        if win_rate_drop >= 15.0:
+            # Record when this condition was first detected
+            if "low_win_rate_since" not in tracking:
+                tracking["low_win_rate_since"] = now.isoformat()
+            first_seen = datetime.fromisoformat(tracking["low_win_rate_since"])
+            duration_days = (now - first_seen).total_seconds() / 86400.0
+            if duration_days >= 14:
+                active_conditions.append({
+                    "condition": "low_win_rate",
+                    "duration_days": round(duration_days, 1),
+                    "threshold_days": 14,
+                    "detail": (
+                        f"Win rate {live_win_rate:.1f}% is {win_rate_drop:.1f}% below "
+                        f"backtest {bt_win_rate:.1f}%"
+                    ),
+                })
+        else:
+            # Condition cleared — remove tracking entry
+            tracking.pop("low_win_rate_since", None)
+
+        # --- Condition 2: Sharpe ratio < 0.5 for 30+ days ---
+        live_sharpe = float(live.get("sharpe_ratio", 1.0))
+        if live_sharpe < 0.5:
+            if "low_sharpe_since" not in tracking:
+                tracking["low_sharpe_since"] = now.isoformat()
+            first_seen = datetime.fromisoformat(tracking["low_sharpe_since"])
+            duration_days = (now - first_seen).total_seconds() / 86400.0
+            if duration_days >= 30:
+                active_conditions.append({
+                    "condition": "low_sharpe",
+                    "duration_days": round(duration_days, 1),
+                    "threshold_days": 30,
+                    "detail": f"Sharpe ratio {live_sharpe:.3f} < 0.5 threshold",
+                })
+        else:
+            tracking.pop("low_sharpe_since", None)
+
+        # --- Condition 3: Expectancy < 50% of backtest for 21+ days ---
+        bt_expectancy = float(backtest.get("expectancy", 0.0))
+        live_expectancy = float(live.get("expectancy", bt_expectancy))
+        if bt_expectancy > 0 and live_expectancy < (bt_expectancy * 0.5):
+            if "low_expectancy_since" not in tracking:
+                tracking["low_expectancy_since"] = now.isoformat()
+            first_seen = datetime.fromisoformat(tracking["low_expectancy_since"])
+            duration_days = (now - first_seen).total_seconds() / 86400.0
+            if duration_days >= 21:
+                active_conditions.append({
+                    "condition": "low_expectancy",
+                    "duration_days": round(duration_days, 1),
+                    "threshold_days": 21,
+                    "detail": (
+                        f"Expectancy ${live_expectancy:.2f} is below 50% of "
+                        f"backtest ${bt_expectancy:.2f}"
+                    ),
+                })
+        else:
+            tracking.pop("low_expectancy_since", None)
+
+        # Persist updated tracking timestamps back to live_results
+        if tracking != live.get("underperformance_tracking", {}):
+            updated_live = dict(live)
+            updated_live["underperformance_tracking"] = tracking
+            strategy.live_results = updated_live
+            from sqlalchemy.orm.attributes import flag_modified
+            flag_modified(strategy, "live_results")
+
+        return active_conditions
+
+    def evaluate_and_apply_underperformance(
+        self,
+        strategy_id: str,
+    ) -> bool:
+        """Check and apply UNDERPERFORMING status if PRD §3.5 conditions are met.
+
+        Loads the strategy, evaluates underperformance conditions, and
+        auto-transitions to UNDERPERFORMING if any condition has been active
+        for the required duration.
+
+        Args:
+            strategy_id: Strategy to evaluate.
+
+        Returns:
+            True if strategy was transitioned to UNDERPERFORMING, False otherwise.
+        """
+        strategy = self.store.get_strategy(strategy_id)
+        if strategy is None or strategy.status != StrategyStatus.LIVE:
+            return False
+
+        conditions = self.check_underperformance_conditions(strategy)
+
+        # Persist any updated tracking data from check_underperformance_conditions
+        self.store.save_strategy(strategy)
+
+        if not conditions:
+            return False
+
+        # Build human-readable reason
+        condition_texts = [c["detail"] for c in conditions]
+        reason = (
+            f"Auto-detected underperformance (PRD §3.5): "
+            + "; ".join(condition_texts)
+        )
+
+        self.transition_status(
+            strategy_id=strategy_id,
+            new_status=StrategyStatus.UNDERPERFORMING,
+            reason=reason,
+        )
+
+        logger.warning(
+            "strategy_underperformance_auto_detected",
+            strategy_id=strategy_id,
+            conditions=[c["condition"] for c in conditions],
+            condition_count=len(conditions),
+        )
+
+        return True

@@ -12,6 +12,7 @@ Pipeline order (STRICT - do NOT reorder):
 5. check_max_positions - concurrent position limit
 6. check_concentration - single-symbol exposure limit
 7. check_position_size - individual position size limit
+8. check_portfolio_correlation - cross-strategy asset exposure limits
 
 Decision: DEC-2026-02-08-006 - Type hints 100% coverage
 Decision: DEC-2026-02-08-007 - Input validation at boundaries
@@ -393,3 +394,150 @@ def check_position_size(
         check_name="position_size",
         checks_passed=("position_size",),
     )
+
+
+# ---------------------------------------------------------------------------
+# Portfolio Correlation Limits (PRD §2.2.1 Feature A)
+# ---------------------------------------------------------------------------
+
+# Per-asset long exposure caps (base asset -> max % of total equity).
+# Decision: PRD §2.2.1 Feature A - prevent over-concentration in same direction.
+_ASSET_EXPOSURE_LIMITS: dict[str, float] = {
+    "BTC": 40.0,  # max_btc_exposure_pct
+    "ETH": 30.0,  # max_eth_exposure_pct
+}
+
+# Maximum total long exposure across all correlated positions.
+_MAX_CORRELATED_EXPOSURE_PCT: float = 60.0
+
+
+def check_portfolio_correlation(
+    order: OrderRequest,
+    portfolio: PortfolioState,
+) -> RiskCheckResult:
+    """Check portfolio-level asset exposure limits across all strategies.
+
+    Enforces per-asset and total-correlated caps to prevent over-concentration
+    in any single asset or direction. This is a cross-strategy check — it sums
+    ALL open positions regardless of which strategy owns them.
+
+    Per PRD §2.2.1 Feature A (Portfolio Correlation Limits):
+      - BTC long exposure: max 40% of total equity
+      - ETH long exposure: max 30% of total equity
+      - Total correlated long exposure: max 60% of total equity
+
+    Only applied to BUY orders (opening long positions). SELL orders
+    that close existing positions are always allowed through this check.
+
+    Args:
+        order: The order to validate.
+        portfolio: Current portfolio state (all open positions, all strategies).
+
+    Returns:
+        RiskCheckResult indicating pass or fail.
+    """
+    if portfolio.total_equity <= 0:
+        return RiskCheckResult(
+            approved=False,
+            check_name="portfolio_correlation",
+            rejection_reason="Cannot check correlation with zero equity",
+            checks_failed=("portfolio_correlation",),
+        )
+
+    # Only apply to orders that open new long positions.
+    # Closing trades (SELL against existing LONG) pass through freely.
+    if order.side != "buy":
+        return RiskCheckResult(
+            approved=True,
+            check_name="portfolio_correlation",
+            checks_passed=("portfolio_correlation",),
+        )
+
+    new_order_base = _extract_base_asset(order.symbol)
+    new_order_value = order.quantity * order.price
+
+    # Tally existing long exposure per base asset
+    asset_long_exposure: dict[str, float] = {}
+    total_long_exposure: float = 0.0
+
+    for pos in portfolio.open_positions:
+        if pos.side.value != "long":
+            continue
+        base = _extract_base_asset(pos.symbol)
+        pos_value = pos.size * pos.current_price
+        asset_long_exposure[base] = asset_long_exposure.get(base, 0.0) + pos_value
+        total_long_exposure += pos_value
+
+    # Include the proposed new buy order in the totals
+    asset_long_exposure[new_order_base] = (
+        asset_long_exposure.get(new_order_base, 0.0) + new_order_value
+    )
+    total_long_exposure += new_order_value
+
+    # Check per-asset limits (BTC 40%, ETH 30%)
+    for asset, limit_pct in _ASSET_EXPOSURE_LIMITS.items():
+        exposure = asset_long_exposure.get(asset, 0.0)
+        exposure_pct = (exposure / portfolio.total_equity) * 100
+        if exposure_pct > limit_pct:
+            reason = (
+                f"{asset} long exposure {exposure_pct:.2f}% exceeds "
+                f"portfolio limit {limit_pct:.1f}%"
+            )
+            logger.warning(
+                "risk_check_correlation_asset_rejected",
+                asset=asset,
+                exposure_pct=exposure_pct,
+                limit_pct=limit_pct,
+                symbol=order.symbol,
+            )
+            return RiskCheckResult(
+                approved=False,
+                check_name="portfolio_correlation",
+                rejection_reason=reason,
+                checks_failed=("portfolio_correlation",),
+            )
+
+    # Check total correlated (all-long) exposure cap
+    total_pct = (total_long_exposure / portfolio.total_equity) * 100
+    if total_pct > _MAX_CORRELATED_EXPOSURE_PCT:
+        reason = (
+            f"Total correlated long exposure {total_pct:.2f}% exceeds "
+            f"limit {_MAX_CORRELATED_EXPOSURE_PCT:.1f}%"
+        )
+        logger.warning(
+            "risk_check_correlation_total_rejected",
+            total_exposure_pct=total_pct,
+            limit_pct=_MAX_CORRELATED_EXPOSURE_PCT,
+            symbol=order.symbol,
+        )
+        return RiskCheckResult(
+            approved=False,
+            check_name="portfolio_correlation",
+            rejection_reason=reason,
+            checks_failed=("portfolio_correlation",),
+        )
+
+    return RiskCheckResult(
+        approved=True,
+        check_name="portfolio_correlation",
+        checks_passed=("portfolio_correlation",),
+    )
+
+
+def _extract_base_asset(symbol: str) -> str:
+    """Extract base asset from a USDT-quoted trading symbol.
+
+    Strips common quote currency suffixes. All MVP symbols are USDT pairs
+    (BTCUSDT, ETHUSDT, etc.) per DEC-2026-01-15-001.
+
+    Args:
+        symbol: Trading pair symbol (e.g., "BTCUSDT").
+
+    Returns:
+        Base asset string (e.g., "BTC").
+    """
+    symbol_upper = symbol.upper()
+    for quote in ("USDT", "BUSD"):
+        if symbol_upper.endswith(quote) and len(symbol_upper) > len(quote):
+            return symbol_upper[: -len(quote)]
+    return symbol_upper
