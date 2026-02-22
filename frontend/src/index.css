@@ -1,0 +1,174 @@
+/* ========== GOOGLE FONTS IMPORTS ========== */
+@import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700&family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap');
+
+/* ========== LIGHT MODE (DEFAULT) ========== */
+:root {
+  --color-background: #fdfbf8;      /* paper-100 */
+  --color-surface: #f5ebe2;         /* paper-300 */
+  --color-surface-alt: #ebf8f7;     /* deep-teal-100 */
+  --color-text-primary: #1e404a;    /* deep-teal-900 */
+  --color-text-secondary: #707070;  /* obsidian-500 */
+  --color-text-tertiary: #a3a3a3;   /* obsidian-400 */
+  --color-border: #a8dfe4;          /* deep-teal-300 */
+  --color-border-subtle: #cceeed;   /* deep-teal-200 */
+  --color-accent: #45a3ba;          /* deep-teal-500 */
+  --color-accent-light: #6dd5ca;    /* turquoise-mist-300 */
+  --color-gain: #10b981;            /* Green (universal) */
+  --color-loss: #ef4444;            /* Red (universal) */
+  --color-neutral: #f59e0b;         /* Amber (universal) */
+}
+
+/* ========== DARK MODE ========== */
+.dark {
+  --color-background: #0a0a0a;      /* obsidian-900 */
+  --color-surface: #1e404a;         /* deep-teal-900 */
+  --color-surface-alt: #24515f;     /* deep-teal-800 */
+  --color-text-primary: #fdfbf8;    /* paper-100 */
+  --color-text-secondary: #d0d0d0;  /* obsidian-300 */
+  --color-text-tertiary: #a3a3a3;   /* obsidian-400 */
+  --color-border: #246f67;          /* turquoise-mist-700 */
+  --color-border-subtle: #1f5954;   /* turquoise-mist-800 */
+  --color-accent: #6dd5ca;          /* turquoise-mist-300 */
+  --color-accent-light: #45bfb0;    /* turquoise-mist-400 */
+  /* Semantic colors unchanged */
+  --color-gain: #10b981;
+  --color-loss: #ef4444;
+  --color-neutral: #f59e0b;
+}
+
+/* ========== THEME VARIANTS (5 accent themes) ========== */
+
+/* Ocean (default turquoise) */
+html {
+  --accent-primary: #45a3ba;
+  --accent-secondary: #6dd5ca;
+}
+
+/* Sapphire (blue) */
+[data-theme="sapphire"] {
+  --accent-primary: #0ea5e9;
+  --accent-secondary: #38bdf8;
+}
+
+/* Emerald (deeper green) */
+[data-theme="emerald"] {
+  --accent-primary: #059669;
+  --accent-secondary: #10b981;
+}
+
+/* Amber (warm golden) */
+[data-theme="amber"] {
+  --accent-primary: #d97706;
+  --accent-secondary: #f59e0b;
+}
+
+/* Slate (cool gray) */
+[data-theme="slate"] {
+  --accent-primary: #64748b;
+  --accent-secondary: #94a3b8;
+}
+
+/* ========== GLASS-MORPHISM UTILITIES ========== */
+
+.glass-panel {
+  background: rgba(255, 251, 248, 0.8);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(69, 163, 186, 0.1);
+}
+
+.dark .glass-panel {
+  background: rgba(30, 64, 74, 0.6);
+  border-color: rgba(109, 213, 202, 0.1);
+}
+
+.glass-panel-elevated {
+  background: rgba(255, 251, 248, 0.8);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(69, 163, 186, 0.1);
+  box-shadow: 0 10px 15px -3px rgb(30 64 74 / 0.05), 0 4px 6px -4px rgb(30 64 74 / 0.05);
+}
+
+.dark .glass-panel-elevated {
+  background: rgba(30, 64, 74, 0.6);
+  border-color: rgba(109, 213, 202, 0.1);
+  box-shadow: 0 10px 15px -3px rgb(30 64 74 / 0.2), 0 4px 6px -4px rgb(30 64 74 / 0.2);
+}
+
+.glass-panel-subtle {
+  background: rgba(255, 251, 248, 0.4);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border: 1px solid transparent;
+}
+
+.dark .glass-panel-subtle {
+  background: rgba(30, 64, 74, 0.3);
+}
+
+.glass-panel-dark {
+  background: rgba(30, 64, 74, 0.8);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border-color: rgba(109, 213, 202, 0.15);
+}
+
+/* ========== CUSTOM SCROLLBARS ========== */
+
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(69, 163, 186, 0.4);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(69, 163, 186, 0.6);
+}
+
+.dark ::-webkit-scrollbar-thumb {
+  background: rgba(109, 213, 202, 0.3);
+}
+
+.dark ::-webkit-scrollbar-thumb:hover {
+  background: rgba(109, 213, 202, 0.5);
+}
+
+/* ========== TAILWIND DIRECTIVES ========== */
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Global styles */
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  background-color: #fdfbf8; /* paper-100 */
+  color: #0a0a0a; /* obsidian-900 */
+  transition: background-color 200ms, color 200ms;
+}
+
+.dark body {
+  background-color: #0a0a0a; /* obsidian-900 */
+  color: #fdfbf8; /* paper-100 */
+}
+
+/* Reduce motion if requested */
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
