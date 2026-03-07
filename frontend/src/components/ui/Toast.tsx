@@ -1,94 +1,132 @@
-import React from 'react';
-import { motion } from 'framer-motion';
-import { CheckCircle, XCircle, AlertTriangle, Info, Zap, X } from 'lucide-react';
+import React, { useEffect } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { X, CheckCircle, AlertCircle, AlertTriangle, Info } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import type { ToastItem } from '@/contexts/ToastContext';
+import { smoothSpring } from '@/lib/animations';
+import { type ToastData, useToast } from '@/contexts/ToastContext';
 
-interface ToastProps {
-  toast: ToastItem;
-  onDismiss: () => void;
+interface ToastItemProps {
+  toast: ToastData;
+  onDismiss: (id: string) => void;
 }
 
-const iconMap = {
-  success: CheckCircle,
-  error: XCircle,
-  warning: AlertTriangle,
-  info: Info,
-  critical: Zap,
-};
+const ToastItem: React.FC<ToastItemProps> = ({ toast, onDismiss }) => {
+  const { id, title, description, type = 'info', duration = 5000, action } = toast;
 
-const styleMap = {
-  success: {
-    border: 'border-gain/30',
-    icon: 'text-gain',
-    bg: 'bg-gain/5',
-    extra: '',
-  },
-  error: {
-    border: 'border-loss/30',
-    icon: 'text-loss',
-    bg: 'bg-loss/5',
-    extra: '',
-  },
-  warning: {
-    border: 'border-neutral/30',
-    icon: 'text-neutral',
-    bg: 'bg-neutral/5',
-    extra: '',
-  },
-  info: {
-    border: 'border-deep-teal-500/30',
-    icon: 'text-deep-teal-500',
-    bg: 'bg-deep-teal-500/5',
-    extra: '',
-  },
-  critical: {
-    border: 'border-loss/70 animate-pulse',
-    icon: 'text-loss',
-    bg: 'bg-loss/10',
-    extra: 'ring-1 ring-loss/30',
-  },
-};
+  useEffect(() => {
+    if (duration > 0) {
+      const timer = setTimeout(() => {
+        onDismiss(id);
+      }, duration);
+      return () => clearTimeout(timer);
+    }
+  }, [id, duration, onDismiss]);
 
-export const Toast: React.FC<ToastProps> = ({ toast, onDismiss }) => {
-  const Icon = iconMap[toast.type];
-  const styles = styleMap[toast.type];
+  const config = {
+    success: {
+      icon: CheckCircle,
+      accent: "bg-gain",
+      iconColor: "text-gain",
+    },
+    error: {
+      icon: AlertCircle,
+      accent: "bg-loss",
+      iconColor: "text-loss",
+    },
+    warning: {
+      icon: AlertTriangle,
+      accent: "bg-warning",
+      iconColor: "text-warning",
+    },
+    info: {
+      icon: Info,
+      accent: "bg-info",
+      iconColor: "text-info",
+    }
+  }[type];
+
+  const Icon = config.icon;
 
   return (
     <motion.div
       layout
-      initial={{ opacity: 0, x: 80, scale: 0.95 }}
+      initial={{ opacity: 0, x: 100, scale: 0.95 }}
       animate={{ opacity: 1, x: 0, scale: 1 }}
-      exit={{ opacity: 0, x: 80, scale: 0.95 }}
-      transition={{ type: 'spring', stiffness: 400, damping: 30 }}
+      exit={{ opacity: 0, x: 100, scale: 0.95 }}
+      transition={{ ...smoothSpring, duration: 0.4 }}
       className={cn(
-        'pointer-events-auto w-80 rounded-xl border backdrop-blur-xl shadow-2xl',
-        'bg-paper-100/90 dark:bg-obsidian-300/90',
-        styles.border,
-        styles.extra,
+        "relative w-full min-w-[320px] max-w-[420px] rounded-xl overflow-hidden shadow-xl pointer-events-auto",
+        "bg-paper-100/95 dark:bg-obsidian-300/95 backdrop-blur-xl",
+        "border border-deep-teal-800/10 dark:border-white/10"
       )}
+      role="alert"
     >
-      <div className="flex items-start gap-3 p-4">
-        <div className={cn('mt-0.5 shrink-0', styles.icon)}>
-          <Icon className="h-5 w-5" />
+      {/* Left Accent Bar */}
+      <div className={cn("absolute left-0 top-0 bottom-0 w-[3px]", config.accent)} />
+
+      <div className="p-4 pl-5 flex items-start gap-3">
+        <div className={cn("mt-0.5 flex-shrink-0", config.iconColor)}>
+          <Icon className="w-5 h-5" strokeWidth={2} />
         </div>
-        <div className="flex-1 min-w-0">
-          <p className="text-sm font-medium text-deep-teal-800 dark:text-paper-100">
-            {toast.title}
-          </p>
-          {toast.message && (
-            <p className="mt-1 text-xs text-obsidian-400/70 dark:text-paper-100/60 font-mono">
-              {toast.message}
+
+        <div className="flex-1 space-y-1">
+          <h3 className="font-sans font-medium text-sm text-obsidian-400 dark:text-paper-100 leading-tight">
+            {title}
+          </h3>
+          {description && (
+            <p className="font-sans text-xs text-obsidian-400/70 dark:text-paper-100/70 leading-relaxed">
+              {description}
             </p>
           )}
+          {action && (
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                action.onClick();
+              }}
+              className="mt-2 text-xs font-medium text-deep-teal-800 dark:text-turquoise-mist hover:underline focus:outline-none"
+            >
+              {action.label}
+            </button>
+          )}
         </div>
+
         <button
-          onClick={onDismiss}
-          className="shrink-0 text-obsidian-400/40 dark:text-paper-100/40 hover:text-obsidian-400 dark:hover:text-paper-100 transition-colors"
+          onClick={() => onDismiss(id)}
+          className="flex-shrink-0 -mr-1 -mt-1 p-1.5 rounded-md text-obsidian-400/40 dark:text-paper-100/40 hover:bg-black/5 dark:hover:bg-white/5 hover:text-obsidian-400 dark:hover:text-paper-100 transition-colors focus:outline-none focus:ring-2 focus:ring-turquoise-mist/50"
+          aria-label="Close notification"
         >
-          <X className="h-4 w-4" />
+          <X className="w-4 h-4" />
         </button>
       </div>
+
+      {duration > 0 && (
+        <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-obsidian-400/5 dark:bg-white/5">
+          <motion.div
+            initial={{ width: "100%" }}
+            animate={{ width: "0%" }}
+            transition={{ duration: duration / 1000, ease: "linear" }}
+            className={cn("h-full", config.accent)}
+          />
+        </div>
+      )}
     </motion.div>
+  );
+};
+
+export const ToastContainer = ({ toasts }: { toasts: ToastData[] }) => {
+  const { dismiss } = useToast();
+
+  return (
+    <div
+      className="fixed bottom-6 right-6 z-[120] flex flex-col gap-3 pointer-events-none p-4 md:p-0"
+      aria-live="polite"
+    >
+      <AnimatePresence mode="popLayout">
+        {toasts.map((toast) => (
+          <ToastItem key={toast.id} toast={toast} onDismiss={dismiss} />
+        ))}
+      </AnimatePresence>
+    </div>
   );
 };

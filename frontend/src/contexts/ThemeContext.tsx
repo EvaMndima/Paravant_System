@@ -1,165 +1,92 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { MotionGlobalConfig } from 'framer-motion';
-
-// Theme types
-export type ThemeMode = 'light' | 'dark' | 'system';
-export type AccentTheme = 'ocean' | 'sapphire' | 'emerald' | 'amber' | 'slate';
-
-interface ThemeState {
-  mode: ThemeMode;
-  accent: AccentTheme;
-  compactMode: boolean;
-  reducedMotion: boolean;
-}
-
-interface ThemeContextType extends ThemeState {
-  setMode: (mode: ThemeMode) => void;
-  setAccent: (accent: AccentTheme) => void;
-  setCompactMode: (enabled: boolean) => void;
-  setReducedMotion: (enabled: boolean) => void;
-  toggleMode: () => void;
-  toggleCompactMode: () => void;
-  toggleReducedMotion: () => void;
-}
+import type { ThemeMode, AppTheme, ThemeContextType } from '@/types';
 
 const ThemeContext = createContext<ThemeContextType | undefined>(undefined);
 
-// eslint-disable-next-line react-refresh/only-export-components -- context hook must be co-located with provider
-export function useTheme() {
-  const context = useContext(ThemeContext);
-  if (!context) {
-    throw new Error('useTheme must be used within a ThemeProvider');
-  }
-  return context;
-}
-
 export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  // Initialize state from localStorage
-  const [mode, setModeState] = useState<ThemeMode>(() => {
-    if (typeof window !== 'undefined') {
-      const saved = localStorage.getItem('theme-mode');
-      if (saved === 'light' || saved === 'dark' || saved === 'system') {
-        return saved;
-      }
-    }
-    return 'system';
-  });
+  // Theme Mode (Light/Dark/System)
+  const [mode, setMode] = useState<ThemeMode>(() =>
+    (localStorage.getItem('themeMode') as ThemeMode) || 'system'
+  );
 
-  const [accent, setAccentState] = useState<AccentTheme>(() => {
-    if (typeof window !== 'undefined') {
-      const saved = localStorage.getItem('theme-accent');
-      if (saved === 'ocean' || saved === 'sapphire' || saved === 'emerald' || saved === 'amber' || saved === 'slate') {
-        return saved;
-      }
-    }
-    return 'ocean';
-  });
+  // App Theme (Color Palette)
+  const [appTheme, setAppTheme] = useState<AppTheme>(() =>
+    (localStorage.getItem('appTheme') as AppTheme) || 'ocean'
+  );
 
-  const [compactMode, setCompactModeState] = useState(() => {
-    if (typeof window !== 'undefined') {
-      const saved = localStorage.getItem('theme-compact');
-      return saved === 'true';
-    }
-    return false;
-  });
+  // Compact Mode State
+  const [compactMode, setCompactMode] = useState<boolean>(() =>
+    localStorage.getItem('compactMode') === 'true'
+  );
 
-  const [reducedMotion, setReducedMotionState] = useState(() => {
-    if (typeof window !== 'undefined') {
-      const saved = localStorage.getItem('theme-reduced-motion');
-      if (saved !== null) {
-        return saved === 'true';
-      }
-      // Check system preference
-      return window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    }
-    return false;
-  });
+  // Reduced Motion State
+  const [reducedMotion, setReducedMotion] = useState<boolean>(() =>
+    localStorage.getItem('reducedMotion') === 'true'
+  );
 
-  // Apply mode (light/dark/system) to HTML element
+  // Apply Theme Mode (Light/Dark) to <html> class
   useEffect(() => {
-    const applyMode = (effectiveMode: 'light' | 'dark') => {
-      document.documentElement.classList.toggle('dark', effectiveMode === 'dark');
+    const root = window.document.documentElement;
+    const applyMode = () => {
+      const isDark =
+        mode === 'dark' ||
+        (mode === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches);
+
+      root.classList.remove('light', 'dark');
+      root.classList.add(isDark ? 'dark' : 'light');
     };
+
+    applyMode();
+    localStorage.setItem('themeMode', mode);
 
     if (mode === 'system') {
       const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
-      applyMode(mediaQuery.matches ? 'dark' : 'light');
-
-      const listener = (e: MediaQueryListEvent) => {
-        applyMode(e.matches ? 'dark' : 'light');
-      };
-      mediaQuery.addEventListener('change', listener);
-      return () => mediaQuery.removeEventListener('change', listener);
-    } else {
-      applyMode(mode);
+      const handleChange = () => applyMode();
+      mediaQuery.addEventListener('change', handleChange);
+      return () => mediaQuery.removeEventListener('change', handleChange);
     }
   }, [mode]);
 
-  // Apply accent theme to HTML element
+  // Apply App Theme via data-theme attribute on <html>
   useEffect(() => {
-    document.documentElement.setAttribute('data-theme', accent);
-  }, [accent]);
+    const root = window.document.documentElement;
+    root.setAttribute('data-theme', appTheme);
+    localStorage.setItem('appTheme', appTheme);
+  }, [appTheme]);
 
-  // Apply compact mode to body element
+  // Apply Compact Mode via body class
   useEffect(() => {
-    document.body.classList.toggle('compact-mode', compactMode);
+    if (compactMode) {
+      document.body.classList.add('compact');
+    } else {
+      document.body.classList.remove('compact');
+    }
+    localStorage.setItem('compactMode', String(compactMode));
   }, [compactMode]);
 
-  // Apply reduced motion preference
+  // Apply Reduced Motion via Framer Motion global config
   useEffect(() => {
     MotionGlobalConfig.skipAnimations = reducedMotion;
+    localStorage.setItem('reducedMotion', String(reducedMotion));
   }, [reducedMotion]);
 
-  // Setters with localStorage persistence
-  const setMode = (newMode: ThemeMode) => {
-    setModeState(newMode);
-    localStorage.setItem('theme-mode', newMode);
-  };
+  return (
+    <ThemeContext.Provider value={{
+      mode, setMode,
+      appTheme, setAppTheme,
+      compactMode, setCompactMode,
+      reducedMotion, setReducedMotion
+    }}>
+      {children}
+    </ThemeContext.Provider>
+  );
+};
 
-  const setAccent = (newAccent: AccentTheme) => {
-    setAccentState(newAccent);
-    localStorage.setItem('theme-accent', newAccent);
-  };
-
-  const setCompactMode = (enabled: boolean) => {
-    setCompactModeState(enabled);
-    localStorage.setItem('theme-compact', enabled.toString());
-  };
-
-  const setReducedMotion = (enabled: boolean) => {
-    setReducedMotionState(enabled);
-    localStorage.setItem('theme-reduced-motion', enabled.toString());
-  };
-
-  // Toggle functions
-  const toggleMode = () => {
-    const modes: ThemeMode[] = ['light', 'dark', 'system'];
-    const currentIndex = modes.indexOf(mode);
-    const nextMode = modes[(currentIndex + 1) % modes.length];
-    setMode(nextMode);
-  };
-
-  const toggleCompactMode = () => {
-    setCompactMode(!compactMode);
-  };
-
-  const toggleReducedMotion = () => {
-    setReducedMotion(!reducedMotion);
-  };
-
-  const value: ThemeContextType = {
-    mode,
-    accent,
-    compactMode,
-    reducedMotion,
-    setMode,
-    setAccent,
-    setCompactMode,
-    setReducedMotion,
-    toggleMode,
-    toggleCompactMode,
-    toggleReducedMotion,
-  };
-
-  return <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>;
+export const useTheme = () => {
+  const context = useContext(ThemeContext);
+  if (context === undefined) {
+    throw new Error('useTheme must be used within a ThemeProvider');
+  }
+  return context;
 };
