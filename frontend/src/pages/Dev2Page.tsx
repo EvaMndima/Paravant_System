@@ -27,6 +27,15 @@ import { PositionDrawer } from '@/components/dashboard/PositionDrawer';
 import type { DrawerPosition } from '@/components/dashboard/PositionDrawer';
 import { ExportModal } from '@/components/dashboard/ExportModal';
 import type { ExportConfig } from '@/components/dashboard/ExportModal';
+import { StrategyConfigModal } from '@/components/dashboard/StrategyConfigModal';
+import { BacktestResultsModal } from '@/components/dashboard/BacktestResultsModal';
+import { StrategyDetailDrawer } from '@/components/dashboard/StrategyDetailDrawer';
+import { RiskGauge } from '@/components/dashboard/RiskGauge';
+import { DrawdownChart } from '@/components/dashboard/DrawdownChart';
+import { TradeDetailModal } from '@/components/dashboard/TradeDetailModal';
+import { RegimeTagSelector } from '@/components/dashboard/RegimeTagSelector';
+import type { MarketRegime } from '@/components/dashboard/RegimeTagSelector';
+import { SystemStatusBar } from '@/components/dashboard/SystemStatusBar';
 
 // --- UI Primitives ---
 import { Button } from '@/components/ui/Button';
@@ -175,6 +184,13 @@ function Dev2Content() {
   } = useDashboard();
 
   const [drawerPosition, setDrawerPosition] = useState<DrawerPosition | null>(null);
+
+  // New component overlay state
+  const [isStrategyConfigOpen, setIsStrategyConfigOpen] = useState(false);
+  const [isBacktestOpen, setIsBacktestOpen] = useState(false);
+  const [isStrategyDetailOpen, setIsStrategyDetailOpen] = useState(false);
+  const [isTradeDetailOpen, setIsTradeDetailOpen] = useState(false);
+  const [currentRegime, setCurrentRegime] = useState<MarketRegime>('trending_up');
 
   const handlePositionClick = (pos: Position) => {
     const p: DrawerPosition = {
@@ -542,10 +558,203 @@ function Dev2Content() {
           </div>
         </motion.section>
 
+        {/* ── Section 6: System Status Bar ─────────────────────── */}
+        <motion.section variants={fadeInUp}>
+          <SectionTitle>6.0 SystemStatusBar</SectionTitle>
+          <div className="space-y-4">
+            {/* Collapsed (default) */}
+            <div>
+              <p className="text-xs text-obsidian-400/50 dark:text-paper-100/50 mb-2 font-mono">
+                Collapsed (click expand arrow to reveal service details)
+              </p>
+              <SystemStatusBar collapsible={true} defaultExpanded={false} />
+            </div>
+            {/* Pre-expanded */}
+            <div>
+              <p className="text-xs text-obsidian-400/50 dark:text-paper-100/50 mb-2 font-mono">
+                Expanded — shows per-service latency, status, and details
+              </p>
+              <SystemStatusBar collapsible={true} defaultExpanded={true} />
+            </div>
+          </div>
+        </motion.section>
+
+        {/* ── Section 7: Regime Tag Selector ───────────────────── */}
+        <motion.section variants={fadeInUp}>
+          <SectionTitle>7.0 RegimeTagSelector</SectionTitle>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {/* Interactive */}
+            <div>
+              <p className="text-xs text-obsidian-400/50 dark:text-paper-100/50 mb-2 font-mono">
+                Interactive — click any option, confirm popup appears before apply
+              </p>
+              <RegimeTagSelector
+                current={currentRegime}
+                onChange={setCurrentRegime}
+                showConfirmation={true}
+              />
+            </div>
+            {/* Disabled */}
+            <div>
+              <p className="text-xs text-obsidian-400/50 dark:text-paper-100/50 mb-2 font-mono">
+                Disabled state (read-only)
+              </p>
+              <RegimeTagSelector
+                current="volatile"
+                disabled={true}
+                showConfirmation={false}
+              />
+            </div>
+          </div>
+        </motion.section>
+
+        {/* ── Section 8: Risk Gauge ─────────────────────────────── */}
+        <motion.section variants={fadeInUp}>
+          <SectionTitle>8.0 RiskGauge</SectionTitle>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <RiskGauge
+              value={28}
+              label="Portfolio Risk"
+              sublabel="Low risk — healthy"
+              usedCapital={28000}
+              totalCapital={100000}
+            />
+            <RiskGauge
+              value={52}
+              label="Daily Exposure"
+              sublabel="Medium risk"
+              usedCapital={52000}
+              totalCapital={100000}
+            />
+            <RiskGauge
+              value={78}
+              label="Drawdown Level"
+              sublabel="High risk zone"
+              usedCapital={78000}
+              totalCapital={100000}
+            />
+            <RiskGauge
+              value={94}
+              label="Leverage Usage"
+              sublabel="CRITICAL — reduce now"
+              usedCapital={94000}
+              totalCapital={100000}
+            />
+          </div>
+        </motion.section>
+
+        {/* ── Section 9: Drawdown Chart ─────────────────────────── */}
+        <motion.section variants={fadeInUp}>
+          <SectionTitle>9.0 DrawdownChart</SectionTitle>
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <DrawdownChart
+              title="Portfolio Drawdown — 90D"
+              maxDrawdown={-18.4}
+              currentDrawdown={-3.2}
+              height={220}
+            />
+            <DrawdownChart
+              title="BTC Strategy Drawdown"
+              maxDrawdown={-24.1}
+              currentDrawdown={-11.6}
+              height={220}
+            />
+          </div>
+        </motion.section>
+
+        {/* ── Section 10: Strategy Workflow Modals ─────────────── */}
+        <motion.section variants={fadeInUp}>
+          <SectionTitle>10.0 Strategy Workflow — ConfigModal + BacktestResultsModal + DetailDrawer</SectionTitle>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            {/* StrategyConfigModal */}
+            <GlassCard variant="subtle" padding="md" className="space-y-3">
+              <div className="space-y-1">
+                <span className="text-sm font-mono font-bold text-obsidian-400 dark:text-paper-100">
+                  10.1 StrategyConfigModal
+                </span>
+                <p className="text-xs text-obsidian-400/50 dark:text-paper-100/50">
+                  Parameter sliders + risk rules per strategy type. Includes R:R ratio indicator.
+                </p>
+              </div>
+              <Button
+                variant="primary"
+                size="sm"
+                className="w-full"
+                onClick={() => setIsStrategyConfigOpen(true)}
+              >
+                Configure Momentum_MACD
+              </Button>
+            </GlassCard>
+
+            {/* BacktestResultsModal */}
+            <GlassCard variant="subtle" padding="md" className="space-y-3">
+              <div className="space-y-1">
+                <span className="text-sm font-mono font-bold text-obsidian-400 dark:text-paper-100">
+                  10.2 BacktestResultsModal
+                </span>
+                <p className="text-xs text-obsidian-400/50 dark:text-paper-100/50">
+                  Equity curve, 4 core metrics, collapsible trade log with individual rows.
+                </p>
+              </div>
+              <Button
+                variant="secondary"
+                size="sm"
+                className="w-full"
+                onClick={() => setIsBacktestOpen(true)}
+              >
+                View Backtest Results
+              </Button>
+            </GlassCard>
+
+            {/* StrategyDetailDrawer */}
+            <GlassCard variant="subtle" padding="md" className="space-y-3">
+              <div className="space-y-1">
+                <span className="text-sm font-mono font-bold text-obsidian-400 dark:text-paper-100">
+                  10.3 StrategyDetailDrawer
+                </span>
+                <p className="text-xs text-obsidian-400/50 dark:text-paper-100/50">
+                  Slide-in drawer with 90D curve, signal history, and strategy stats.
+                </p>
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                className="w-full"
+                onClick={() => setIsStrategyDetailOpen(true)}
+              >
+                Strategy Deep Dive
+              </Button>
+            </GlassCard>
+          </div>
+        </motion.section>
+
+        {/* ── Section 11: TradeDetailModal ────────────────────── */}
+        <motion.section variants={fadeInUp}>
+          <SectionTitle>11.0 TradeDetailModal</SectionTitle>
+          <GlassCard variant="subtle" padding="md" className="space-y-3 max-w-sm">
+            <div className="space-y-1">
+              <span className="text-sm font-mono font-bold text-obsidian-400 dark:text-paper-100">
+                11.1 TradeDetailModal
+              </span>
+              <p className="text-xs text-obsidian-400/50 dark:text-paper-100/50">
+                Full execution detail: P&L hero, price chart during trade, cost breakdown (fees + slippage), signal context.
+              </p>
+            </div>
+            <Button
+              variant="secondary"
+              size="sm"
+              className="w-full"
+              onClick={() => setIsTradeDetailOpen(true)}
+            >
+              View Trade TRD-20241203-0042
+            </Button>
+          </GlassCard>
+        </motion.section>
+
         {/* ── Footer ────────────────────────────────────────── */}
         <motion.div variants={fadeInUp} className="pb-8 text-center">
           <p className="text-xs font-mono text-obsidian-400/30 dark:text-paper-100/30">
-            Session 6 complete — 11 dashboard components + DashboardContext verified
+            Session 6 + Session 7 prep complete — 19 dashboard components verified
           </p>
         </motion.div>
 
@@ -572,6 +781,31 @@ function Dev2Content() {
         onClose={closeExportModal}
         onExport={(config: ExportConfig) => console.log('Export config:', config)}
         title="Export Portfolio Data"
+      />
+
+      {/* New Session 7 prep overlays */}
+      <StrategyConfigModal
+        isOpen={isStrategyConfigOpen}
+        onClose={() => setIsStrategyConfigOpen(false)}
+        strategyId="s5"
+        strategyName="Momentum_MACD"
+        strategyType="momentum"
+        onSave={(id, params, risk) => console.log('Strategy saved:', id, params, risk)}
+      />
+
+      <BacktestResultsModal
+        isOpen={isBacktestOpen}
+        onClose={() => setIsBacktestOpen(false)}
+      />
+
+      <StrategyDetailDrawer
+        isOpen={isStrategyDetailOpen}
+        onClose={() => setIsStrategyDetailOpen(false)}
+      />
+
+      <TradeDetailModal
+        isOpen={isTradeDetailOpen}
+        onClose={() => setIsTradeDetailOpen(false)}
       />
     </div>
   );

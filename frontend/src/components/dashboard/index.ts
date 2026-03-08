@@ -35,3 +35,27 @@ export type { DrawerPosition } from './PositionDrawer';
 
 export { ExportModal } from './ExportModal';
 export type { ExportConfig, ExportFormat } from './ExportModal';
+
+export { StrategyConfigModal } from './StrategyConfigModal';
+export type { StrategyConfigModalProps, StrategyConfigState } from './StrategyConfigModal';
+
+export { BacktestResultsModal } from './BacktestResultsModal';
+export type { BacktestResult, BacktestTrade, BacktestResultsModalProps } from './BacktestResultsModal';
+
+export { StrategyDetailDrawer } from './StrategyDetailDrawer';
+export type { StrategyDetailData, StrategySignalEntry, StrategyDetailDrawerProps } from './StrategyDetailDrawer';
+
+export { RiskGauge } from './RiskGauge';
+export type { RiskGaugeProps, RiskLevel } from './RiskGauge';
+
+export { DrawdownChart } from './DrawdownChart';
+export type { DrawdownChartProps, DrawdownDataPoint } from './DrawdownChart';
+
+export { TradeDetailModal } from './TradeDetailModal';
+export type { TradeDetail, TradeDetailModalProps } from './TradeDetailModal';
+
+export { RegimeTagSelector } from './RegimeTagSelector';
+export type { RegimeTagSelectorProps, MarketRegime } from './RegimeTagSelector';
+
+export { SystemStatusBar } from './SystemStatusBar';
+export type { SystemStatusBarProps, ServiceHealth, ServiceStatus } from './SystemStatusBar';
