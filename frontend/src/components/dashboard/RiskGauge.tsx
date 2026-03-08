@@ -122,11 +122,7 @@ export const RiskGauge: React.FC<RiskGaugeProps> = ({
 
   // Needle angle: maps 0% -> ARC_START_DEG, 100% -> ARC_START_DEG + ARC_SWEEP_DEG
   const needleAngle = ARC_START_DEG + (ARC_SWEEP_DEG * pct) / 100;
-  const needleTip = polarToCartesian(CENTER, CENTER, RADIUS - 8, needleAngle);
 
-  // Arc length for dash animation
-  const arcLength = Math.PI * RADIUS * (ARC_SWEEP_DEG / 180);
-  const fillLength = (arcLength * pct) / 100;
 
   return (
     <GlassCard variant="default" padding="md" className={cn('flex flex-col items-center', className)}>
@@ -182,22 +178,24 @@ export const RiskGauge: React.FC<RiskGaugeProps> = ({
             );
           })}
 
-          {/* Needle */}
-          <motion.line
-            x1={CENTER}
-            y1={CENTER}
-            x2={needleTip.x}
-            y2={needleTip.y}
-            stroke={config.color}
-            strokeWidth={2}
-            strokeLinecap="round"
-            initial={{ rotate: 0, originX: CENTER, originY: CENTER }}
-            animate={{
-              x2: needleTip.x,
-              y2: needleTip.y,
-            }}
+          {/* Needle — rotate a <g> so framer-motion uses CSS transforms,
+              not SVG presentation attributes (which cause "undefined" errors) */}
+          <motion.g
+            style={{ transformOrigin: `${CENTER}px ${CENTER}px` }}
+            initial={{ rotate: ARC_START_DEG - 90 }}
+            animate={{ rotate: needleAngle - 90 }}
             transition={{ duration: 1.2, ease: 'easeOut' }}
-          />
+          >
+            <line
+              x1={CENTER}
+              y1={CENTER}
+              x2={CENTER + (RADIUS - 8)}
+              y2={CENTER}
+              stroke={config.color}
+              strokeWidth={2}
+              strokeLinecap="round"
+            />
+          </motion.g>
           <circle cx={CENTER} cy={CENTER} r={4} fill={config.color} />
         </svg>
 
@@ -209,7 +207,7 @@ export const RiskGauge: React.FC<RiskGaugeProps> = ({
             transition={{ delay: 0.6 }}
             className="font-mono font-bold text-2xl leading-none text-obsidian-400 dark:text-paper-100"
           >
-            {formatNumber(pct, 0)}%
+            {Math.round(pct)}%
           </motion.span>
         </div>
       </div>

@@ -611,6 +611,31 @@ function Dev2Content() {
         {/* ── Section 8: Risk Gauge ─────────────────────────────── */}
         <motion.section variants={fadeInUp}>
           <SectionTitle>8.0 RiskGauge</SectionTitle>
+
+          {/* Risk level legend — context before viewing the gauges */}
+          <GlassCard variant="subtle" padding="sm" className="mb-5">
+            <div className="flex flex-wrap items-center gap-x-6 gap-y-2 px-1">
+              <span className="text-[10px] font-mono uppercase tracking-widest text-obsidian-400/40 dark:text-paper-100/40 shrink-0">
+                Risk Levels
+              </span>
+              {[
+                { color: '#10B981', label: 'Low', range: '0–40%' },
+                { color: '#F59E0B', label: 'Medium', range: '40–65%' },
+                { color: '#EF4444', label: 'High', range: '65–85%' },
+                { color: '#DC2626', label: 'Critical', range: '85–100%' },
+              ].map(({ color, label, range }) => (
+                <div key={label} className="flex items-center gap-2">
+                  <div className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: color }} />
+                  <span className="text-xs font-mono font-medium text-obsidian-400 dark:text-paper-100">{label}</span>
+                  <span className="text-[10px] font-mono text-obsidian-400/40 dark:text-paper-100/40">{range}</span>
+                </div>
+              ))}
+              <span className="text-[10px] font-sans text-obsidian-400/40 dark:text-paper-100/40 ml-auto hidden lg:block">
+                Needle animates from 0 on mount. Capital bar shows used vs available below gauge.
+              </span>
+            </div>
+          </GlassCard>
+
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             <RiskGauge
               value={28}

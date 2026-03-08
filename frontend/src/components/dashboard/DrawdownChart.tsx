@@ -12,7 +12,7 @@ import {
 import { SizedResponsiveContainer } from '@/components/charts/SizedResponsiveContainer';
 import { GlassCard } from '@/components/ui/GlassCard';
 import { Badge } from '@/components/ui/Badge';
-import { cn, formatNumber } from '@/lib/utils';
+import { cn } from '@/lib/utils';
 
 export interface DrawdownDataPoint {
   date: string;
@@ -45,7 +45,7 @@ const DrawdownTooltip = ({ active, payload, label }: any) => {
       <div className="bg-obsidian-400/90 dark:bg-obsidian-300/95 backdrop-blur-md border border-white/10 shadow-xl rounded-lg p-3 min-w-[130px]">
         <p className="text-paper-100/60 font-sans text-xs mb-1">{label}</p>
         <p className={cn('font-mono text-base font-medium', value < -10 ? 'text-loss' : value < -5 ? 'text-warning' : 'text-gain')}>
-          {formatNumber(value, 1)}%
+          {Number(value).toFixed(1)}%
         </p>
       </div>
     );
@@ -87,16 +87,19 @@ function getBarColor(value: number): string {
   return 'rgba(220, 38, 38, 0.9)';
 }
 
-// Recharts needs a static fill — we use a custom bar shape
+// Recharts passes a negative height for bars that extend below the baseline.
+// Use Math.abs and adjust y so the rect always renders top-down.
 const ColoredBar = (props: any) => {
   const { x, y, width, height, value } = props;
-  if (!height || height <= 0) return null;
+  if (!height) return null;
+  const absHeight = Math.abs(height);
+  const barY = height < 0 ? y + height : y;
   return (
     <rect
       x={x}
-      y={y}
+      y={barY}
       width={width}
-      height={height}
+      height={absHeight}
       fill={getBarColor(value)}
       rx={1}
     />
@@ -133,7 +136,7 @@ export const DrawdownChart: React.FC<DrawdownChartProps> = ({
           </h3>
           <div className="flex items-center gap-2">
             <span className="text-2xl font-mono font-bold text-obsidian-400 dark:text-paper-100">
-              {formatNumber(computedMax, 1)}%
+              {computedMax.toFixed(1)}%
             </span>
             <span className="text-xs font-sans text-obsidian-400/40 dark:text-paper-100/40">max drawdown</span>
           </div>
@@ -144,7 +147,7 @@ export const DrawdownChart: React.FC<DrawdownChartProps> = ({
             size="sm"
             dot
           >
-            Current: {formatNumber(currentDrawdown, 1)}%
+            Current: {currentDrawdown.toFixed(1)}%
           </Badge>
           {currentDrawdown < -5 && (
             <div className="text-[10px] font-mono text-obsidian-400/40 dark:text-paper-100/40">
