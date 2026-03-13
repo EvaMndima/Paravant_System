@@ -55,3 +55,12 @@ export type { DataTableProps, Column } from './DataTable';
 export { ToastContainer } from './Toast';
 
 export { KeyboardShortcuts } from './KeyboardShortcuts';
+
+export { Select } from './Select';
+export type { SelectProps, SelectOption } from './Select';
+
+export { Pagination } from './Pagination';
+export type { PaginationProps } from './Pagination';
+
+export { DateRangePicker } from './DateRangePicker';
+export type { DateRangePickerProps, DateRange, DateRangePreset } from './DateRangePicker';

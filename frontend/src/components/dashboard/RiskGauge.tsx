@@ -1,8 +1,8 @@
-import React, { useMemo } from 'react';
-import { motion } from 'framer-motion';
+import React, { useEffect } from 'react';
+import { motion, animate, useMotionValue, useTransform } from 'framer-motion';
 import { Shield, AlertTriangle, AlertOctagon } from 'lucide-react';
 import { GlassCard } from '@/components/ui/GlassCard';
-import { cn, formatNumber } from '@/lib/utils';
+import { cn } from '@/lib/utils';
 
 export type RiskLevel = 'low' | 'medium' | 'high' | 'critical';
 
@@ -68,20 +68,17 @@ const levelConfig: Record<RiskLevel, {
   },
 };
 
-// SVG arc parameters
-const RADIUS = 70;
+// SVG arc parameters — horseshoe gauge opening downward
+const CX = 90;           // horizontal center
+const CY = 70;           // vertical center (shifted up)
+const RADIUS = 60;
 const STROKE_WIDTH = 10;
-const CENTER = 90;
-// Arc spans 220 degrees: from 160deg to 380deg (20deg past 0)
-const ARC_START_DEG = 160;
-const ARC_SWEEP_DEG = 220;
+const ARC_START_DEG = 225;   // 7:30 — lower-left
+const ARC_SWEEP_DEG = 270;   // sweeps clockwise to 4:30 — lower-right
 
 function polarToCartesian(cx: number, cy: number, r: number, deg: number) {
   const rad = ((deg - 90) * Math.PI) / 180;
-  return {
-    x: cx + r * Math.cos(rad),
-    y: cy + r * Math.sin(rad),
-  };
+  return { x: cx + r * Math.cos(rad), y: cy + r * Math.sin(rad) };
 }
 
 function describeArc(cx: number, cy: number, r: number, startDeg: number, endDeg: number): string {
@@ -90,6 +87,9 @@ function describeArc(cx: number, cy: number, r: number, startDeg: number, endDeg
   const largeArc = endDeg - startDeg > 180 ? 1 : 0;
   return `M ${start.x} ${start.y} A ${r} ${r} 0 ${largeArc} 1 ${end.x} ${end.y}`;
 }
+
+// Compute the full 270° background track once (static)
+const TRACK_PATH = describeArc(CX, CY, RADIUS, ARC_START_DEG, ARC_START_DEG + ARC_SWEEP_DEG);
 
 export const RiskGauge: React.FC<RiskGaugeProps> = ({
   value,
@@ -106,66 +106,87 @@ export const RiskGauge: React.FC<RiskGaugeProps> = ({
   const config = levelConfig[level];
   const LevelIcon = config.icon;
 
-  // Arc calculations
-  const trackPath = useMemo(
-    () => describeArc(CENTER, CENTER, RADIUS, ARC_START_DEG, ARC_START_DEG + ARC_SWEEP_DEG),
-    []
-  );
+  // Single motion value drives BOTH the fill arc and the needle.
+  // Animates from 0 on mount, and adapts when pct changes — like a donut chart.
+  const animPct = useMotionValue(0);
 
-  const fillEndDeg = ARC_START_DEG + (ARC_SWEEP_DEG * pct) / 100;
-  const fillPath = useMemo(
-    () => pct > 0
-      ? describeArc(CENTER, CENTER, RADIUS, ARC_START_DEG, Math.max(ARC_START_DEG + 2, fillEndDeg))
-      : '',
-    [pct, fillEndDeg]
-  );
+  useEffect(() => {
+    const controls = animate(animPct, pct, {
+      duration: 1.2,
+      ease: [0.16, 1, 0.3, 1], // expo-out: fast initial sweep, smooth settle
+    });
+    return controls.stop;
+  }, [pct]);
 
-  // Needle angle: maps 0% -> ARC_START_DEG, 100% -> ARC_START_DEG + ARC_SWEEP_DEG
-  const needleAngle = ARC_START_DEG + (ARC_SWEEP_DEG * pct) / 100;
+  // Fill arc path: recomputed every animation frame from the live pct value.
+  // Same angle formula as the needle — both read from animPct so they are
+  // always in perfect sync regardless of frame timing.
+  const fillArcPath = useTransform(animPct, (p: number) => {
+    if (p < 0.1) return '';
+    const endDeg = ARC_START_DEG + (ARC_SWEEP_DEG * Math.min(p, 100)) / 100;
+    return describeArc(CX, CY, RADIUS, ARC_START_DEG, endDeg);
+  });
 
+  // Needle path: a slim clock-hand triangle pointing from pivot to the arc end.
+  // Base width = 3px each side. Tip lands exactly at the arc centerline (RADIUS).
+  // A short tail stub in the opposite direction gives visual balance.
+  const needlePath = useTransform(animPct, (p: number) => {
+    const angle = ARC_START_DEG + (ARC_SWEEP_DEG * Math.min(p, 100)) / 100;
+    const tip = polarToCartesian(CX, CY, RADIUS, angle);
+    // Perpendicular base points at the pivot
+    const b1 = polarToCartesian(CX, CY, 2.5, angle + 90);
+    const b2 = polarToCartesian(CX, CY, 2.5, angle - 90);
+    // Short tail in the opposite direction
+    const tail = polarToCartesian(CX, CY, 10, angle + 180);
+    return [
+      `M ${b1.x.toFixed(2)} ${b1.y.toFixed(2)}`,
+      `L ${tip.x.toFixed(2)} ${tip.y.toFixed(2)}`,
+      `L ${b2.x.toFixed(2)} ${b2.y.toFixed(2)}`,
+      `L ${tail.x.toFixed(2)} ${tail.y.toFixed(2)}`,
+      'Z',
+    ].join(' ');
+  });
+
+  // Percentage label animates in sync with the arc sweep
+  const displayPct = useTransform(animPct, (p: number) => `${Math.round(p)}%`);
 
   return (
     <GlassCard variant="default" padding="md" className={cn('flex flex-col items-center', className)}>
       {/* SVG Gauge */}
-      <div className="relative w-[180px] h-[120px]">
-        <svg viewBox="0 0 180 120" className="w-full h-full overflow-visible">
+      <div className="w-[180px] h-[130px]">
+        <svg viewBox="0 0 180 130" className="w-full h-full overflow-visible">
           <defs>
-            <filter id="gauge-glow">
-              <feGaussianBlur stdDeviation="2" result="blur" />
+            <filter id={`gauge-glow-${level}`} x="-20%" y="-20%" width="140%" height="140%">
+              <feGaussianBlur stdDeviation="3" result="blur" />
               <feMerge><feMergeNode in="blur" /><feMergeNode in="SourceGraphic" /></feMerge>
             </filter>
           </defs>
 
-          {/* Background track */}
+          {/* Background track — static full 270° arc */}
           <path
-            d={trackPath}
+            d={TRACK_PATH}
             fill="none"
             stroke={config.trackColor}
             strokeWidth={STROKE_WIDTH}
             strokeLinecap="round"
           />
 
-          {/* Filled arc */}
-          {pct > 0 && (
-            <motion.path
-              d={fillPath}
-              fill="none"
-              stroke={config.color}
-              strokeWidth={STROKE_WIDTH}
-              strokeLinecap="round"
-              filter="url(#gauge-glow)"
-              initial={{ pathLength: 0 }}
-              animate={{ pathLength: pct / 100 }}
-              transition={{ duration: 1.2, ease: 'easeOut' }}
-              style={{ filter: `drop-shadow(0 0 4px ${config.glowColor})` }}
-            />
-          )}
+          {/* Filled arc — path computed frame-by-frame from animPct.
+              No pathLength normalization needed: the path itself grows with the value. */}
+          <motion.path
+            d={fillArcPath}
+            fill="none"
+            stroke={config.color}
+            strokeWidth={STROKE_WIDTH}
+            strokeLinecap="round"
+            style={{ filter: `drop-shadow(0 0 5px ${config.glowColor})` }}
+          />
 
           {/* Tick marks at 25%, 50%, 75% */}
           {[25, 50, 75].map(tick => {
             const tickAngle = ARC_START_DEG + (ARC_SWEEP_DEG * tick) / 100;
-            const outer = polarToCartesian(CENTER, CENTER, RADIUS + 6, tickAngle);
-            const inner = polarToCartesian(CENTER, CENTER, RADIUS + 2, tickAngle);
+            const outer = polarToCartesian(CX, CY, RADIUS + 6, tickAngle);
+            const inner = polarToCartesian(CX, CY, RADIUS + 2, tickAngle);
             return (
               <line
                 key={tick}
@@ -178,39 +199,27 @@ export const RiskGauge: React.FC<RiskGaugeProps> = ({
             );
           })}
 
-          {/* Needle — rotate a <g> so framer-motion uses CSS transforms,
-              not SVG presentation attributes (which cause "undefined" errors) */}
-          <motion.g
-            style={{ transformOrigin: `${CENTER}px ${CENTER}px` }}
-            initial={{ rotate: ARC_START_DEG - 90 }}
-            animate={{ rotate: needleAngle - 90 }}
-            transition={{ duration: 1.2, ease: 'easeOut' }}
-          >
-            <line
-              x1={CENTER}
-              y1={CENTER}
-              x2={CENTER + (RADIUS - 8)}
-              y2={CENTER}
-              stroke={config.color}
-              strokeWidth={2}
-              strokeLinecap="round"
-            />
-          </motion.g>
-          <circle cx={CENTER} cy={CENTER} r={4} fill={config.color} />
-        </svg>
+          {/* Clock-hand needle — SVG polygon computed directly from animPct.
+              No CSS rotation or transform-origin: the tip coordinate IS the arc end.
+              Adapts immediately whenever pct changes. */}
+          <motion.path
+            d={needlePath}
+            fill={config.color}
+            opacity={0.92}
+          />
 
-        {/* Centre value overlay */}
-        <div className="absolute inset-0 flex flex-col items-center justify-end pb-2">
-          <motion.span
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ delay: 0.6 }}
-            className="font-mono font-bold text-2xl leading-none text-obsidian-400 dark:text-paper-100"
-          >
-            {Math.round(pct)}%
-          </motion.span>
-        </div>
+          {/* Center pivot cap */}
+          <circle cx={CX} cy={CY} r={5} fill={config.color} />
+          <circle cx={CX} cy={CY} r={2.5} fill="white" opacity={0.85} />
+        </svg>
       </div>
+
+      {/* Percentage — animates in sync with the arc sweep */}
+      <motion.span
+        className="font-mono font-bold text-2xl leading-none text-obsidian-400 dark:text-paper-100 mt-1"
+      >
+        {displayPct}
+      </motion.span>
 
       {/* Level badge */}
       <div className={cn(
@@ -229,7 +238,7 @@ export const RiskGauge: React.FC<RiskGaugeProps> = ({
         )}
       </div>
 
-      {/* Capital detail */}
+      {/* Capital detail bar */}
       {showDetails && usedCapital !== undefined && totalCapital !== undefined && (
         <div className="mt-3 w-full">
           <div className="flex justify-between text-[10px] font-mono text-obsidian-400/40 dark:text-paper-100/40 mb-1">
@@ -242,7 +251,7 @@ export const RiskGauge: React.FC<RiskGaugeProps> = ({
               style={{ backgroundColor: config.color }}
               initial={{ width: 0 }}
               animate={{ width: `${pct}%` }}
-              transition={{ duration: 1.2, ease: 'easeOut' }}
+              transition={{ duration: 1.2, ease: [0.16, 1, 0.3, 1] }}
             />
           </div>
           <div className="flex justify-between mt-1 text-[10px] font-mono">

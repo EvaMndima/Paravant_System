@@ -59,3 +59,18 @@ export type { RegimeTagSelectorProps, MarketRegime } from './RegimeTagSelector';
 
 export { SystemStatusBar } from './SystemStatusBar';
 export type { SystemStatusBarProps, ServiceHealth, ServiceStatus } from './SystemStatusBar';
+
+export { EquityChart } from './EquityChart';
+export type { EquityChartProps, EquityTimeRange } from './EquityChart';
+
+export { PnLSummaryStrip } from './PnLSummaryStrip';
+export type { PnLSummaryStripProps, PnLSummaryData } from './PnLSummaryStrip';
+
+export { TradeHistoryTable } from './TradeHistoryTable';
+export type { TradeHistoryTableProps } from './TradeHistoryTable';
+
+export { AlertRuleCard, MOCK_ALERT_RULES } from './AlertRuleCard';
+export type { AlertRule, AlertRuleCardProps, AlertRuleStatus, AlertRuleCondition } from './AlertRuleCard';
+
+export { SettingsForm } from './SettingsForm';
+export type { SettingsFormProps, SettingsState } from './SettingsForm';

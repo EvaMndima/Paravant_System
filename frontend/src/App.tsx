@@ -18,6 +18,7 @@ const TradeHistoryPage = lazy(() => import('@/pages/TradeHistoryPage'))
 const SettingsPage = lazy(() => import('@/pages/SettingsPage'))
 const DevPage = lazy(() => import('@/pages/DevPage'))
 const Dev2Page = lazy(() => import('@/pages/Dev2Page'))
+const Dev3Page = lazy(() => import('@/pages/Dev3Page'))
 
 function App() {
   return (
@@ -43,6 +44,7 @@ function App() {
                 {/* Dev pages outside main layout */}
                 <Route path="/dev" element={<DevPage />} />
                 <Route path="/dev2" element={<Dev2Page />} />
+                <Route path="/dev3" element={<Dev3Page />} />
 
                 {/* Catch-all redirect */}
                 <Route path="*" element={<Navigate to="/" replace />} />

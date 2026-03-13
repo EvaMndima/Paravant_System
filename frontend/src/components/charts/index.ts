@@ -9,3 +9,6 @@ export type { DonutSegment, DonutChartProps } from './DonutChart';
 
 export { BenchmarkChart } from './BenchmarkChart';
 export type { BenchmarkDataPoint, BenchmarkChartProps } from './BenchmarkChart';
+
+export { SVGAreaChart } from './SVGAreaChart';
+export type { SVGAreaChartProps } from './SVGAreaChart';

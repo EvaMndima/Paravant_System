@@ -16,7 +16,8 @@
       "Bash(grep:*)",
       "Bash(xargs:*)",
       "Bash(wc:*)",
-      "Bash(ls:*)"
+      "Bash(ls:*)",
+      "Bash(git add:*)"
     ]
   },
   "outputStyle": "Explanatory"

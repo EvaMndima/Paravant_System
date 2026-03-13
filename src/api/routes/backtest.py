@@ -9,6 +9,7 @@ Decision: DEC-2026-02-08-008 - Structured logging
 from __future__ import annotations
 
 
+from datetime import datetime
 from fastapi import APIRouter, HTTPException, status
 from pydantic import BaseModel, Field
 
@@ -106,6 +107,76 @@ class TradeLogResponse(BaseModel):
     total: int
     page: int
     per_page: int
+
+
+class EquityPointResponse(BaseModel):
+    """Single equity curve snapshot."""
+
+    timestamp: str
+    value: float
+
+
+class FullTradeResponse(BaseModel):
+    """Complete trade record for modal consumption."""
+
+    id: str
+    entry_time: str
+    exit_time: str
+    symbol: str
+    direction: str
+    entry_price: float
+    exit_price: float
+    quantity: float
+    realized_pnl: float
+    return_pct: float
+    duration_hours: float
+    commission_total: float
+
+
+class FullBacktestMetricsResponse(BaseModel):
+    """All metrics fields the modal Overview and P&L tabs consume."""
+
+    total_return_pct: float
+    annualized_return_pct: float
+    sharpe_ratio: float
+    sortino_ratio: float
+    calmar_ratio: float
+    max_drawdown_pct: float
+    max_drawdown_duration_days: float
+    total_trades: int
+    winning_trades: int
+    losing_trades: int
+    win_rate_pct: float
+    profit_factor: float
+    expectancy: float
+    avg_win_pct: float
+    avg_loss_pct: float
+    largest_win: float
+    largest_loss: float
+    passed_validation: bool
+    validation_errors: list[str] = Field(default_factory=list)
+
+
+class FullBacktestResponse(BaseModel):
+    """Complete backtest results for modal consumption.
+
+    Returns all equity curve points and all trades without pagination,
+    so the frontend modal can render charts and the full trade log.
+    """
+
+    strategy_id: str
+    strategy_name: str
+    symbol: str
+    timeframe: str
+    start_date: str
+    end_date: str
+    initial_capital: float
+    final_capital: float
+    metrics: FullBacktestMetricsResponse
+    equity_curve: list[EquityPointResponse]
+    trades: list[FullTradeResponse]
+    passed_validation: bool
+    validation_errors: list[str] = Field(default_factory=list)
 
 
 # ---------------------------------------------------------------------------
@@ -338,4 +409,136 @@ async def get_backtest_trades(
         total=total,
         page=page,
         per_page=per_page,
+    )
+
+
+@router.get(
+    "/{strategy_id}/backtest/results",
+    response_model=FullBacktestResponse,
+)
+async def get_backtest_results(
+    strategy_id: str,
+) -> FullBacktestResponse:
+    """Get complete backtest results for modal consumption.
+
+    Returns all equity curve points and all trade records without
+    pagination, along with the full metrics set. Intended for the
+    BacktestResultsModal which renders charts and a complete trade log.
+
+    Args:
+        strategy_id: ID of the strategy.
+
+    Returns:
+        FullBacktestResponse with equity curve, all trades, and metrics.
+
+    Raises:
+        HTTPException: If strategy or backtest results not found.
+    """
+    store = _get_store()
+
+    strategy = store.get_strategy(strategy_id)
+    if strategy is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Strategy not found: {strategy_id}",
+        )
+
+    data = strategy.backtest_results
+    if not data or not isinstance(data, dict):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No backtest results found for this strategy",
+        )
+
+    metrics_raw = data.get("metrics", {})
+    passed = data.get("passed_validation", False)
+    validation_errors: list[str] = data.get("validation_errors", [])
+
+    # Build equity curve list
+    equity_curve: list[EquityPointResponse] = [
+        EquityPointResponse(
+            timestamp=ep.get("timestamp", ""),
+            value=float(ep.get("equity", 0.0)),
+        )
+        for ep in data.get("equity_curve", [])
+    ]
+
+    # Build full trade list — compute duration_hours and commission_total
+    raw_trades: list[dict] = data.get("trade_log", [])
+    trades: list[FullTradeResponse] = []
+    for idx, t in enumerate(raw_trades):
+        entry_iso = t.get("entry_time", "")
+        exit_iso = t.get("exit_time", "")
+        try:
+            entry_dt = datetime.fromisoformat(entry_iso)
+            exit_dt = datetime.fromisoformat(exit_iso)
+            duration_hours = (exit_dt - entry_dt).total_seconds() / 3600.0
+        except (ValueError, TypeError):
+            duration_hours = 0.0
+
+        symbol = t.get("symbol", "")
+        commission_total = float(
+            t.get("entry_commission", 0.0) + t.get("exit_commission", 0.0)
+        )
+
+        trades.append(
+            FullTradeResponse(
+                id=f"{symbol}-{idx}",
+                entry_time=entry_iso,
+                exit_time=exit_iso,
+                symbol=symbol,
+                direction=t.get("direction", ""),
+                entry_price=float(t.get("entry_price", 0.0)),
+                exit_price=float(t.get("exit_price", 0.0)),
+                quantity=float(t.get("quantity", 0.0)),
+                realized_pnl=float(t.get("realized_pnl", 0.0)),
+                return_pct=float(t.get("return_pct", 0.0)),
+                duration_hours=round(duration_hours, 2),
+                commission_total=round(commission_total, 6),
+            )
+        )
+
+    metrics = FullBacktestMetricsResponse(
+        total_return_pct=float(metrics_raw.get("total_return_pct", 0.0)),
+        annualized_return_pct=float(metrics_raw.get("annualized_return_pct", 0.0)),
+        sharpe_ratio=float(metrics_raw.get("sharpe_ratio", 0.0)),
+        sortino_ratio=float(metrics_raw.get("sortino_ratio", 0.0)),
+        calmar_ratio=float(metrics_raw.get("calmar_ratio", 0.0)),
+        max_drawdown_pct=float(metrics_raw.get("max_drawdown_pct", 0.0)),
+        max_drawdown_duration_days=float(metrics_raw.get("max_drawdown_duration_days", 0.0)),
+        total_trades=int(metrics_raw.get("total_trades", 0)),
+        winning_trades=int(metrics_raw.get("winning_trades", 0)),
+        losing_trades=int(metrics_raw.get("losing_trades", 0)),
+        win_rate_pct=float(metrics_raw.get("win_rate_pct", 0.0)),
+        profit_factor=float(metrics_raw.get("profit_factor", 0.0)),
+        expectancy=float(metrics_raw.get("expectancy", 0.0)),
+        avg_win_pct=float(metrics_raw.get("avg_win_pct", 0.0)),
+        avg_loss_pct=float(metrics_raw.get("avg_loss_pct", 0.0)),
+        largest_win=float(metrics_raw.get("largest_win", 0.0)),
+        largest_loss=float(metrics_raw.get("largest_loss", 0.0)),
+        passed_validation=passed,
+        validation_errors=list(validation_errors),
+    )
+
+    logger.info(
+        "backtest_results_fetched",
+        strategy_id=strategy_id,
+        equity_points=len(equity_curve),
+        trades=len(trades),
+    )
+
+    return FullBacktestResponse(
+        strategy_id=strategy_id,
+        strategy_name=data.get("strategy_name", ""),
+        symbol=data.get("symbol", ""),
+        timeframe=data.get("timeframe", ""),
+        start_date=data.get("start_date", ""),
+        end_date=data.get("end_date", ""),
+        initial_capital=float(data.get("initial_capital", 0.0)),
+        final_capital=float(data.get("final_capital", 0.0)),
+        metrics=metrics,
+        equity_curve=equity_curve,
+        trades=trades,
+        passed_validation=passed,
+        validation_errors=list(validation_errors),
     )

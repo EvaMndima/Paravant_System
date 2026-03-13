@@ -1801,11 +1801,54 @@ parameters:
 
 ---
 
+### DEC-2026-02-22-003: Two-Tier Backtest Validation Thresholds (E. Chan Framework)
+- **Decision:** Replace the single hardcoded ValidationThresholds with two named presets — SUPERVISED_THRESHOLDS (Tier-1, default) and AUTOMATED_THRESHOLDS (Tier-2) — and add Expectancy and Calmar ratio checks. Default constructor now returns Tier-1 (Supervised) values.
+- **Context:** The original validator used five checks with thresholds copied from the PRD without consulting strategy-type norms. Three problems were identified:
+  1. min_win_rate_pct=50% rejects ALL trend-following templates (donchian_atr, bb_squeeze_breakout) which are designed to operate at 35-45% win rates. Both templates declare min_win_rate_pct=40-42% in their own YAML but the validator rejected them at 50%.
+  2. min_num_trades=100 makes 30-day backtests on 1H timeframe mathematically impossible (typical yield: 48-90 trades). Required 90-120 day backtests to hit threshold.
+  3. No Expectancy or Calmar check despite both metrics already being computed in BacktestMetrics. These are more informative quality gates than win rate.
+- **Rationale:**
+  - E. Chan ("Quantitative Trading", 2008) states win rate is "a psychological comfort metric" with no standalone meaning without the win/loss ratio. Expectancy = (win_rate * avg_win) - (loss_rate * avg_loss) makes win rate redundant as a check.
+  - E. Chan's minimum trade count for statistical validity is 45 (central limit theorem floor). 30 is the bare minimum. 100 is excessive for MVP validation.
+  - Two tiers match the two operational phases: manual oversight (now) and full automation (target). Thresholds should reflect the degree of human protection in the loop.
+  - Calmar ratio (annualized_return / max_drawdown) measures whether returns justify the drawdown experienced. Automated strategies must cover their own drawdown without a human stepping in.
+  - Profit factor raised from 1.3 to 1.5 in Tier-2 to compensate for the relaxed win rate requirement.
+- **Tier-1 SUPERVISED_THRESHOLDS (default, current phase):**
+  - min_sharpe_ratio: 0.5
+  - max_drawdown_pct: 25.0
+  - min_win_rate_pct: 0.0  (disabled — expectancy is the gate)
+  - min_profit_factor: 1.35
+  - min_num_trades: 30
+  - min_expectancy: 0.01  (any positive expectancy)
+  - min_calmar_ratio: 0.0  (disabled — human oversight provides protection)
+- **Tier-2 AUTOMATED_THRESHOLDS (use when promoting to live automated):**
+  - min_sharpe_ratio: 1.0
+  - max_drawdown_pct: 15.0
+  - min_win_rate_pct: 35.0  (permits trend strategies; blocks genuinely broken ones)
+  - min_profit_factor: 1.5
+  - min_num_trades: 60
+  - min_expectancy: 10.0  ($10 avg profit/trade on $10K capital)
+  - min_calmar_ratio: 1.0  (annual return must cover max drawdown)
+- **Alternatives Considered:**
+  - Keep win_rate=50%: Rejected — internally contradicts template YAML files (donchian min_win_rate_pct=40%, bb_squeeze=42%). Would permanently block two of seven templates.
+  - Keep min_num_trades=100: Rejected — makes 30-day 1H backtests impossible, forcing unnecessarily long validation windows.
+  - Single threshold set: Rejected — conflates manually-supervised and fully-automated risk profiles. Human oversight is a meaningful safety layer that should relax automated thresholds.
+  - Per-template thresholds: Rejected — adds complexity. Two tiers (supervised vs automated) cover the operational phases clearly.
+- **Status:** ACTIVE
+- **Date Decided:** 2026-03-11
+- **Implemented By:** Session — validator.py refactor
+- **Affected Files:**
+  - `src/core/strategy/backtest/validator.py` — ValidationThresholds, SUPERVISED_THRESHOLDS, AUTOMATED_THRESHOLDS, BacktestValidator.validate()
+  - `tests/unit/backtest/test_validator.py` — 40 tests covering both tiers, all 7 checks, boundary conditions
+- **References:** E. Chan "Quantitative Trading" (2008) Ch.3, "Algorithmic Trading" (2013) Ch.2
+
+---
+
 **End of Decisions Log**
 
-**Total Decisions:** 57 active, 0 superseded, 5 locked
-**Last Updated:** 2026-02-22
-**Next Decision ID:** DEC-2026-02-22-003
+**Total Decisions:** 58 active, 0 superseded, 5 locked
+**Last Updated:** 2026-03-11
+**Next Decision ID:** DEC-2026-03-11-001
 
 ## Phase 5 Decisions (Backtesting & Simulation)
 

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Settings, Save, RotateCcw, Info } from 'lucide-react';
+import { Save, RotateCcw, Info } from 'lucide-react';
 import { Modal } from '@/components/ui/Modal';
 import { Input } from '@/components/ui/Input';
 import { Button } from '@/components/ui/Button';
@@ -240,20 +240,24 @@ export const StrategyConfigModal: React.FC<StrategyConfigModalProps> = ({
 
         {/* Footer */}
         <div className="flex items-center justify-between pt-2 border-t border-deep-teal-800/5 dark:border-white/5">
-          <Button variant="ghost" size="sm" onClick={handleReset} className="gap-2 text-obsidian-400/60 dark:text-paper-100/60">
-            <RotateCcw className="w-3.5 h-3.5" />
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={handleReset}
+            leftIcon={<RotateCcw className="w-3.5 h-3.5" />}
+            className="text-obsidian-400/60 dark:text-paper-100/60"
+          >
             Reset defaults
           </Button>
           <div className="flex gap-2">
-            <Button variant="outline" size="sm" onClick={onClose}>Cancel</Button>
+            <Button variant="secondary" size="sm" onClick={onClose}>Cancel</Button>
             <Button
               variant="primary"
               size="sm"
               onClick={handleSave}
               disabled={!isDirty}
-              className="gap-2"
+              leftIcon={<Save className="w-3.5 h-3.5" />}
             >
-              <Save className="w-3.5 h-3.5" />
               Save changes
             </Button>
           </div>
