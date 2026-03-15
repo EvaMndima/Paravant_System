@@ -3,6 +3,5 @@ builder = "dockerfile"
 dockerfilePath = "Dockerfile"
 
 [deploy]
-startCommand = "PYTHONUNBUFFERED=1 PYTHONPATH=. python scripts/run_paper_trading.py"
-healthcheckPath = ""
+startCommand = "python -m scripts.run_paper_trading"
 restartPolicyType = "always"
