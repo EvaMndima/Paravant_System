@@ -13,13 +13,17 @@ RUN groupadd -r appgroup && useradd -r -g appgroup appuser
 # Set working directory
 WORKDIR /app
 
-# Install system dependencies
+# Install system dependencies (curl for health checks, gcc for any packages needing compilation)
 RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
+    gcc \
+    g++ \
     && rm -rf /var/lib/apt/lists/*
 
+# Upgrade pip first
+RUN pip install --upgrade pip
+
 # Copy dependency files
-COPY pyproject.toml ./
 COPY requirements.txt ./
 
 # Install Python dependencies
@@ -35,12 +39,9 @@ RUN mkdir -p /app/data /app/logs && \
 # Switch to non-root user
 USER appuser
 
-# Expose port
+# Expose port (used by web service only)
 EXPOSE 8000
 
-# Health check
-HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-    CMD curl -f http://localhost:8000/health || exit 1
-
-# Run application
+# Default command runs the web API
+# Railway overrides this via railway.toml startCommand for the paper service
 CMD ["uvicorn", "src.api.main:app", "--host", "0.0.0.0", "--port", "8000"]

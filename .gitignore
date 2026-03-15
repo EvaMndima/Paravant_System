@@ -76,8 +76,8 @@ node_modules/
 .DS_Store
 Thumbs.db
 
-# Docker
-.dockerignore
+# Docker build artifacts (not .dockerignore itself — Railway needs it)
+*.dockerignore.bak
 
 # AI agent skills (local tool configurations, not project code)
 .agent/skills/
