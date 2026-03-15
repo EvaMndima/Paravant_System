@@ -5,3 +5,4 @@ dockerfilePath = "Dockerfile"
 [deploy]
 startCommand = "python -m scripts.run_paper_trading"
 restartPolicyType = "always"
+region = "europe-west4"
