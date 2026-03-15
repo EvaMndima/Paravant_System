@@ -11,9 +11,15 @@ from __future__ import annotations
 
 from src.core.exceptions import TemplateNotFoundError
 from src.core.strategy.generators import (BbSqueezeBreakoutGenerator,
+                                          BbSqueezeMomentumGenerator,
+                                          BearTrendFollowerGenerator,
+                                          CascadingMomentumFilterGenerator,
                                           DonchianAtrGenerator,
                                           EmaTrendRsiGenerator,
+                                          IchimokuCloudTrendGenerator,
+                                          KeltnerFadeAdxGenerator,
                                           MacdPullbackGenerator,
+                                          RegimeAwareMeanReversionGenerator,
                                           RsiBbMeanReversionGenerator,
                                           SupertrendVolumeMacdGenerator,
                                           VwapPullbackVolumeGenerator)
@@ -32,6 +38,13 @@ _DEFAULT_GENERATORS: dict[str, type[SignalGenerator]] = {
     "supertrend_volume_macd": SupertrendVolumeMacdGenerator,
     "donchian_atr": DonchianAtrGenerator,
     "vwap_pullback_volume": VwapPullbackVolumeGenerator,
+    # Bear-regime strategies
+    "bb_squeeze_momentum": BbSqueezeMomentumGenerator,
+    "ichimoku_cloud_trend": IchimokuCloudTrendGenerator,
+    "keltner_fade_adx": KeltnerFadeAdxGenerator,
+    "bear_trend_follower": BearTrendFollowerGenerator,
+    "regime_aware_mean_reversion": RegimeAwareMeanReversionGenerator,
+    "cascading_momentum_filter": CascadingMomentumFilterGenerator,
 }
 
 

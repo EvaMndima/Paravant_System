@@ -68,9 +68,17 @@ htmlcov/
 *_key*
 credentials*
 
+# Frontend build cache
+frontend/.vite/
+node_modules/
+
 # OS
 .DS_Store
 Thumbs.db
 
 # Docker
 .dockerignore
+
+# AI agent skills (local tool configurations, not project code)
+.agent/skills/
+.claude/skills/

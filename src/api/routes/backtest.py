@@ -8,8 +8,6 @@ Decision: DEC-2026-02-08-008 - Structured logging
 """
 from __future__ import annotations
 
-
-from datetime import datetime
 from fastapi import APIRouter, HTTPException, status
 from pydantic import BaseModel, Field
 
@@ -134,7 +132,11 @@ class FullTradeResponse(BaseModel):
 
 
 class FullBacktestMetricsResponse(BaseModel):
-    """All metrics fields the modal Overview and P&L tabs consume."""
+    """All metrics fields the modal Overview and P&L tabs consume.
+
+    Validation status (passed_validation, validation_errors) lives on the
+    parent FullBacktestResponse, not here, to avoid duplication.
+    """
 
     total_return_pct: float
     annualized_return_pct: float
@@ -153,8 +155,6 @@ class FullBacktestMetricsResponse(BaseModel):
     avg_loss_pct: float
     largest_win: float
     largest_loss: float
-    passed_validation: bool
-    validation_errors: list[str] = Field(default_factory=list)
 
 
 class FullBacktestResponse(BaseModel):
@@ -451,8 +451,10 @@ async def get_backtest_results(
         )
 
     metrics_raw = data.get("metrics", {})
-    passed = data.get("passed_validation", False)
-    validation_errors: list[str] = data.get("validation_errors", [])
+    passed = bool(data.get("passed_validation", False))
+    # Guard against corrupted JSON (e.g. migrated or manually-edited records)
+    _raw_errors = data.get("validation_errors", [])
+    validation_errors: list[str] = _raw_errors if isinstance(_raw_errors, list) else []
 
     # Build equity curve list
     equity_curve: list[EquityPointResponse] = [
@@ -463,29 +465,17 @@ async def get_backtest_results(
         for ep in data.get("equity_curve", [])
     ]
 
-    # Build full trade list — compute duration_hours and commission_total
+    # Build full trade list — duration_hours and total_commission are
+    # pre-computed by TradeRecord.to_dict() at write time; no re-derivation needed.
     raw_trades: list[dict] = data.get("trade_log", [])
     trades: list[FullTradeResponse] = []
     for idx, t in enumerate(raw_trades):
-        entry_iso = t.get("entry_time", "")
-        exit_iso = t.get("exit_time", "")
-        try:
-            entry_dt = datetime.fromisoformat(entry_iso)
-            exit_dt = datetime.fromisoformat(exit_iso)
-            duration_hours = (exit_dt - entry_dt).total_seconds() / 3600.0
-        except (ValueError, TypeError):
-            duration_hours = 0.0
-
         symbol = t.get("symbol", "")
-        commission_total = float(
-            t.get("entry_commission", 0.0) + t.get("exit_commission", 0.0)
-        )
-
         trades.append(
             FullTradeResponse(
                 id=f"{symbol}-{idx}",
-                entry_time=entry_iso,
-                exit_time=exit_iso,
+                entry_time=t.get("entry_time", ""),
+                exit_time=t.get("exit_time", ""),
                 symbol=symbol,
                 direction=t.get("direction", ""),
                 entry_price=float(t.get("entry_price", 0.0)),
@@ -493,8 +483,8 @@ async def get_backtest_results(
                 quantity=float(t.get("quantity", 0.0)),
                 realized_pnl=float(t.get("realized_pnl", 0.0)),
                 return_pct=float(t.get("return_pct", 0.0)),
-                duration_hours=round(duration_hours, 2),
-                commission_total=round(commission_total, 6),
+                duration_hours=float(t.get("duration_hours", 0.0)),
+                commission_total=float(t.get("total_commission", 0.0)),
             )
         )
 
@@ -516,8 +506,6 @@ async def get_backtest_results(
         avg_loss_pct=float(metrics_raw.get("avg_loss_pct", 0.0)),
         largest_win=float(metrics_raw.get("largest_win", 0.0)),
         largest_loss=float(metrics_raw.get("largest_loss", 0.0)),
-        passed_validation=passed,
-        validation_errors=list(validation_errors),
     )
 
     logger.info(

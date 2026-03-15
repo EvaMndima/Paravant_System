@@ -98,6 +98,14 @@ parameters:
     step: 0.5
     description: "Fixed stop loss percentage from entry"
 
+  - name: "ema_regime_period"
+    type: "int"
+    min: 100
+    max: 300
+    default: 200
+    step: 50
+    description: "EMA period for regime gate (BULL=LONG only, BEAR=SHORT only)"
+
 expected_performance:
   min_sharpe: 1.1
   max_drawdown_pct: 10.0

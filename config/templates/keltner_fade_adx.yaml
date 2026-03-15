@@ -1,0 +1,157 @@
+# Keltner Fade ADX Strategy Template
+# Mean reversion at Keltner Channel extremes with regime-aware direction
+# Fades overextensions WITH the trend, not against it
+#
+# Entry Logic: KC band touch/rejection + StochRSI extreme + ADX < threshold + EMA slope
+# Exit Logic: Keltner midline (mean) or ATR stop
+
+id: "keltner_fade_adx"
+name: "Keltner Fade ADX"
+version: "1.0.0"
+type: "mean_reversion"
+description: >
+  Fades price overextensions at Keltner Channel boundaries, but only in the
+  direction of the larger trend determined by EMA(50) slope. In bear trends,
+  only SHORT fades at upper KC (sell rallies). In bull trends, only LONG fades
+  at lower KC (buy dips). ADX must be below threshold confirming the trend is
+  not too strong for mean reversion. StochasticRSI confirms overbought/oversold.
+
+entry_logic: >
+  SHORT FADE (bear regime, EMA50 slope < 0):
+    1. Previous bar high touched/exceeded upper Keltner
+    2. Current bar closes back inside KC (rejection candle)
+    3. StochasticRSI K > overbought threshold
+    4. ADX < max threshold (trend not too strong for fading)
+  LONG FADE (bull regime, EMA50 slope > 0):
+    1. Previous bar low touched/fell below lower Keltner
+    2. Current bar closes back inside KC (rejection candle)
+    3. StochasticRSI K < oversold threshold
+    4. ADX < max threshold
+
+exit_logic: >
+  Target: Keltner midline (EMA center).
+  Stop: KC band + 1*ATR buffer from entry.
+
+parameters:
+  - name: "kc_ema_period"
+    type: "int"
+    min: 15
+    max: 30
+    default: 20
+    step: 5
+    description: "Keltner Channel EMA period"
+
+  - name: "kc_atr_period"
+    type: "int"
+    min: 10
+    max: 20
+    default: 14
+    step: 2
+    description: "Keltner Channel ATR period"
+
+  - name: "kc_multiplier"
+    type: "float"
+    min: 1.5
+    max: 3.0
+    default: 2.0
+    step: 0.25
+    description: "KC ATR multiplier for band width"
+
+  - name: "ema_trend_period"
+    type: "int"
+    min: 30
+    max: 100
+    default: 50
+    step: 10
+    description: "EMA period for trend regime detection"
+
+  - name: "ema_slope_lookback"
+    type: "int"
+    min: 5
+    max: 20
+    default: 10
+    step: 5
+    description: "Lookback period for EMA slope calculation"
+
+  - name: "adx_period"
+    type: "int"
+    min: 7
+    max: 14
+    default: 10
+    step: 1
+    description: "ADX period (shorter for faster response)"
+
+  - name: "adx_max_threshold"
+    type: "float"
+    min: 20.0
+    max: 40.0
+    default: 30.0
+    step: 5.0
+    description: "Maximum ADX for fading (above = trend too strong)"
+
+  - name: "stoch_rsi_period"
+    type: "int"
+    min: 7
+    max: 21
+    default: 14
+    step: 7
+    description: "StochasticRSI RSI + Stochastic period"
+
+  - name: "stoch_k_smooth"
+    type: "int"
+    min: 2
+    max: 5
+    default: 3
+    step: 1
+    description: "StochasticRSI K smoothing period"
+
+  - name: "stoch_d_smooth"
+    type: "int"
+    min: 2
+    max: 5
+    default: 3
+    step: 1
+    description: "StochasticRSI D smoothing period"
+
+  - name: "stoch_overbought"
+    type: "float"
+    min: 60.0
+    max: 90.0
+    default: 70.0
+    step: 5.0
+    description: "StochRSI overbought threshold"
+
+  - name: "stoch_oversold"
+    type: "float"
+    min: 10.0
+    max: 40.0
+    default: 30.0
+    step: 5.0
+    description: "StochRSI oversold threshold"
+
+  - name: "atr_period"
+    type: "int"
+    min: 10
+    max: 20
+    default: 14
+    step: 2
+    description: "ATR period for stop loss calculation"
+
+expected_performance:
+  min_sharpe: 0.5
+  max_drawdown_pct: 20.0
+  min_win_rate_pct: 50.0
+
+recommended_for:
+  - "trending_down"
+  - "volatile"
+
+not_recommended_for:
+  - "ranging"
+
+symbols:
+  - "BTCUSDT"
+  - "ETHUSDT"
+
+timeframes:
+  - "1h"

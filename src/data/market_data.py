@@ -27,6 +27,7 @@ import pandas as pd
 from numpy.typing import NDArray
 
 from src.brokers.binance.client import BinanceClient
+from src.core.config.settings import get_settings
 from src.utils.logging import get_logger
 
 logger = get_logger(__name__)
@@ -393,7 +394,7 @@ class MarketDataFetcher:
         Args:
             client: BinanceClient instance (creates new if None).
         """
-        self.client = client or BinanceClient(testnet=True)
+        self.client = client or BinanceClient(testnet=get_settings().binance_testnet)
 
         logger.info("market_data_fetcher_initialized")
 

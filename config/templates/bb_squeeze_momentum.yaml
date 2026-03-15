@@ -1,0 +1,154 @@
+# BB Squeeze Momentum Breakout Strategy Template
+# TTM Squeeze method: BB inside Keltner Channels = volatility compression
+# Enters on squeeze release with multi-indicator confirmation
+#
+# Entry Logic: TTM squeeze fires + directional close + MACD + SuperTrend + volume
+# Exit Logic: 2*ATR trailing stop or time stop
+
+id: "bb_squeeze_momentum"
+name: "BB Squeeze Momentum Breakout"
+version: "1.0.0"
+type: "volatility_breakout"
+description: >
+  Uses John Carter's TTM Squeeze method to detect volatility compression:
+  Bollinger Bands fitting inside Keltner Channels indicates a coiled market.
+  When the squeeze releases (BB expands outside KC), enters in the direction
+  confirmed by MACD momentum, SuperTrend trend, and volume spike.
+  More selective than standard BB squeeze — requires true band containment.
+
+entry_logic: >
+  SQUEEZE: BB_upper < KC_upper AND BB_lower > KC_lower (BB inside KC).
+  FIRE: Previous bar squeezed, current bar NOT (bands expanded).
+  LONG: Squeeze fires + close > prev_close + MACD histogram > 0 and rising
+        + SuperTrend bullish + volume > threshold * average.
+  SHORT: Squeeze fires + close < prev_close + MACD histogram < 0 and falling
+         + SuperTrend bearish + volume > threshold * average.
+
+exit_logic: >
+  Stop: 2 * ATR from entry price (dynamic).
+  Time stop: Exit after time_stop_bars if target not reached.
+  Target: Ride the momentum breakout.
+
+parameters:
+  - name: "bb_period"
+    type: "int"
+    min: 10
+    max: 30
+    default: 20
+    step: 2
+    description: "Bollinger Bands lookback period"
+
+  - name: "bb_std_dev"
+    type: "float"
+    min: 2.0
+    max: 3.5
+    default: 2.5
+    step: 0.25
+    description: "BB standard deviation multiplier (wider than KC)"
+
+  - name: "kc_ema_period"
+    type: "int"
+    min: 15
+    max: 30
+    default: 20
+    step: 5
+    description: "Keltner Channel EMA period"
+
+  - name: "kc_atr_period"
+    type: "int"
+    min: 10
+    max: 20
+    default: 14
+    step: 2
+    description: "Keltner Channel ATR period"
+
+  - name: "kc_multiplier"
+    type: "float"
+    min: 1.0
+    max: 2.0
+    default: 1.5
+    step: 0.25
+    description: "KC ATR multiplier (narrower than BB for squeeze detection)"
+
+  - name: "macd_fast"
+    type: "int"
+    min: 8
+    max: 16
+    default: 12
+    step: 2
+    description: "MACD fast EMA period"
+
+  - name: "macd_slow"
+    type: "int"
+    min: 20
+    max: 30
+    default: 26
+    step: 2
+    description: "MACD slow EMA period"
+
+  - name: "macd_signal"
+    type: "int"
+    min: 5
+    max: 12
+    default: 9
+    step: 1
+    description: "MACD signal line period"
+
+  - name: "volume_threshold"
+    type: "float"
+    min: 1.0
+    max: 3.0
+    default: 1.5
+    step: 0.25
+    description: "Volume multiplier above average for confirmation"
+
+  - name: "supertrend_period"
+    type: "int"
+    min: 7
+    max: 14
+    default: 10
+    step: 1
+    description: "SuperTrend ATR period"
+
+  - name: "supertrend_multiplier"
+    type: "float"
+    min: 2.0
+    max: 4.0
+    default: 3.0
+    step: 0.5
+    description: "SuperTrend ATR multiplier"
+
+  - name: "atr_period"
+    type: "int"
+    min: 10
+    max: 20
+    default: 14
+    step: 2
+    description: "ATR period for stop loss calculation"
+
+  - name: "time_stop_bars"
+    type: "int"
+    min: 10
+    max: 40
+    default: 20
+    step: 5
+    description: "Maximum bars to hold position before time-based exit"
+
+expected_performance:
+  min_sharpe: 0.5
+  max_drawdown_pct: 25.0
+  min_win_rate_pct: 40.0
+
+recommended_for:
+  - "ranging"
+  - "volatile"
+
+not_recommended_for:
+  - "trending_up"
+
+symbols:
+  - "BTCUSDT"
+  - "ETHUSDT"
+
+timeframes:
+  - "1h"

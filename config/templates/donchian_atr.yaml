@@ -54,9 +54,9 @@ parameters:
     type: "float"
     min: 1.0
     max: 5.0
-    default: 2.5
+    default: 1.5
     step: 0.5
-    description: "ATR multiplier for trailing stop loss"
+    description: "ATR multiplier for trailing stop loss (tightened from 2.5 to reduce DD)"
 
   - name: "volume_ma_period"
     type: "int"
@@ -73,6 +73,14 @@ parameters:
     default: 1.2
     step: 0.1
     description: "Volume must exceed MA by this multiplier"
+
+  - name: "ema_regime_period"
+    type: "int"
+    min: 100
+    max: 300
+    default: 200
+    step: 50
+    description: "EMA period for regime gate (BULL=LONG only, BEAR=SHORT only)"
 
 expected_performance:
   min_sharpe: 1.0

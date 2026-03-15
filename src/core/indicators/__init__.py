@@ -23,11 +23,18 @@ Available Indicators:
     Volatility Indicators:
         - ATR: Average True Range (Wilder's smoothing)
         - BollingerBands: Bollinger Bands with squeeze detection
+        - KeltnerChannel: Keltner Channels (EMA + ATR bands)
 
     Trend Indicators:
         - DonchianChannel: Donchian Channels with breakout detection
         - SuperTrend: SuperTrend with trend flip detection
         - ADX: Average Directional Index with +DI/-DI
+        - IchimokuCloud: Ichimoku Cloud with crypto-adjusted defaults
+
+    Momentum Oscillators:
+        - RSI: Relative Strength Index (Wilder's smoothing)
+        - MACD: Moving Average Convergence Divergence
+        - StochasticRSI: Stochastic oscillator applied to RSI
 
     Volume Indicators:
         - VWAP: Volume Weighted Average Price
@@ -69,9 +76,12 @@ from src.core.indicators.cached import CachedIndicatorCalculator
 from src.core.indicators.donchian import DonchianChannel, DonchianResult
 from src.core.indicators.ema import EMA
 from src.core.indicators.factory import IndicatorFactory
+from src.core.indicators.ichimoku import IchimokuCloud, IchimokuResult
+from src.core.indicators.keltner import KeltnerChannel, KeltnerResult
 from src.core.indicators.macd import MACD, MACDResult
 from src.core.indicators.rsi import RSI
 from src.core.indicators.sma import SMA
+from src.core.indicators.stochastic_rsi import StochasticRSI, StochasticRSIResult
 from src.core.indicators.supertrend import SuperTrend, SuperTrendResult
 from src.core.indicators.volume import VolumeAverage
 from src.core.indicators.vwap import VWAP, VWAPResult
@@ -91,6 +101,8 @@ __all__ = [
     "ATR",
     "BollingerBands",
     "BollingerResult",
+    "KeltnerChannel",
+    "KeltnerResult",
     # Trend indicators
     "DonchianChannel",
     "DonchianResult",
@@ -98,6 +110,11 @@ __all__ = [
     "SuperTrendResult",
     "ADX",
     "ADXResult",
+    "IchimokuCloud",
+    "IchimokuResult",
+    # Momentum oscillators (additional)
+    "StochasticRSI",
+    "StochasticRSIResult",
     # Volume indicators
     "VWAP",
     "VWAPResult",

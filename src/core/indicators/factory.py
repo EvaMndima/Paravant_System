@@ -22,9 +22,12 @@ from src.core.indicators.base import Indicator
 from src.core.indicators.bollinger import BollingerBands
 from src.core.indicators.donchian import DonchianChannel
 from src.core.indicators.ema import EMA
+from src.core.indicators.ichimoku import IchimokuCloud
+from src.core.indicators.keltner import KeltnerChannel
 from src.core.indicators.macd import MACD
 from src.core.indicators.rsi import RSI
 from src.core.indicators.sma import SMA
+from src.core.indicators.stochastic_rsi import StochasticRSI
 from src.core.indicators.supertrend import SuperTrend
 from src.core.indicators.volume import VolumeAverage
 from src.core.indicators.vwap import VWAP
@@ -70,6 +73,11 @@ class IndicatorFactory:
         "supertrend": SuperTrend,
         "st": SuperTrend,  # Alias
         "adx": ADX,
+        "keltner": KeltnerChannel,
+        "kc": KeltnerChannel,  # Alias
+        "ichimoku": IchimokuCloud,
+        "stochastic_rsi": StochasticRSI,
+        "stoch_rsi": StochasticRSI,  # Alias
         # Volume indicators
         "vwap": VWAP,
         "volume": VolumeAverage,

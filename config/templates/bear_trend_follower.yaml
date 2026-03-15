@@ -1,0 +1,140 @@
+# Bear Trend Follower Strategy Template
+# Multi-timeframe (1H+4H) trend follower designed for bear markets
+# Uses 4H EMA(200) regime filter with 1H entry signals
+#
+# Entry Logic: 4H regime detection + 1H Keltner rejection + ADX/DI confirmation
+# Exit Logic: KC lower band target or ATR-based stop
+
+id: "bear_trend_follower"
+name: "Bear Trend Follower"
+version: "1.0.0"
+type: "trend_following"
+description: >
+  Multi-timeframe trend-following strategy optimized for bear markets.
+  Uses 4H EMA(200) to determine regime: bear (below) or bull (above).
+  In bear regime, takes high-conviction SHORT entries at upper Keltner
+  Channel rejection when ADX confirms trend strength and -DI > +DI shows
+  seller dominance. In bull regime, offers low-conviction counter-trend
+  LONG entries at lower KC when RSI is deeply oversold.
+  Requires 810+ 1H bars (34 days) for 4H EMA(200) warmup.
+
+entry_logic: >
+  BEAR REGIME (price < 4H EMA200):
+    SHORT: Previous bar high >= upper KC + current close < KC upper
+           + ADX > min_threshold + -DI > +DI
+  BULL REGIME (price > 4H EMA200):
+    LONG: Previous bar low <= lower KC + current close > KC lower
+          + RSI < oversold + SuperTrend bullish (counter-trend, low strength)
+
+exit_logic: >
+  SHORT target: Lower Keltner Channel band.
+  LONG target: Keltner midline.
+  Stop: KC band + 1.5*ATR buffer.
+
+parameters:
+  - name: "htf_ema_period"
+    type: "int"
+    min: 100
+    max: 250
+    default: 200
+    step: 50
+    description: "Higher timeframe (4H) EMA period for regime detection"
+
+  - name: "kc_ema_period"
+    type: "int"
+    min: 15
+    max: 30
+    default: 20
+    step: 5
+    description: "1H Keltner Channel EMA period"
+
+  - name: "kc_atr_period"
+    type: "int"
+    min: 10
+    max: 20
+    default: 14
+    step: 2
+    description: "1H Keltner Channel ATR period"
+
+  - name: "kc_multiplier"
+    type: "float"
+    min: 1.0
+    max: 3.0
+    default: 1.5
+    step: 0.25
+    description: "1H KC ATR multiplier"
+
+  - name: "adx_period"
+    type: "int"
+    min: 10
+    max: 20
+    default: 14
+    step: 2
+    description: "1H ADX period"
+
+  - name: "adx_min_threshold"
+    type: "float"
+    min: 15.0
+    max: 35.0
+    default: 20.0
+    step: 5.0
+    description: "Minimum ADX for trend confirmation (bear SHORT only)"
+
+  - name: "rsi_period"
+    type: "int"
+    min: 7
+    max: 21
+    default: 14
+    step: 7
+    description: "1H RSI period"
+
+  - name: "rsi_oversold"
+    type: "float"
+    min: 15.0
+    max: 30.0
+    default: 25.0
+    step: 5.0
+    description: "RSI oversold threshold (bull LONG only)"
+
+  - name: "supertrend_period"
+    type: "int"
+    min: 7
+    max: 14
+    default: 10
+    step: 1
+    description: "1H SuperTrend period"
+
+  - name: "supertrend_multiplier"
+    type: "float"
+    min: 2.0
+    max: 4.0
+    default: 3.0
+    step: 0.5
+    description: "1H SuperTrend multiplier"
+
+  - name: "atr_period"
+    type: "int"
+    min: 10
+    max: 20
+    default: 14
+    step: 2
+    description: "ATR period for stop loss"
+
+expected_performance:
+  min_sharpe: 0.5
+  max_drawdown_pct: 25.0
+  min_win_rate_pct: 40.0
+
+recommended_for:
+  - "trending_down"
+
+not_recommended_for:
+  - "ranging"
+  - "trending_up"
+
+symbols:
+  - "BTCUSDT"
+  - "ETHUSDT"
+
+timeframes:
+  - "1h"

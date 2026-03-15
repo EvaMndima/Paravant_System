@@ -10,9 +10,9 @@ from __future__ import annotations
 import asyncio
 import sys
 from datetime import datetime, timedelta, timezone
-from types import SimpleNamespace
 from typing import Any
 
+from run_backtest_shared import make_strategy, verdict
 from src.core.strategy.backtest.engine import BacktestEngine
 from src.core.strategy.backtest.types import BacktestConfig
 from src.core.strategy.backtest.validator import SUPERVISED_THRESHOLDS
@@ -147,29 +147,6 @@ TESTS: list[dict[str, Any]] = [
 ]
 
 
-def _make_strategy(t: dict[str, Any]) -> SimpleNamespace:
-    return SimpleNamespace(
-        id=t["id"],
-        name=t["name"],
-        template_id=t["template_id"],
-        parameters=t["parameters"],
-    )
-
-
-def _verdict(passed: bool, errors: list[str]) -> str:
-    if passed:
-        return "PASS"
-    first = errors[0] if errors else "?"
-    first = (
-        first
-        .replace("Insufficient trades:", "trades:")
-        .replace("Sharpe ratio too low:", "sharpe:")
-        .replace("Max drawdown too high:", "drawdown:")
-        .replace("Profit factor too low:", "PF:")
-        .replace("Expectancy too low:", "expectancy:")
-    )
-    return f"FAIL ({first})"
-
 
 async def run_all() -> None:
     """Run all regime-search tests and print comparison table."""
@@ -210,7 +187,7 @@ async def run_all() -> None:
     rows: list[dict[str, Any]] = []
 
     for t in TESTS:
-        strategy = _make_strategy(t)
+        strategy = make_strategy(t)
         series = data_cache[t["symbol"]]
         print(f"  {t['name']:<30} ... ", end="", flush=True)
         try:
@@ -236,7 +213,7 @@ async def run_all() -> None:
                 "errors": result.validation_errors,
                 "rationale": t["rationale"],
             })
-            print(_verdict(result.passed_validation, result.validation_errors))
+            print(verdict(result.passed_validation, result.validation_errors))
         except Exception as exc:
             print(f"ERROR: {exc}")
             rows.append({"name": t["name"], "symbol": t["symbol"], "error": str(exc)})
@@ -265,7 +242,7 @@ async def run_all() -> None:
             f"{row['wr']:>5.1f}% "
             f"{row['trades']:>7} "
             f"{row['expectancy']:>6.2f}  "
-            f"{_verdict(row['passed'], row['errors'])}"
+            f"{verdict(row['passed'], row['errors'])}"
         )
         print(line)
 
@@ -282,12 +259,12 @@ async def run_all() -> None:
     valid_rows = [r for r in rows if "error" not in r]
     print(f"\nFull ranking by Sharpe ({len(passing)} passing / {len(valid_rows)} ran):\n")
     for rank, r in enumerate(sorted(valid_rows, key=lambda x: x["sharpe"], reverse=True), 1):
-        verdict = _verdict(r["passed"], r["errors"])
+        v = verdict(r["passed"], r["errors"])
         calmar = f"{r['calmar']:.2f}" if r["calmar"] != float("inf") else "inf"
         print(
             f"  #{rank}  {r['name']:<30}  Sharpe={r['sharpe']:>6.3f}  "
             f"PF={r['pf']:>5.3f}  Trades={r['trades']:>3}  "
-            f"Exp=${r['expectancy']:>7.2f}  Calmar={calmar:>6}  {verdict}"
+            f"Exp=${r['expectancy']:>7.2f}  Calmar={calmar:>6}  {v}"
         )
 
     if errored:

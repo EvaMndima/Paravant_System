@@ -16,9 +16,9 @@ from __future__ import annotations
 import asyncio
 import sys
 from datetime import datetime, timedelta, timezone
-from types import SimpleNamespace
 from typing import Any
 
+from run_backtest_shared import make_strategy, verdict
 from src.core.strategy.backtest.engine import BacktestEngine
 from src.core.strategy.backtest.types import BacktestConfig
 from src.core.strategy.backtest.validator import SUPERVISED_THRESHOLDS
@@ -109,52 +109,6 @@ TIMEFRAME = "1h"
 INITIAL_CAPITAL = 10_000.0
 
 
-def _make_strategy(variant: dict[str, Any]) -> SimpleNamespace:
-    """Create a lightweight in-memory strategy object.
-
-    The BacktestEngine only reads: id, name, template_id, parameters.
-    Using SimpleNamespace avoids needing a database session while staying
-    fully compatible with the engine interface.
-
-    Args:
-        variant: Variant dict with id, name, template_id, parameters.
-
-    Returns:
-        SimpleNamespace acting as a Strategy duck-type.
-    """
-    return SimpleNamespace(
-        id=variant["id"],
-        name=variant["name"],
-        template_id=variant["template_id"],
-        parameters=variant["parameters"],
-    )
-
-
-def _verdict(passed: bool, errors: list[str]) -> str:
-    """Format pass/fail with first error if failed.
-
-    Args:
-        passed: Whether validation passed.
-        errors: List of validation error messages.
-
-    Returns:
-        Short verdict string.
-    """
-    if passed:
-        return "PASS"
-    # Show only the first error to keep table readable
-    first = errors[0] if errors else "unknown"
-    # Abbreviate common prefixes
-    first = (
-        first
-        .replace("Insufficient trades:", "trades:")
-        .replace("Sharpe ratio too low:", "sharpe:")
-        .replace("Max drawdown too high:", "drawdown:")
-        .replace("Profit factor too low:", "PF:")
-        .replace("Expectancy too low:", "expectancy:")
-    )
-    return f"FAIL  ({first})"
-
 
 async def _fetch_data(
     fetcher: MarketDataFetcher,
@@ -215,7 +169,7 @@ async def run_all() -> None:
     rows: list[dict[str, Any]] = []
 
     for variant in VARIANTS:
-        strategy = _make_strategy(variant)
+        strategy = make_strategy(variant)
         series = data_cache[variant["symbol"]]
 
         print(f"  {variant['name']} ... ", end="", flush=True)
@@ -242,8 +196,8 @@ async def run_all() -> None:
                 "errors": result.validation_errors,
                 "note": variant["note"],
             })
-            verdict = _verdict(result.passed_validation, result.validation_errors)
-            print(verdict)
+            v = verdict(result.passed_validation, result.validation_errors)
+            print(v)
         except Exception as exc:
             print(f"ERROR: {exc}")
             rows.append({
@@ -279,7 +233,7 @@ async def run_all() -> None:
             f"{row['wr']:>5.1f}% "
             f"{row['trades']:>7} "
             f"{row['expectancy']:>6.2f}  "
-            f"{_verdict(row['passed'], row['errors'])}"
+            f"{verdict(row['passed'], row['errors'])}"
         )
         print(line)
 

@@ -4,6 +4,11 @@ Entry: All three conditions must be met simultaneously - SuperTrend direction,
 MACD confirmation, and volume surge.
 Exit: SuperTrend flip or MACD crossover reversal.
 
+v1.1: Added SuperTrend persistence check (3-bar hold).
+In bear markets, SuperTrend whipsaws on relief bounces — flips bullish
+for 1-2 bars then flips back bearish. Requiring 3 consecutive bars in
+the same direction filters out these false flips.
+
 Template ID: supertrend_volume_macd
 Strategy Type: trend_following
 """
@@ -22,6 +27,9 @@ from src.utils.logging import get_logger
 
 logger = get_logger(__name__)
 
+# Minimum consecutive bars SuperTrend must hold direction before entry
+_ST_PERSISTENCE_BARS = 3
+
 
 class SupertrendVolumeMacdGenerator(SignalGenerator):
     """Signal generator for SuperTrend + Volume + MACD strategy.
@@ -29,6 +37,9 @@ class SupertrendVolumeMacdGenerator(SignalGenerator):
     Requires triple confluence: SuperTrend trend direction, MACD
     confirmation (above/below zero), and volume above average. This
     multi-factor approach reduces false signals.
+
+    v1.1: SuperTrend must hold direction for 3+ consecutive bars
+    before entry is permitted, filtering bear-bounce whipsaws.
 
     Required parameters:
         supertrend_period, supertrend_multiplier,
@@ -51,7 +62,7 @@ class SupertrendVolumeMacdGenerator(SignalGenerator):
         params: dict[str, Any],
         symbol: str,
     ) -> TradingSignal | None:
-        """Evaluate triple confluence conditions.
+        """Evaluate triple confluence conditions with persistence filter.
 
         Args:
             series: OHLCV series for the symbol.
@@ -93,6 +104,18 @@ class SupertrendVolumeMacdGenerator(SignalGenerator):
             st_trend = st_result.current_trend  # +1 bullish, -1 bearish
             st_value = st_result.current
 
+            # SuperTrend persistence: direction must hold for 3+ bars
+            # Filters bear-bounce whipsaws where ST flips for 1-2 bars
+            valid_trend = st_result.trend[st_result.trend != 0]
+            if len(valid_trend) < _ST_PERSISTENCE_BARS:
+                return None
+            st_persistent_bull = all(
+                int(valid_trend[-i]) == 1 for i in range(1, _ST_PERSISTENCE_BARS + 1)
+            )
+            st_persistent_bear = all(
+                int(valid_trend[-i]) == -1 for i in range(1, _ST_PERSISTENCE_BARS + 1)
+            )
+
             # MACD state
             macd_curr = macd_result.current
             valid_signal = macd_result.signal_line[~np.isnan(macd_result.signal_line)]
@@ -106,14 +129,15 @@ class SupertrendVolumeMacdGenerator(SignalGenerator):
             indicators = {
                 "supertrend": st_value,
                 "supertrend_trend": float(st_trend),
+                "st_persistent": st_persistent_bull or st_persistent_bear,
                 "macd": macd_curr,
                 "macd_signal": macd_signal_val,
                 "volume_ratio": current_volume / vol_ma if vol_ma > 0 else 0,
             }
 
-            # LONG: SuperTrend bullish + MACD > signal + MACD > 0 + volume
+            # LONG: SuperTrend bullish (3-bar persistent) + MACD > signal + MACD > 0 + volume
             if (
-                st_trend == 1
+                st_persistent_bull
                 and macd_curr > macd_signal_val
                 and macd_curr > 0
                 and volume_ok
@@ -128,9 +152,9 @@ class SupertrendVolumeMacdGenerator(SignalGenerator):
                     metadata={"trigger": "supertrend_macd_volume_long"},
                 )
 
-            # SHORT: SuperTrend bearish + MACD < signal + MACD < 0 + volume
+            # SHORT: SuperTrend bearish (3-bar persistent) + MACD < signal + MACD < 0 + volume
             if (
-                st_trend == -1
+                st_persistent_bear
                 and macd_curr < macd_signal_val
                 and macd_curr < 0
                 and volume_ok
@@ -145,7 +169,7 @@ class SupertrendVolumeMacdGenerator(SignalGenerator):
                     metadata={"trigger": "supertrend_macd_volume_short"},
                 )
 
-            # CLOSE on SuperTrend flip
+            # CLOSE on SuperTrend flip (no persistence required for exits)
             if st_result.just_flipped_bullish() or st_result.just_flipped_bearish():
                 return TradingSignal(
                     direction=SignalDirection.CLOSE,

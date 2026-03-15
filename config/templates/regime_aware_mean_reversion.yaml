@@ -1,0 +1,192 @@
+# Regime-Aware Mean Reversion Strategy Template
+# Multi-timeframe (1H+4H) mean reversion with regime-adaptive direction
+# Widest indicator confluence set: RSI + BB + VWAP + KC + MACD + ATR
+#
+# Entry Logic: 4H regime + RSI extreme + Band touch + MACD/VWAP confirmation
+# Exit Logic: VWAP/EMA(20) target, 1.5*ATR stop, 12-bar time stop
+
+id: "regime_aware_mean_reversion"
+name: "Regime-Aware Mean Reversion"
+version: "1.0.0"
+type: "mean_reversion"
+description: >
+  Highest-priority bear-regime strategy. Combines 4H EMA(200) regime
+  detection with 7-indicator confluence on 1H for high-probability
+  mean reversion setups. In bear markets, primarily shorts overbought
+  bounces (RSI>75 at upper BB/KC). In bull markets, primarily buys
+  oversold dips (RSI<25 at lower BB/KC). Secondary counter-regime
+  signals available at extreme conditions with reduced conviction.
+  Requires 810+ 1H bars (34 days) for 4H EMA(200) warmup.
+
+entry_logic: >
+  BEAR REGIME (price < 4H EMA200):
+    PRIMARY SHORT: RSI > rsi_overbought_bear + (price >= upper BB OR upper KC)
+                   + MACD histogram turning negative
+    SECONDARY LONG: RSI < rsi_oversold_bear + price <= lower BB
+                    + VWAP deviation > threshold (deeply oversold bounce)
+  BULL REGIME (price > 4H EMA200):
+    PRIMARY LONG: RSI < rsi_oversold_bull + (price <= lower BB OR lower KC)
+                  + MACD histogram turning positive
+    SECONDARY SHORT: RSI > rsi_overbought_bull + price >= upper BB
+                     + VWAP deviation > threshold
+
+exit_logic: >
+  Target: VWAP (if favorable) or BB middle band.
+  Stop: 1.5 * ATR from entry.
+  Time stop: Exit after time_stop_bars.
+
+parameters:
+  - name: "htf_ema_period"
+    type: "int"
+    min: 100
+    max: 250
+    default: 200
+    step: 50
+    description: "4H EMA period for regime detection"
+
+  - name: "rsi_period"
+    type: "int"
+    min: 5
+    max: 14
+    default: 9
+    step: 2
+    description: "1H RSI period (shorter for faster response)"
+
+  - name: "rsi_overbought_bear"
+    type: "float"
+    min: 65.0
+    max: 85.0
+    default: 70.0
+    step: 5.0
+    description: "RSI overbought threshold in bear regime (SHORT trigger)"
+
+  - name: "rsi_oversold_bear"
+    type: "float"
+    min: 10.0
+    max: 30.0
+    default: 25.0
+    step: 5.0
+    description: "RSI oversold threshold in bear regime (LONG trigger)"
+
+  - name: "rsi_overbought_bull"
+    type: "float"
+    min: 75.0
+    max: 90.0
+    default: 80.0
+    step: 5.0
+    description: "RSI overbought threshold in bull regime (SHORT trigger)"
+
+  - name: "rsi_oversold_bull"
+    type: "float"
+    min: 15.0
+    max: 30.0
+    default: 25.0
+    step: 5.0
+    description: "RSI oversold threshold in bull regime (LONG trigger)"
+
+  - name: "bb_period"
+    type: "int"
+    min: 15
+    max: 30
+    default: 20
+    step: 5
+    description: "Bollinger Bands period"
+
+  - name: "bb_std_dev"
+    type: "float"
+    min: 1.5
+    max: 3.0
+    default: 2.0
+    step: 0.25
+    description: "BB standard deviation multiplier"
+
+  - name: "kc_ema_period"
+    type: "int"
+    min: 15
+    max: 30
+    default: 20
+    step: 5
+    description: "Keltner Channel EMA period"
+
+  - name: "kc_atr_period"
+    type: "int"
+    min: 10
+    max: 20
+    default: 14
+    step: 2
+    description: "Keltner Channel ATR period"
+
+  - name: "kc_multiplier"
+    type: "float"
+    min: 1.5
+    max: 3.0
+    default: 2.0
+    step: 0.25
+    description: "KC ATR multiplier"
+
+  - name: "vwap_deviation_pct"
+    type: "float"
+    min: 1.0
+    max: 5.0
+    default: 2.0
+    step: 0.5
+    description: "Min VWAP deviation % for secondary signal confirmation"
+
+  - name: "macd_fast"
+    type: "int"
+    min: 8
+    max: 16
+    default: 12
+    step: 2
+    description: "MACD fast EMA period"
+
+  - name: "macd_slow"
+    type: "int"
+    min: 20
+    max: 30
+    default: 26
+    step: 2
+    description: "MACD slow EMA period"
+
+  - name: "macd_signal"
+    type: "int"
+    min: 5
+    max: 12
+    default: 9
+    step: 1
+    description: "MACD signal line period"
+
+  - name: "atr_period"
+    type: "int"
+    min: 10
+    max: 20
+    default: 14
+    step: 2
+    description: "ATR period for stop loss"
+
+  - name: "time_stop_bars"
+    type: "int"
+    min: 6
+    max: 24
+    default: 12
+    step: 3
+    description: "Maximum bars to hold before time-based exit"
+
+expected_performance:
+  min_sharpe: 0.5
+  max_drawdown_pct: 25.0
+  min_win_rate_pct: 45.0
+
+recommended_for:
+  - "volatile"
+  - "trending_down"
+
+not_recommended_for:
+  - "ranging"
+
+symbols:
+  - "BTCUSDT"
+  - "ETHUSDT"
+
+timeframes:
+  - "1h"

@@ -238,6 +238,9 @@ class TradeRecord:
             "slippage_cost": self.slippage_cost,
             "realized_pnl": self.realized_pnl,
             "return_pct": self.return_pct,
+            # Pre-computed derived fields so readers don't need to re-derive them
+            "duration_hours": round(self.duration_hours, 2),
+            "total_commission": round(self.total_commission, 6),
         }
 
 
