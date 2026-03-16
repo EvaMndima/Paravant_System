@@ -39,7 +39,7 @@ import asyncio
 import json
 import math
 import os
-import signal
+import signal as signal_mod
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
@@ -458,8 +458,8 @@ async def main() -> None:
         print(f"\nReceived signal {sig}, shutting down...")
         stop_event.set()
 
-    signal.signal(signal.SIGINT, handle_signal)
-    signal.signal(signal.SIGTERM, handle_signal)
+    signal_mod.signal(signal_mod.SIGINT, handle_signal)
+    signal_mod.signal(signal_mod.SIGTERM, handle_signal)
 
     print(f"\nPolling every {POLLING_INTERVAL}s. Press Ctrl+C to stop.\n")
 
