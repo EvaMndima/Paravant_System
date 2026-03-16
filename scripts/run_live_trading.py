@@ -9,8 +9,9 @@ Default configuration:
     Capital:  Configurable via LIVE_CAPITAL_USDT env var (default $20)
 
 Position sizing:
-    Uses 70% of available capital per trade, leaving 30% as a buffer
-    to absorb commission and ensure orders clear Binance minimum notional ($10).
+    Uses 25% of available capital per trade ($5 on a $20 account), keeping
+    max loss per trade around $0.50-$1.00 with ATR-based stops.
+    Clears Binance minimum notional ($5 for BTCUSDT Spot).
 
 Safety:
     - Reads BINANCE_TESTNET env var: set "true" to test on testnet first
@@ -65,11 +66,12 @@ LIVE_CAPITAL = float(os.getenv("LIVE_CAPITAL_USDT", "20.0"))
 LIVE_SYMBOL = os.getenv("LIVE_SYMBOL", "BTCUSDT")
 LIVE_TEMPLATE = os.getenv("LIVE_TEMPLATE", "bear_trend_follower")
 
-# Fraction of capital to deploy per trade (keeps buffer for commission + slippage)
-POSITION_SIZE_FRACTION = 0.70
+# Fraction of capital to deploy per trade — 25% keeps max loss ~$0.50-$1.00
+# with ATR-based stops on a $20 account.  Remaining 75% is buffer.
+POSITION_SIZE_FRACTION = 0.25
 
-# Binance minimum notional value — orders below this are rejected
-BINANCE_MIN_NOTIONAL = 10.0
+# Binance minimum notional value — BTCUSDT spot minimum is $5
+BINANCE_MIN_NOTIONAL = 5.0
 
 # Polling interval in seconds (matches paper trading engine)
 POLLING_INTERVAL = 60
