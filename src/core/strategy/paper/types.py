@@ -47,6 +47,7 @@ class PaperTradingStatus:
         realized_pnl: P&L from completed trades only.
         has_open_position: Whether a position is currently open.
         open_position_direction: Direction of open position ("LONG"/"SHORT"/None).
+        open_position_entry_price: Entry price of open position (None if flat).
         days_elapsed: Calendar days since start.
         validation_passed: Whether validation criteria are met.
         validation_errors: List of validation failures (empty if passed).
@@ -67,6 +68,7 @@ class PaperTradingStatus:
     realized_pnl: float = 0.0
     has_open_position: bool = False
     open_position_direction: str | None = None
+    open_position_entry_price: float | None = None
     days_elapsed: float = 0.0
     validation_passed: bool = False
     validation_errors: list[str] = field(default_factory=list)
@@ -93,6 +95,7 @@ class PaperTradingStatus:
             "realized_pnl": round(self.realized_pnl, 4),
             "has_open_position": self.has_open_position,
             "open_position_direction": self.open_position_direction,
+            "open_position_entry_price": self.open_position_entry_price,
             "days_elapsed": round(self.days_elapsed, 2),
             "validation_passed": self.validation_passed,
             "validation_errors": self.validation_errors,

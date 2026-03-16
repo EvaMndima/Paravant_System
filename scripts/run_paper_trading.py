@@ -258,7 +258,11 @@ async def trade_monitor(
     telegram: TelegramChannel | None,
     stop_event: asyncio.Event,
 ) -> None:
-    """Monitor engines for new trades and send Telegram alerts.
+    """Monitor engines for position entries AND trade exits, send Telegram alerts.
+
+    Tracks two state changes per engine:
+    - Position opened (was flat, now has_open_position) -> ENTRY alert
+    - Trade completed (num_trades incremented) -> EXIT alert with PnL
 
     Args:
         engines: List of running engines.
@@ -268,8 +272,9 @@ async def trade_monitor(
     if telegram is None:
         return
 
-    # Track trade counts per engine
+    # Track state per engine: trade count + whether position was open
     last_counts: dict[str, int] = {e.strategy_id: 0 for e in engines}
+    had_position: dict[str, bool] = {e.strategy_id: False for e in engines}
 
     while not stop_event.is_set():
         try:
@@ -285,13 +290,45 @@ async def trade_monitor(
                 continue
 
             status = engine.get_status()
-            prev_count = last_counts.get(engine.strategy_id, 0)
+            sid = engine.strategy_id
+            prev_had_pos = had_position.get(sid, False)
+            prev_count = last_counts.get(sid, 0)
 
+            # --- ENTRY ALERT: was flat, now has a position ---
+            if status.has_open_position and not prev_had_pos:
+                direction = status.open_position_direction or "?"
+                entry_price = status.open_position_entry_price
+                price_str = f"${entry_price:,.2f}" if entry_price else "?"
+
+                msg = (
+                    f"Direction: {direction}\n"
+                    f"Entry Price: {price_str}\n"
+                    f"Equity: ${status.current_equity:,.2f}"
+                )
+
+                alert = Alert(
+                    level=AlertLevel.INFO,
+                    title=f"OPENED: {sid}",
+                    message=msg,
+                    metadata={
+                        "strategy": sid,
+                        "direction": direction,
+                        "entry_price": price_str,
+                    },
+                )
+                try:
+                    await telegram.send(alert)
+                except Exception as exc:
+                    logger.error(
+                        "telegram_entry_alert_failed",
+                        error=str(exc),
+                        strategy_id=sid,
+                    )
+
+            # --- EXIT ALERT: trade count went up (round-trip completed) ---
             if status.num_trades > prev_count:
-                # New trades detected
                 trades = engine.get_trade_log()
                 new_trades = trades[prev_count:]
-                last_counts[engine.strategy_id] = status.num_trades
 
                 for trade in new_trades:
                     direction = trade.get("direction", "?")
@@ -301,17 +338,18 @@ async def trade_monitor(
 
                     msg = (
                         f"Direction: {direction}\n"
-                        f"Entry: ${trade.get('entry_price', 0):.2f} -> "
-                        f"Exit: ${trade.get('exit_price', 0):.2f}\n"
-                        f"PnL: ${pnl:+.2f} ({ret_pct:+.2f}%)"
+                        f"Entry: ${trade.get('entry_price', 0):,.2f} -> "
+                        f"Exit: ${trade.get('exit_price', 0):,.2f}\n"
+                        f"PnL: ${pnl:+.2f} ({ret_pct:+.2f}%)\n"
+                        f"Equity: ${status.current_equity:,.2f}"
                     )
 
                     alert = Alert(
                         level=AlertLevel.INFO,
-                        title=f"Paper Trade: {engine.strategy_id}",
+                        title=f"CLOSED: {sid}",
                         message=msg,
                         metadata={
-                            "strategy": engine.strategy_id,
+                            "strategy": sid,
                             "symbol": symbol,
                             "pnl": f"${pnl:+.2f}",
                         },
@@ -320,10 +358,14 @@ async def trade_monitor(
                         await telegram.send(alert)
                     except Exception as exc:
                         logger.error(
-                            "telegram_alert_failed",
+                            "telegram_exit_alert_failed",
                             error=str(exc),
-                            strategy_id=engine.strategy_id,
+                            strategy_id=sid,
                         )
+
+            # Update tracked state
+            had_position[sid] = status.has_open_position
+            last_counts[sid] = status.num_trades
 
 
 async def hourly_summary(

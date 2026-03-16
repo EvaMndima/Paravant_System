@@ -217,8 +217,10 @@ class PaperTradingEngine:
         # Open position metadata for display
         has_open_position = self._portfolio.has_position()
         open_position_direction: str | None = None
+        open_position_entry_price: float | None = None
         if has_open_position and self._portfolio.position is not None:
             open_position_direction = self._portfolio.position.direction.value
+            open_position_entry_price = self._portfolio.position.entry_price
 
         days_elapsed = 0.0
         if self._started_at is not None:
@@ -241,6 +243,7 @@ class PaperTradingEngine:
             realized_pnl=realized_pnl,
             has_open_position=has_open_position,
             open_position_direction=open_position_direction,
+            open_position_entry_price=open_position_entry_price,
             days_elapsed=days_elapsed,
         )
 
