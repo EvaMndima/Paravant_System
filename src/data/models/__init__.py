@@ -1,6 +1,7 @@
 """Database models package - exports all models."""
 from .account import Account, AccountStatus, RiskProfile
 from .base import Base, TimestampMixin, generate_id
+from .paper_session import PaperTradingSession
 from .fill_rate_record import FillRateRecord
 from .order import Order, OrderSide, OrderStatus, OrderType
 from .pnl import EquitySnapshot, PnLRecord
@@ -54,4 +55,6 @@ __all__ = [
     # Execution Quality (Phase 4B)
     "SlippageRecord",
     "FillRateRecord",
+    # Paper trading persistence
+    "PaperTradingSession",
 ]

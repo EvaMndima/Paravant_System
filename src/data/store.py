@@ -15,9 +15,9 @@ from sqlalchemy.orm import Session, selectinload
 from ..utils.logging import get_logger
 from .database import engine
 from .models import (Account, AccountStatus, AuditLog, EquitySnapshot, Order,
-                     OrderStatus, PnLRecord, Position, PositionStatus, Signal,
-                     Strategy, StrategyAssignment, StrategyStatus, SymbolInfo,
-                     SystemState, Trade)
+                     OrderStatus, PaperTradingSession, PnLRecord, Position,
+                     PositionStatus, Signal, Strategy, StrategyAssignment,
+                     StrategyStatus, SymbolInfo, SystemState, Trade)
 
 
 class DataStore:
@@ -1253,3 +1253,62 @@ class DataStore:
             )
 
             return symbols
+
+    # =========================================================================
+    # Paper trading session persistence
+    # =========================================================================
+
+    def upsert_paper_session(
+        self, session_data: PaperTradingSession
+    ) -> PaperTradingSession:
+        """Save or update a paper trading session snapshot.
+
+        Uses INSERT OR REPLACE semantics (merge on primary key).
+        Called after every poll cycle so state survives container restarts.
+
+        Args:
+            session_data: PaperTradingSession instance with current state.
+
+        Returns:
+            The saved PaperTradingSession instance.
+        """
+        with self.session() as db:
+            merged = db.merge(session_data)
+            db.flush()
+            db.refresh(merged)
+            db.expunge(merged)
+            self.logger.debug(
+                "paper_session_saved",
+                session_id=session_data.session_id,
+                cash=session_data.cash,
+                total_trades=session_data.total_trades,
+            )
+            return merged
+
+    def get_paper_session(
+        self, session_id: str
+    ) -> PaperTradingSession | None:
+        """Load a persisted paper trading session by ID.
+
+        Called on engine startup to restore state from the last save point.
+
+        Args:
+            session_id: The session key (e.g. "paper_BTF_BTCUSDT").
+
+        Returns:
+            PaperTradingSession if found, None if this is a fresh start.
+        """
+        with self.session() as db:
+            stmt = select(PaperTradingSession).where(
+                PaperTradingSession.session_id == session_id
+            )
+            result = db.scalars(stmt).first()
+            if result:
+                db.expunge(result)
+                self.logger.info(
+                    "paper_session_loaded",
+                    session_id=session_id,
+                    total_trades=result.total_trades,
+                    cash=result.cash,
+                )
+            return result

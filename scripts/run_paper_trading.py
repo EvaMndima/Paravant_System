@@ -37,7 +37,9 @@ from src.core.strategy.backtest.types import BacktestConfig
 from src.core.strategy.factory import SignalGeneratorFactory
 from src.core.strategy.paper.engine import PaperTradingEngine
 from src.core.strategy.paper.types import PaperTradingMode
+from src.data.database import init_db
 from src.data.market_data import MarketDataFetcher
+from src.data.store import DataStore
 from src.utils.logging import get_logger
 
 logger = get_logger(__name__)
@@ -142,6 +144,7 @@ def build_engines(
     factory: SignalGeneratorFactory,
     series_provider: Any,
     config: BacktestConfig,
+    store: DataStore,
     lite: bool = False,
 ) -> list[PaperTradingEngine]:
     """Create PaperTradingEngine instances for all strategy-symbol pairs.
@@ -177,6 +180,7 @@ def build_engines(
                 series_provider=series_provider,
                 mode=PaperTradingMode.LIVE,
                 config=config,
+                store=store,
             )
             engines.append(engine)
 
@@ -417,9 +421,13 @@ async def main(lite: bool = False) -> None:
     print(f"Started: {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S')} UTC")
     print("=" * 60)
 
+    # Initialize database (creates tables if they don't exist, idempotent)
+    init_db()
+
     # Initialize components
     fetcher = MarketDataFetcher()
     factory = SignalGeneratorFactory()
+    store = DataStore()
 
     config = BacktestConfig(
         initial_capital=10_000.0,
@@ -446,7 +454,7 @@ async def main(lite: bool = False) -> None:
             return None
 
     # Build engines
-    engines = build_engines(factory, series_provider, config, lite=lite)
+    engines = build_engines(factory, series_provider, config, store, lite=lite)
     print(f"Created {len(engines)} paper trading sessions")
 
     for engine in engines:

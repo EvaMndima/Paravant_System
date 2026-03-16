@@ -17,13 +17,16 @@ from typing import Any
 
 from src.core.exceptions import PaperTradingError
 from src.core.strategy.backtest.metrics import BacktestMetricsCalculator
-from src.core.strategy.backtest.portfolio import PortfolioState
+from src.core.strategy.backtest.portfolio import OpenPosition, PortfolioState
 from src.core.strategy.backtest.trader import SimulatedTrader
-from src.core.strategy.backtest.types import BacktestConfig
+from src.core.strategy.backtest.types import BacktestConfig, EquityPoint, TradeRecord
 from src.core.strategy.factory import SignalGeneratorFactory
 from src.core.strategy.paper.types import PaperTradingMode, PaperTradingStatus
 from src.data.market_data import OHLCVSeries
 from src.data.models import Strategy
+from src.data.models.paper_session import PaperTradingSession
+from src.data.models.signal import SignalDirection
+from src.data.store import DataStore
 from src.utils.logging import get_logger
 
 logger = get_logger(__name__)
@@ -70,6 +73,7 @@ class PaperTradingEngine:
         series_provider: SeriesProvider,
         mode: PaperTradingMode,
         config: BacktestConfig | None = None,
+        store: DataStore | None = None,
     ) -> None:
         """Initialize paper trading engine.
 
@@ -79,12 +83,15 @@ class PaperTradingEngine:
             series_provider: Async callable to fetch OHLCV data.
             mode: Paper trading mode (SIMULATED or LIVE).
             config: Trading configuration. Uses defaults if None.
+            store: Optional DataStore for session state persistence.
+                   When provided, state survives container restarts.
         """
         self._strategy = strategy
         self._factory = signal_generator_factory
         self._series_provider = series_provider
         self._mode = mode
         self._config = config or BacktestConfig()
+        self._store = store
 
         self._portfolio = PortfolioState(self._config.initial_capital)
         self._trader = SimulatedTrader()
@@ -341,6 +348,149 @@ class PaperTradingEngine:
             num_trades=len(self._portfolio.trade_log),
         )
 
+    def _load_state(self) -> None:
+        """Restore portfolio state from a persisted DB snapshot.
+
+        Called once at the start of _run_live(). If no snapshot exists
+        (first run or store not configured), the portfolio starts fresh.
+        Silently skips on any error so a corrupted snapshot never blocks startup.
+        """
+        if self._store is None:
+            return
+
+        try:
+            saved = self._store.get_paper_session(self._strategy.id)
+        except Exception as exc:
+            logger.warning(
+                "paper_state_load_failed",
+                strategy_id=self._strategy.id,
+                error=str(exc),
+            )
+            return
+
+        if saved is None:
+            return
+
+        # Restore cash and started_at
+        self._portfolio.cash = saved.cash
+        self._started_at = saved.started_at
+
+        # Restore open position if one was saved
+        if saved.position_data:
+            p = saved.position_data
+            try:
+                self._portfolio._position = OpenPosition(
+                    symbol=p["symbol"],
+                    direction=SignalDirection(p["direction"]),
+                    quantity=p["quantity"],
+                    entry_price=p["entry_price"],
+                    entry_commission=p["entry_commission"],
+                    entry_slippage=p["entry_slippage"],
+                    entry_time=datetime.fromisoformat(p["entry_time"]),
+                )
+            except Exception as exc:
+                logger.warning(
+                    "paper_state_position_restore_failed",
+                    strategy_id=self._strategy.id,
+                    error=str(exc),
+                )
+
+        # Restore completed trade log
+        restored_trades: list[TradeRecord] = []
+        for t in saved.trade_log:
+            try:
+                restored_trades.append(TradeRecord(
+                    entry_time=datetime.fromisoformat(t["entry_time"]),
+                    exit_time=datetime.fromisoformat(t["exit_time"]),
+                    symbol=t["symbol"],
+                    direction=SignalDirection(t["direction"]),
+                    entry_price=t["entry_price"],
+                    exit_price=t["exit_price"],
+                    quantity=t["quantity"],
+                    entry_commission=t["entry_commission"],
+                    exit_commission=t["exit_commission"],
+                    slippage_cost=t["slippage_cost"],
+                    realized_pnl=t["realized_pnl"],
+                    return_pct=t["return_pct"],
+                ))
+            except Exception:
+                pass  # Skip malformed records — don't lose the rest
+        self._portfolio._trade_log = restored_trades
+
+        # Restore equity curve (last 500 points)
+        restored_curve: list[EquityPoint] = []
+        for e in saved.equity_curve:
+            try:
+                restored_curve.append(EquityPoint(
+                    timestamp=datetime.fromisoformat(e["timestamp"]),
+                    equity=e["equity"],
+                    cash=e["cash"],
+                    position_value=e["position_value"],
+                ))
+            except Exception:
+                pass
+        self._portfolio.equity_curve = restored_curve
+
+        logger.info(
+            "paper_state_restored",
+            strategy_id=self._strategy.id,
+            cash=saved.cash,
+            trades=len(restored_trades),
+            equity_points=len(restored_curve),
+            has_position=saved.position_data is not None,
+        )
+
+    def _save_state(self) -> None:
+        """Persist current portfolio state to the DB.
+
+        Called after every poll cycle. Silently skips on any error so a
+        DB write failure never crashes the trading loop.
+        Caps equity_curve at 500 points to keep the row bounded.
+        """
+        if self._store is None:
+            return
+
+        try:
+            # Serialize open position if any
+            position_data: dict[str, Any] | None = None
+            if self._portfolio.has_position() and self._portfolio.position is not None:
+                pos = self._portfolio.position
+                position_data = {
+                    "symbol": pos.symbol,
+                    "direction": pos.direction.value,
+                    "quantity": pos.quantity,
+                    "entry_price": pos.entry_price,
+                    "entry_commission": pos.entry_commission,
+                    "entry_slippage": pos.entry_slippage,
+                    "entry_time": pos.entry_time.isoformat(),
+                }
+
+            # Cap equity curve at 500 most recent points
+            curve_slice = self._portfolio.equity_curve[-500:]
+
+            symbol = self._strategy.symbols[0] if self._strategy.symbols else ""
+            template_id = getattr(self._strategy, "template_id", "")
+
+            session_record = PaperTradingSession(
+                session_id=self._strategy.id,
+                template_id=template_id,
+                symbol=symbol,
+                initial_capital=self._config.initial_capital,
+                cash=self._portfolio.cash,
+                position_data=position_data,
+                trade_log=[t.to_dict() for t in self._portfolio.trade_log],
+                equity_curve=[p.to_dict() for p in curve_slice],
+                started_at=self._started_at or datetime.now(timezone.utc),
+                total_trades=len(self._portfolio.trade_log),
+            )
+            self._store.upsert_paper_session(session_record)
+        except Exception as exc:
+            logger.warning(
+                "paper_state_save_failed",
+                strategy_id=self._strategy.id,
+                error=str(exc),
+            )
+
     async def _run_live(self) -> None:
         """Run live paper trading with polling loop.
 
@@ -350,6 +500,9 @@ class PaperTradingEngine:
         """
         symbol = self._strategy.symbols[0] if self._strategy.symbols else "BTCUSDT"
         min_bars = self._generator.min_bars_required
+
+        # Restore state from last save point (survives container restarts)
+        self._load_state()
 
         logger.info(
             "live_paper_trading_started",
@@ -374,6 +527,8 @@ class PaperTradingEngine:
                 else:
                     # Process the latest bar
                     self._process_live_bar(series)
+                    # Persist state so restarts don't lose progress
+                    self._save_state()
 
             except PaperTradingError:
                 raise

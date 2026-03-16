@@ -5,3 +5,14 @@ dockerfilePath = "Dockerfile"
 [deploy]
 startCommand = "python -m scripts.run_paper_trading"
 restartPolicyType = "always"
+
+# IMPORTANT: Add a Railway persistent volume mounted at /app/data
+# so the SQLite database (data/trading.db) survives redeploys.
+#
+# How to add it (one-time setup, Railway dashboard):
+#   1. Click the "paper" service
+#   2. Settings -> Volumes -> Add Volume
+#   3. Mount path: /app/data
+#   4. Name: paravant-data
+#
+# Without this volume, state resets on every deploy.
