@@ -76,6 +76,9 @@ BINANCE_MIN_NOTIONAL = 5.0
 # Polling interval in seconds (matches paper trading engine)
 POLLING_INTERVAL = 60
 
+# Hourly summary interval in seconds
+HOURLY_INTERVAL = 3600
+
 # State file path (must be on a Railway persistent volume)
 STATE_FILE = Path(os.getenv("LIVE_STATE_FILE", "/app/data/live_state.json"))
 
@@ -316,14 +319,25 @@ async def main() -> None:
             logger.warning("live_telegram_failed", error=str(exc))
 
     # Startup alert
+    mode_label = "TESTNET" if testnet else "REAL MONEY"
+    pos_detail = "FLAT (no position)"
+    if state.get("in_position"):
+        pos_detail = (
+            f"IN {state.get('side', '?')} @ ${state.get('entry_price', 0):,.2f} "
+            f"(qty: {state.get('quantity', 0):.6f})"
+        )
     await send_alert(
-        title="Live Trading Started",
+        title=f"Live Trading Started [{mode_label}]",
         message=(
             f"Strategy: {LIVE_TEMPLATE}\n"
             f"Symbol: {LIVE_SYMBOL}\n"
             f"Capital: ${LIVE_CAPITAL:.2f}\n"
-            f"Testnet: {testnet}\n"
-            f"In Position: {state.get('in_position', False)}"
+            f"Per Trade: ${LIVE_CAPITAL * POSITION_SIZE_FRACTION:.2f} "
+            f"({POSITION_SIZE_FRACTION:.0%})\n"
+            f"Mode: {mode_label}\n"
+            f"Position: {pos_detail}\n"
+            f"Realized PnL: ${state.get('realized_pnl', 0):+.2f}\n"
+            f"Completed Trades: {state.get('total_trades', 0)}"
         ),
     )
 
@@ -402,13 +416,25 @@ async def main() -> None:
                             state["quantity"] = 0.0
                             save_state(state)
 
+                            hold_time = ""
+                            if state.get("entry_time"):
+                                try:
+                                    entry_dt = datetime.fromisoformat(state["entry_time"])
+                                    hold_hrs = (datetime.now(timezone.utc) - entry_dt).total_seconds() / 3600
+                                    hold_time = f"\nHold Time: {hold_hrs:.1f} hours"
+                                except (ValueError, TypeError):
+                                    pass
+                            ret_pct = (pnl / (entry_price * qty)) * 100 if entry_price * qty > 0 else 0
+
                             await send_alert(
-                                title=f"Live Trade Closed: {LIVE_SYMBOL}",
+                                title=f"TRADE CLOSED: {LIVE_SYMBOL}",
                                 message=(
                                     f"Direction: {current_side}\n"
-                                    f"Entry: ${entry_price:.2f} -> Exit: ${current_price:.2f}\n"
-                                    f"Est. PnL: ${pnl:+.2f}\n"
-                                    f"Total Realized: ${state['realized_pnl']:+.2f}"
+                                    f"Entry: ${entry_price:,.2f} -> Exit: ${current_price:,.2f}\n"
+                                    f"PnL: ${pnl:+.2f} ({ret_pct:+.1f}%){hold_time}\n"
+                                    f"---\n"
+                                    f"Total Realized: ${state['realized_pnl']:+.2f}\n"
+                                    f"Completed Trades: {state['total_trades']}"
                                 ),
                             )
 
@@ -431,29 +457,73 @@ async def main() -> None:
                                 save_state(state)
 
                                 await send_alert(
-                                    title=f"Live Trade Entered: {LIVE_SYMBOL}",
+                                    title=f"TRADE OPENED: {LIVE_SYMBOL}",
                                     message=(
                                         f"Direction: {sig_dir}\n"
-                                        f"Entry: ${current_price:.2f}\n"
+                                        f"Entry Price: ${current_price:,.2f}\n"
                                         f"Quantity: {qty:.6f}\n"
-                                        f"Notional: ${qty * current_price:.2f}"
+                                        f"Notional: ${qty * current_price:.2f}\n"
+                                        f"Risk (~ATR stop): ~${qty * current_price * 0.15:.2f} max\n"
+                                        f"Signal Strength: {signal.strength:.2f}"
                                     ),
                                 )
 
-                # Periodic status print (every 12 polls = ~12 minutes)
+                # Periodic console log (every 12 polls = ~12 minutes)
                 if poll_count % 12 == 0:
                     pos_str = (
-                        f"IN {state['side']} @ ${state.get('entry_price', 0):.2f}"
+                        f"IN {state['side']} @ ${state.get('entry_price', 0):,.2f}"
                         if state.get("in_position")
                         else "FLAT"
                     )
                     print(
                         f"[{datetime.now(timezone.utc).strftime('%H:%M:%S')} UTC] "
-                        f"Poll #{poll_count} | {LIVE_SYMBOL} ${current_price:.2f} | "
+                        f"Poll #{poll_count} | {LIVE_SYMBOL} ${current_price:,.2f} | "
                         f"{pos_str} | "
                         f"Realized: ${state.get('realized_pnl', 0):+.2f} | "
                         f"Trades: {state.get('total_trades', 0)}",
                         flush=True,
+                    )
+
+                # Hourly Telegram summary (every 60 polls = ~60 minutes)
+                if poll_count % 60 == 0:
+                    now_utc = datetime.now(timezone.utc)
+                    pos_summary = "FLAT (no open position)"
+                    unrealized = 0.0
+                    if state.get("in_position"):
+                        entry_p = state.get("entry_price", 0)
+                        qty_held = state.get("quantity", 0)
+                        side_held = state.get("side", "?")
+                        if side_held == "LONG":
+                            unrealized = (current_price - entry_p) * qty_held
+                        else:
+                            unrealized = (entry_p - current_price) * qty_held
+                        hold_h = ""
+                        if state.get("entry_time"):
+                            try:
+                                e_dt = datetime.fromisoformat(state["entry_time"])
+                                hold_h = f" ({(now_utc - e_dt).total_seconds() / 3600:.1f}h)"
+                            except (ValueError, TypeError):
+                                pass
+                        pos_summary = (
+                            f"{side_held} @ ${entry_p:,.2f}{hold_h}\n"
+                            f"Current: ${current_price:,.2f}\n"
+                            f"Unrealized: ${unrealized:+.2f}"
+                        )
+
+                    total_pnl = state.get("realized_pnl", 0) + unrealized
+
+                    await send_alert(
+                        title=f"Hourly Update: {LIVE_SYMBOL}",
+                        message=(
+                            f"Price: ${current_price:,.2f}\n"
+                            f"Position: {pos_summary}\n"
+                            f"---\n"
+                            f"Realized PnL: ${state.get('realized_pnl', 0):+.2f}\n"
+                            f"Total PnL: ${total_pnl:+.2f}\n"
+                            f"Completed Trades: {state.get('total_trades', 0)}\n"
+                            f"Capital: ${LIVE_CAPITAL:.2f}\n"
+                            f"Time: {now_utc.strftime('%Y-%m-%d %H:%M')} UTC"
+                        ),
                     )
 
         except Exception as exc:
@@ -471,11 +541,18 @@ async def main() -> None:
         except asyncio.TimeoutError:
             continue
 
-    # Shutdown
+    # Shutdown summary
+    pos_at_shutdown = "FLAT"
+    if state.get("in_position"):
+        pos_at_shutdown = (
+            f"IN {state.get('side', '?')} @ ${state.get('entry_price', 0):,.2f} "
+            f"(qty: {state.get('quantity', 0):.6f})"
+        )
     summary = (
-        f"Total Trades: {state.get('total_trades', 0)}\n"
+        f"Position: {pos_at_shutdown}\n"
+        f"Completed Trades: {state.get('total_trades', 0)}\n"
         f"Realized PnL: ${state.get('realized_pnl', 0):+.2f}\n"
-        f"In Position: {state.get('in_position', False)}"
+        f"Capital: ${LIVE_CAPITAL:.2f}"
     )
     print(f"\n{summary}")
     await send_alert(title="Live Trading Stopped", message=summary)
