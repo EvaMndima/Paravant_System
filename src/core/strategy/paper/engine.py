@@ -35,8 +35,10 @@ logger = get_logger(__name__)
 # (symbol, lookback_bars) -> OHLCVSeries | None
 SeriesProvider = Callable[[str, int], Awaitable[OHLCVSeries | None]]
 
-# Default polling interval for live mode (seconds)
-LIVE_POLLING_INTERVAL = 60
+# Default polling interval for live mode (seconds).
+# 900s (15 min) is optimal for 1H-candle strategies: new data appears
+# once per hour, so polling every minute wastes API calls and CPU.
+LIVE_POLLING_INTERVAL = 900
 
 # Default number of days for simulated mode
 SIMULATED_DAYS = 21

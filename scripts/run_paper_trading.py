@@ -130,9 +130,9 @@ LITE_SYMBOLS: dict[str, list[str]] = {
 }
 
 # Status report interval (seconds)
-STATUS_INTERVAL = 300  # 5 minutes
+STATUS_INTERVAL = 900  # 15 minutes (aligned with polling interval)
 # Telegram trade check interval (seconds)
-TRADE_CHECK_INTERVAL = 120  # 2 minutes
+TRADE_CHECK_INTERVAL = 900  # 15 minutes (aligned with polling interval)
 
 
 # ---------------------------------------------------------------------------
