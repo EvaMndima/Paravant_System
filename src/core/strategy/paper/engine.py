@@ -202,6 +202,17 @@ class PaperTradingEngine:
             if self._config.initial_capital > 0:
                 current_pnl_pct = (current_pnl / self._config.initial_capital) * 100.0
 
+        # Realized PnL = sum of all closed trade records
+        realized_pnl = sum(t.realized_pnl for t in self._portfolio.trade_log)
+        # Unrealized PnL = mark-to-market equity minus realized gains
+        unrealized_pnl = current_pnl - realized_pnl
+
+        # Open position metadata for display
+        has_open_position = self._portfolio.has_position()
+        open_position_direction: str | None = None
+        if has_open_position and self._portfolio.position is not None:
+            open_position_direction = self._portfolio.position.direction.value
+
         days_elapsed = 0.0
         if self._started_at is not None:
             reference = self._stopped_at or datetime.now(timezone.utc)
@@ -219,6 +230,10 @@ class PaperTradingEngine:
             current_pnl=current_pnl,
             current_pnl_pct=current_pnl_pct,
             num_trades=len(self._portfolio.trade_log),
+            unrealized_pnl=unrealized_pnl,
+            realized_pnl=realized_pnl,
+            has_open_position=has_open_position,
+            open_position_direction=open_position_direction,
             days_elapsed=days_elapsed,
         )
 

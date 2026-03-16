@@ -40,9 +40,13 @@ class PaperTradingStatus:
         stopped_at: Timezone-aware UTC stop timestamp (None if running).
         current_equity: Current portfolio equity value.
         initial_capital: Starting portfolio capital.
-        current_pnl: Current cumulative P&L.
+        current_pnl: Current cumulative P&L (realized + unrealized).
         current_pnl_pct: Current P&L as percentage of initial capital.
-        num_trades: Number of completed trades so far.
+        num_trades: Number of completed (closed) trades so far.
+        unrealized_pnl: P&L from currently open positions (not yet closed).
+        realized_pnl: P&L from completed trades only.
+        has_open_position: Whether a position is currently open.
+        open_position_direction: Direction of open position ("LONG"/"SHORT"/None).
         days_elapsed: Calendar days since start.
         validation_passed: Whether validation criteria are met.
         validation_errors: List of validation failures (empty if passed).
@@ -59,6 +63,10 @@ class PaperTradingStatus:
     current_pnl: float = 0.0
     current_pnl_pct: float = 0.0
     num_trades: int = 0
+    unrealized_pnl: float = 0.0
+    realized_pnl: float = 0.0
+    has_open_position: bool = False
+    open_position_direction: str | None = None
     days_elapsed: float = 0.0
     validation_passed: bool = False
     validation_errors: list[str] = field(default_factory=list)
@@ -81,6 +89,10 @@ class PaperTradingStatus:
             "current_pnl": round(self.current_pnl, 4),
             "current_pnl_pct": round(self.current_pnl_pct, 4),
             "num_trades": self.num_trades,
+            "unrealized_pnl": round(self.unrealized_pnl, 4),
+            "realized_pnl": round(self.realized_pnl, 4),
+            "has_open_position": self.has_open_position,
+            "open_position_direction": self.open_position_direction,
             "days_elapsed": round(self.days_elapsed, 2),
             "validation_passed": self.validation_passed,
             "validation_errors": self.validation_errors,

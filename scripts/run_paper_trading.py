@@ -218,26 +218,31 @@ async def status_reporter(
         if not running:
             continue
 
-        total_pnl = 0.0
-        total_trades = 0
+        total_realized = 0.0
+        total_unrealized = 0.0
+        total_completed = 0
+        total_open = 0
         lines = []
         for engine in engines:
             status = engine.get_status()
-            total_pnl += status.current_pnl
-            total_trades += status.num_trades
-            if status.num_trades > 0:
+            total_realized += status.realized_pnl
+            total_unrealized += status.unrealized_pnl
+            total_completed += status.num_trades
+            if status.has_open_position:
+                total_open += 1
                 lines.append(
                     f"  {status.strategy_id}: "
-                    f"${status.current_equity:,.0f} "
-                    f"({status.current_pnl_pct:+.1f}%) "
-                    f"{status.num_trades}T"
+                    f"IN {(status.open_position_direction or '?').upper()} "
+                    f"unrealized ${status.unrealized_pnl:+.0f}"
                 )
 
         print(
             f"\n[{datetime.now(timezone.utc).strftime('%H:%M:%S')} UTC] "
             f"Sessions: {len(running)}/{len(engines)} | "
-            f"Trades: {total_trades} | "
-            f"Total PnL: ${total_pnl:+,.0f}",
+            f"Open: {total_open} | "
+            f"Closed: {total_completed} | "
+            f"Unrealized: ${total_unrealized:+,.0f} | "
+            f"Realized: ${total_realized:+,.0f}",
             flush=True,
         )
         for line in lines:
@@ -341,31 +346,44 @@ async def hourly_summary(
         except asyncio.TimeoutError:
             pass
 
-        total_trades = 0
-        total_pnl = 0.0
-        strategy_lines = []
+        total_completed = 0
+        total_open = 0
+        total_realized = 0.0
+        total_unrealized = 0.0
+        active_lines = []
+
         for engine in engines:
             status = engine.get_status()
-            total_trades += status.num_trades
-            total_pnl += status.current_pnl
-            if status.num_trades > 0:
-                strategy_lines.append(
-                    f"{status.strategy_id}: "
-                    f"${status.current_pnl:+.0f} "
-                    f"({status.current_pnl_pct:+.1f}%) "
-                    f"{status.num_trades}T"
+            total_completed += status.num_trades
+            total_realized += status.realized_pnl
+            if status.has_open_position:
+                total_open += 1
+                total_unrealized += status.unrealized_pnl
+                direction = status.open_position_direction or "?"
+                active_lines.append(
+                    f"  {status.strategy_id}: "
+                    f"IN {direction.upper()} "
+                    f"unrealized ${status.unrealized_pnl:+.0f}"
+                )
+            elif status.num_trades > 0:
+                active_lines.append(
+                    f"  {status.strategy_id}: "
+                    f"{status.num_trades}T closed "
+                    f"realized ${status.realized_pnl:+.0f}"
                 )
 
         running = sum(1 for e in engines if e.is_running)
         msg = (
             f"Sessions: {running}/{len(engines)}\n"
-            f"Total Trades: {total_trades}\n"
-            f"Total PnL: ${total_pnl:+,.0f}\n"
+            f"Open Positions: {total_open}\n"
+            f"Completed Trades: {total_completed}\n"
+            f"Unrealized PnL: ${total_unrealized:+,.0f}\n"
+            f"Realized PnL: ${total_realized:+,.0f}\n"
         )
-        if strategy_lines:
-            msg += "\n" + "\n".join(strategy_lines)
+        if active_lines:
+            msg += "\nActive:\n" + "\n".join(active_lines)
         else:
-            msg += "\nNo trades yet."
+            msg += "\nNo open positions or completed trades yet."
 
         alert = Alert(
             level=AlertLevel.INFO,
