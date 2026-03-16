@@ -53,7 +53,10 @@ from src.core.alerting.manager import Alert, AlertLevel
 from src.core.strategy.backtest.types import BacktestConfig
 from src.core.strategy.factory import SignalGeneratorFactory
 from src.core.risk.types import OrderRequest
+from src.data.database import init_db
 from src.data.market_data import MarketDataFetcher
+from src.data.models.paper_session import PaperTradingSession
+from src.data.store import DataStore
 from src.utils.logging import get_logger
 
 logger = get_logger(__name__)
@@ -115,40 +118,133 @@ STRATEGY_PARAMS_LOOKUP: dict[str, dict[str, Any]] = {
 # ---------------------------------------------------------------------------
 
 
-def load_state() -> dict[str, Any]:
-    """Load live trading position state from disk.
+def _make_session_id() -> str:
+    """Build unique session key for this live config."""
+    return f"live_{LIVE_TEMPLATE}_{LIVE_SYMBOL}"
+
+
+def load_state(store: DataStore) -> dict[str, Any]:
+    """Load live trading state — tries SQLite first, then JSON backup.
 
     Returns:
         State dict with keys: in_position, side, entry_price, quantity,
-        entry_time. Returns empty (no position) dict if file does not exist.
+        entry_time, realized_pnl, total_trades, trade_history.
     """
+    empty: dict[str, Any] = {
+        "in_position": False, "symbol": LIVE_SYMBOL, "realized_pnl": 0.0,
+        "total_trades": 0, "trade_history": [],
+    }
+
+    # 1. Try SQLite (primary)
+    session_id = _make_session_id()
+    try:
+        row = store.get_paper_session(session_id)
+        if row is not None:
+            state: dict[str, Any] = {
+                "in_position": False,
+                "symbol": row.symbol,
+                "realized_pnl": row.initial_capital - row.cash
+                if row.position_data is None
+                else 0.0,
+                "total_trades": row.total_trades,
+                "trade_history": row.trade_log or [],
+            }
+            # Restore realized PnL from trade history
+            state["realized_pnl"] = sum(
+                t.get("realized_pnl", 0.0) for t in state["trade_history"]
+            )
+            # Restore open position
+            if row.position_data and row.position_data.get("in_position"):
+                state["in_position"] = True
+                state["side"] = row.position_data.get("side", "")
+                state["quantity"] = row.position_data.get("quantity", 0.0)
+                state["entry_price"] = row.position_data.get("entry_price", 0.0)
+                state["entry_time"] = row.position_data.get("entry_time", "")
+            logger.info(
+                "live_state_loaded_from_db",
+                session_id=session_id,
+                in_position=state["in_position"],
+                total_trades=state["total_trades"],
+                realized_pnl=state["realized_pnl"],
+            )
+            print(
+                f"State loaded from DATABASE: "
+                f"trades={state['total_trades']}, "
+                f"realized=${state['realized_pnl']:+.2f}, "
+                f"in_position={state['in_position']}"
+            )
+            return state
+    except Exception as exc:
+        logger.warning("live_state_db_load_failed", error=str(exc))
+
+    # 2. Fallback to JSON file
     if STATE_FILE.exists():
         try:
             data = json.loads(STATE_FILE.read_text())
             logger.info(
-                "live_state_loaded",
+                "live_state_loaded_from_json",
                 in_position=data.get("in_position", False),
                 symbol=data.get("symbol"),
-                side=data.get("side"),
+            )
+            print(
+                f"State loaded from JSON backup: "
+                f"trades={data.get('total_trades', 0)}, "
+                f"realized=${data.get('realized_pnl', 0):+.2f}"
             )
             return data
         except Exception as exc:
-            logger.warning("live_state_load_failed", error=str(exc))
-    return {"in_position": False, "symbol": LIVE_SYMBOL, "realized_pnl": 0.0,
-            "total_trades": 0}
+            logger.warning("live_state_json_load_failed", error=str(exc))
+
+    # 3. Fresh start
+    print("No previous state found — starting fresh.")
+    return empty
 
 
-def save_state(state: dict[str, Any]) -> None:
-    """Save live trading position state to disk.
+def save_state(state: dict[str, Any], store: DataStore) -> None:
+    """Save live trading state to SQLite (primary) + JSON (backup).
 
     Args:
         state: Current position state dict.
+        store: DataStore instance for SQLite persistence.
     """
+    session_id = _make_session_id()
+
+    # 1. Save to SQLite
+    try:
+        position_data: dict[str, Any] | None = None
+        if state.get("in_position"):
+            position_data = {
+                "in_position": True,
+                "side": state.get("side", ""),
+                "quantity": state.get("quantity", 0.0),
+                "entry_price": state.get("entry_price", 0.0),
+                "entry_time": state.get("entry_time", ""),
+            }
+
+        row = PaperTradingSession(
+            session_id=session_id,
+            template_id=LIVE_TEMPLATE,
+            symbol=LIVE_SYMBOL,
+            initial_capital=LIVE_CAPITAL,
+            cash=LIVE_CAPITAL - (
+                state.get("entry_price", 0) * state.get("quantity", 0)
+                if state.get("in_position") else 0
+            ),
+            position_data=position_data,
+            trade_log=state.get("trade_history", []),
+            equity_curve=[],
+            total_trades=state.get("total_trades", 0),
+        )
+        store.upsert_paper_session(row)
+    except Exception as exc:
+        logger.warning("live_state_db_save_failed", error=str(exc))
+
+    # 2. Backup to JSON
     try:
         STATE_FILE.parent.mkdir(parents=True, exist_ok=True)
         STATE_FILE.write_text(json.dumps(state, default=str, indent=2))
     except Exception as exc:
-        logger.warning("live_state_save_failed", error=str(exc))
+        logger.warning("live_state_json_save_failed", error=str(exc))
 
 
 # ---------------------------------------------------------------------------
@@ -304,6 +400,11 @@ async def main() -> None:
     # Initialize market data fetcher
     fetcher = MarketDataFetcher()
 
+    # Initialize database + DataStore (state persistence)
+    init_db()
+    store = DataStore()
+    print("Database initialized (SQLite at data/trading.db)")
+
     # Telegram setup
     telegram: TelegramChannel | None = None
     bot_token = os.getenv("TELEGRAM_BOT_TOKEN", "")
@@ -313,8 +414,8 @@ async def main() -> None:
 
     strategy_id = f"live_{LIVE_TEMPLATE}_{LIVE_SYMBOL}"
 
-    # Load persisted position state
-    state = load_state()
+    # Load persisted position state (SQLite first, JSON backup, then fresh)
+    state = load_state(store)
 
     async def send_alert(title: str, message: str, level: AlertLevel = AlertLevel.INFO) -> None:
         """Send a Telegram alert if configured."""
@@ -419,10 +520,23 @@ async def main() -> None:
                                 pnl = (entry_price - current_price) * qty
                             state["realized_pnl"] = state.get("realized_pnl", 0.0) + pnl
                             state["total_trades"] = state.get("total_trades", 0) + 1
+                            # Record completed trade in history
+                            if "trade_history" not in state:
+                                state["trade_history"] = []
+                            state["trade_history"].append({
+                                "direction": current_side,
+                                "symbol": LIVE_SYMBOL,
+                                "entry_price": entry_price,
+                                "exit_price": current_price,
+                                "quantity": qty,
+                                "realized_pnl": round(pnl, 4),
+                                "entry_time": state.get("entry_time", ""),
+                                "exit_time": datetime.now(timezone.utc).isoformat(),
+                            })
                             state["in_position"] = False
                             state["side"] = ""
                             state["quantity"] = 0.0
-                            save_state(state)
+                            save_state(state, store)
 
                             hold_time = ""
                             if state.get("entry_time"):
@@ -462,7 +576,7 @@ async def main() -> None:
                                 state["quantity"] = qty
                                 state["entry_price"] = current_price
                                 state["entry_time"] = datetime.now(timezone.utc).isoformat()
-                                save_state(state)
+                                save_state(state, store)
 
                                 await send_alert(
                                     title=f"TRADE OPENED: {LIVE_SYMBOL}",
@@ -572,4 +686,27 @@ async def main() -> None:
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    import time as _time
+
+    MAX_CRASH_RESTARTS = 5
+    CRASH_COOLDOWN = 60  # seconds between restarts
+
+    for attempt in range(1, MAX_CRASH_RESTARTS + 1):
+        try:
+            asyncio.run(main())
+            break  # Clean exit (SIGINT/SIGTERM)
+        except KeyboardInterrupt:
+            print("\nKeyboard interrupt — exiting.")
+            break
+        except Exception as fatal:
+            print(
+                f"\nFATAL ERROR (attempt {attempt}/{MAX_CRASH_RESTARTS}): {fatal}",
+                flush=True,
+            )
+            logger.error("live_fatal_crash", error=str(fatal), attempt=attempt)
+            if attempt < MAX_CRASH_RESTARTS:
+                print(f"Restarting in {CRASH_COOLDOWN}s...", flush=True)
+                _time.sleep(CRASH_COOLDOWN)
+            else:
+                print("Max restarts reached — stopping to prevent Telegram spam.")
+                sys.exit(1)
