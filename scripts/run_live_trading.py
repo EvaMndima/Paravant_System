@@ -255,6 +255,14 @@ async def main() -> None:
     print(f"Capital:   ${LIVE_CAPITAL:.2f} USDT")
     print(f"Testnet:   {os.getenv('BINANCE_TESTNET', 'true')}")
     print(f"Started:   {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S')} UTC")
+
+    # Print server IP (useful for Binance IP whitelisting)
+    try:
+        import urllib.request
+        ext_ip = urllib.request.urlopen("https://api.ipify.org", timeout=5).read().decode()
+        print(f"Server IP: {ext_ip}  <-- add this to Binance API IP whitelist")
+    except Exception:
+        print("Server IP: could not determine")
     print("=" * 60)
 
     # Validate capital is enough to clear minimum notional
