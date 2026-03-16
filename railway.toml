@@ -3,8 +3,8 @@ builder = "dockerfile"
 dockerfilePath = "Dockerfile"
 
 [deploy]
-startCommand = "python -m scripts.run_live_trading"
-restartPolicyType = "always"
+startCommand = "python -m scripts.run_paper_trading"
+restartPolicyType = "on_failure"
 
 # IMPORTANT: Add a Railway persistent volume mounted at /app/data
 # so the SQLite database (data/trading.db) survives redeploys.

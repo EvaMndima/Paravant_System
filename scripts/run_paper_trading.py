@@ -435,7 +435,7 @@ async def hourly_summary(
             level=AlertLevel.INFO,
             title="Paper Trading Hourly Summary",
             message=msg,
-            metadata={"sessions": running, "trades": total_trades},
+            metadata={"sessions": running, "trades": total_completed},
         )
         try:
             await telegram.send(alert)
@@ -624,6 +624,8 @@ async def main(lite: bool = False) -> None:
 
 
 if __name__ == "__main__":
+    import time as _time
+
     parser = argparse.ArgumentParser(description="PARAVANT Paper Trading Runner")
     parser.add_argument(
         "--lite",
@@ -632,4 +634,28 @@ if __name__ == "__main__":
     )
     args = parser.parse_args()
 
-    asyncio.run(main(lite=args.lite))
+    # Crash-loop protection: max retries with cooldown to prevent
+    # Railway restart spam (Telegram alert flood on repeated crashes).
+    MAX_CRASH_RESTARTS = 5
+    CRASH_COOLDOWN = 60
+
+    for attempt in range(1, MAX_CRASH_RESTARTS + 1):
+        try:
+            asyncio.run(main(lite=args.lite))
+            break  # Clean exit
+        except KeyboardInterrupt:
+            break
+        except Exception as fatal:
+            print(
+                f"FATAL (attempt {attempt}/{MAX_CRASH_RESTARTS}): {fatal}",
+                flush=True,
+            )
+            if attempt < MAX_CRASH_RESTARTS:
+                print(
+                    f"Restarting in {CRASH_COOLDOWN}s...",
+                    flush=True,
+                )
+                _time.sleep(CRASH_COOLDOWN)
+            else:
+                print("Max restarts reached. Exiting.", flush=True)
+                sys.exit(1)
