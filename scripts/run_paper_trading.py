@@ -1,10 +1,23 @@
-"""Paper trading runner for PARAVANT Tier 1 promoted strategies.
+"""Paper trading runner for PARAVANT — regime-aware strategy portfolio.
 
-Runs promoted strategies (BTF, ICVP, CMF, RSI_BB v1.2) on live market data
-via Binance 1H polling. Each strategy-symbol pair runs as an independent
-paper trading session with $10,000 simulated capital.
+Regime management is automated via RegimeDetector (BTC daily EMA(50)/EMA(200))
+and RegimeRouter. Bull strategies run when EMA(50) > EMA(200); bear strategies
+run when EMA(50) < EMA(200). ICVP (ichimoku_cloud_trend) runs in all regimes
+as it is self-directing via cloud position.
 
-Sends Telegram alerts on new trades and hourly status updates (if configured).
+Regime change requires 2 consecutive daily closes on the new macro side to
+confirm, preventing whipsaw switches on single-candle fakeouts.
+
+Active strategy universe:
+    Bull regime:
+        MACD_PB  — DOGE/AVAX         (SUPERVISED-validated, 2 passes)
+        BTP      — BTC/ETH/BNB       (quality-validated, observing Gate 2)
+    Bear regime:
+        BTF      — all 8 symbols     (validated bear, 100% WR in Q1 2026)
+        CMF      — SOL/XRP/AVAX/ETH  (validated bear, highest conviction)
+        RSI_BB   — ETH/BNB/DOGE      (mean-reversion, underperforms strong bull)
+    All regimes:
+        ICVP     — all 8 symbols     (regime-agnostic via cloud direction)
 
 Usage:
     PYTHONPATH=. .venv/Scripts/python scripts/run_paper_trading.py
@@ -19,6 +32,8 @@ Environment:
 
 Decision: DEC-2026-02-08-003 - Timezone-aware UTC timestamps
 Decision: DEC-2026-02-08-008 - Structured logging
+Decision: DEC-2026-05-04-001 - Dual-EMA composite regime detection
+Decision: DEC-2026-05-04-002 - 2-consecutive-close confirmation rule
 """
 from __future__ import annotations
 
@@ -27,6 +42,7 @@ import asyncio
 import os
 import signal
 import sys
+from collections.abc import Callable
 from datetime import datetime, timezone
 from types import SimpleNamespace
 from typing import Any
@@ -37,6 +53,7 @@ from src.core.strategy.backtest.types import BacktestConfig
 from src.core.strategy.factory import SignalGeneratorFactory
 from src.core.strategy.paper.engine import PaperTradingEngine
 from src.core.strategy.paper.types import PaperTradingMode
+from src.core.strategy.regime import RegimeDetector, RegimeRouter, RegimeState
 from src.data.database import init_db
 from src.data.market_data import MarketDataFetcher
 from src.data.store import DataStore
@@ -45,12 +62,68 @@ from src.utils.logging import get_logger
 logger = get_logger(__name__)
 
 # ---------------------------------------------------------------------------
-# Strategy Configuration — Tier 1 promoted strategies
+# Strategy Configuration — Bull Regime
+#
+# These run when BTC EMA(50) > EMA(200) daily (2 consecutive closes confirmed).
+# Decision: DEC-2026-05-04-001 / DEC-2026-05-04-002
 # ---------------------------------------------------------------------------
 
-STRATEGY_CONFIG: dict[str, dict[str, Any]] = {
+BULL_STRATEGY_CONFIG: dict[str, dict[str, Any]] = {
+    "macd_pullback": {
+        # SUPERVISED-validated: 2 passes (DOGE Sharpe=3.8/PF=1.60, AVAX Sharpe=2.1/PF=1.45)
+        # stop=2.5x ATR (sweep-validated, widened from 2.0), tol=0.5% pullback zone
+        "label": "MACD_PB",
+        "regime": "bull",
+        "symbols": ["DOGEUSDT", "AVAXUSDT"],
+        "params": {
+            "macd_fast": 12,
+            "macd_slow": 26,
+            "macd_signal": 9,
+            "pullback_ema_period": 21,
+            "atr_period": 14,
+            "atr_stop_multiplier": 2.5,
+            "risk_reward_ratio": 2.0,
+            "pullback_tolerance_pct": 0.5,
+        },
+    },
+    "bull_trend_pullback": {
+        # Quality-validated (90d): BTC PF=1.79/Sharpe=1.60, ETH PF=2.21/Sharpe=2.27,
+        # BNB PF=1.72/Sharpe=1.73. DD <2.5% on all three. Observing Gate 2 (40 trades).
+        # htf_ema=150 and rsi_high=60 are sweep-optimal from 272-run parameter scan.
+        "label": "BTP",
+        "regime": "bull",
+        "symbols": ["BTCUSDT", "ETHUSDT", "BNBUSDT"],
+        "params": {
+            "htf_ema_period": 150,
+            "trend_ema_period": 50,
+            "rsi_period": 14,
+            "rsi_pullback_low": 30.0,
+            "rsi_pullback_high": 60.0,
+            "macd_fast": 12,
+            "macd_slow": 26,
+            "macd_signal": 9,
+            "atr_period": 14,
+            "atr_stop_multiplier": 2.0,
+            "risk_reward_ratio": 2.5,
+        },
+    },
+}
+
+# ---------------------------------------------------------------------------
+# Strategy Configuration — Bear Regime
+#
+# These run when BTC EMA(50) < EMA(200) daily (2 consecutive closes confirmed).
+# Decision: DEC-2026-05-04-001 / DEC-2026-05-04-002
+#
+# IMPORTANT: Do NOT run BTF in bull — caused -$2,323 paper loss in April 2026
+# when left active during a bull market.
+# ---------------------------------------------------------------------------
+
+BEAR_STRATEGY_CONFIG: dict[str, dict[str, Any]] = {
     "bear_trend_follower": {
+        # Validated bear: 100% WR, Sharpe 2.4-3.6 in Q1 2026 bear regime.
         "label": "BTF",
+        "regime": "bear",
         "symbols": [
             "BTCUSDT", "ETHUSDT", "BNBUSDT", "SOLUSDT",
             "XRPUSDT", "AVAXUSDT", "DOGEUSDT", "DOTUSDT",
@@ -67,26 +140,13 @@ STRATEGY_CONFIG: dict[str, dict[str, Any]] = {
             "supertrend_period": 10,
             "supertrend_multiplier": 3.0,
             "atr_period": 14,
-        },
-    },
-    "ichimoku_cloud_trend": {
-        "label": "ICVP",
-        "symbols": [
-            "BTCUSDT", "ETHUSDT", "BNBUSDT", "SOLUSDT",
-            "XRPUSDT", "AVAXUSDT", "DOGEUSDT", "DOTUSDT",
-        ],
-        "params": {
-            "tenkan_period": 20,
-            "kijun_period": 60,
-            "senkou_b_period": 120,
-            "displacement": 30,
-            "atr_period": 14,
-            "volume_period": 20,
-            "volume_threshold": 1.3,
+            "atr_stop_multiplier": 2.5,
         },
     },
     "cascading_momentum_filter": {
+        # Validated bear (SOL/XRP/AVAX/ETH). Highest conviction in bear downtrends.
         "label": "CMF",
+        "regime": "bear",
         "symbols": ["SOLUSDT", "XRPUSDT", "AVAXUSDT", "ETHUSDT"],
         "params": {
             "daily_st_period": 10,
@@ -104,7 +164,10 @@ STRATEGY_CONFIG: dict[str, dict[str, Any]] = {
         },
     },
     "rsi_bb_mean_reversion": {
+        # Mean-reversion: underperforms strong bull trends despite internal EMA(200) gate.
+        # Reactivate in bear or extended ranging/consolidation conditions.
         "label": "RSI_BB",
+        "regime": "bear",
         "symbols": ["ETHUSDT", "BNBUSDT", "DOGEUSDT"],
         "params": {
             "rsi_period": 14,
@@ -121,11 +184,53 @@ STRATEGY_CONFIG: dict[str, dict[str, Any]] = {
     },
 }
 
-# Lite mode: fewer sessions for local testing
+# ---------------------------------------------------------------------------
+# All-regime strategies (run regardless of bull/bear)
+# ---------------------------------------------------------------------------
+
+ALL_REGIME_CONFIG: dict[str, dict[str, Any]] = {
+    "ichimoku_cloud_trend": {
+        # Regime-agnostic: Ichimoku cloud determines direction internally.
+        # LONG above cloud, SHORT below — self-adjusts to bull and bear regimes.
+        "label": "ICVP",
+        "regime": "all",
+        "symbols": [
+            "BTCUSDT", "ETHUSDT", "BNBUSDT", "SOLUSDT",
+            "XRPUSDT", "AVAXUSDT", "DOGEUSDT", "DOTUSDT",
+        ],
+        "params": {
+            "tenkan_period": 20,
+            "kijun_period": 60,
+            "senkou_b_period": 120,
+            "displacement": 30,
+            "atr_period": 14,
+            "volume_period": 20,
+            "volume_threshold": 1.3,
+        },
+    },
+}
+
+# ---------------------------------------------------------------------------
+# Full configuration — merged view used by RegimeRouter
+# ---------------------------------------------------------------------------
+
+FULL_STRATEGY_CONFIG: dict[str, dict[str, Any]] = {
+    **BULL_STRATEGY_CONFIG,
+    **BEAR_STRATEGY_CONFIG,
+    **ALL_REGIME_CONFIG,
+}
+
+# Backward-compatibility aliases preserved for reference
+STRATEGY_CONFIG = BULL_STRATEGY_CONFIG  # active at time of last manual switch
+SUSPENDED_STRATEGY_CONFIG = BEAR_STRATEGY_CONFIG  # suspended shelf at that time
+
+# Lite mode: one session per strategy for local testing
 LITE_SYMBOLS: dict[str, list[str]] = {
-    "bear_trend_follower": ["BTCUSDT", "ETHUSDT"],
-    "ichimoku_cloud_trend": ["BTCUSDT", "ETHUSDT"],
-    "cascading_momentum_filter": ["ETHUSDT"],
+    "macd_pullback": ["DOGEUSDT"],
+    "bull_trend_pullback": ["BTCUSDT"],
+    "ichimoku_cloud_trend": ["BTCUSDT"],
+    "bear_trend_follower": ["BTCUSDT"],
+    "cascading_momentum_filter": ["SOLUSDT"],
     "rsi_bb_mean_reversion": ["ETHUSDT"],
 }
 
@@ -145,6 +250,7 @@ def build_engines(
     series_provider: Any,
     config: BacktestConfig,
     store: DataStore,
+    strategy_config: dict[str, dict[str, Any]],
     lite: bool = False,
 ) -> list[PaperTradingEngine]:
     """Create PaperTradingEngine instances for all strategy-symbol pairs.
@@ -153,6 +259,8 @@ def build_engines(
         factory: Signal generator factory.
         series_provider: Async callable for OHLCV data.
         config: Backtest/paper trading configuration.
+        store: DataStore for session persistence.
+        strategy_config: Subset of FULL_STRATEGY_CONFIG for the current regime.
         lite: If True, use reduced symbol set for testing.
 
     Returns:
@@ -160,7 +268,7 @@ def build_engines(
     """
     engines: list[PaperTradingEngine] = []
 
-    for template_id, cfg in STRATEGY_CONFIG.items():
+    for template_id, cfg in strategy_config.items():
         label = cfg["label"]
         symbols = LITE_SYMBOLS.get(template_id, []) if lite else cfg["symbols"]
         params = cfg["params"]
@@ -196,17 +304,22 @@ def build_engines(
 
 # ---------------------------------------------------------------------------
 # Monitoring Tasks
+#
+# All three tasks accept a Callable[[], list[PaperTradingEngine]] rather than
+# a static list so they automatically observe the correct engines after a
+# regime flip. They wait before first action (STATUS_INTERVAL / TRADE_CHECK_INTERVAL
+# / 3600s), so the router will always have engines by the time they check.
 # ---------------------------------------------------------------------------
 
 
 async def status_reporter(
-    engines: list[PaperTradingEngine],
+    get_engines: Callable[[], list[PaperTradingEngine]],
     stop_event: asyncio.Event,
 ) -> None:
     """Periodically log status of all running engines.
 
     Args:
-        engines: List of running engines.
+        get_engines: Callable returning the current list of active engines.
         stop_event: Signal to stop reporting.
     """
     while not stop_event.is_set():
@@ -218,6 +331,7 @@ async def status_reporter(
         except asyncio.TimeoutError:
             pass
 
+        engines = get_engines()
         running = [e for e in engines if e.is_running]
         if not running:
             continue
@@ -226,7 +340,7 @@ async def status_reporter(
         total_unrealized = 0.0
         total_completed = 0
         total_open = 0
-        lines = []
+        lines: list[str] = []
         for engine in engines:
             status = engine.get_status()
             total_realized += status.realized_pnl
@@ -254,27 +368,26 @@ async def status_reporter(
 
 
 async def trade_monitor(
-    engines: list[PaperTradingEngine],
+    get_engines: Callable[[], list[PaperTradingEngine]],
     telegram: TelegramChannel | None,
     stop_event: asyncio.Event,
 ) -> None:
     """Monitor engines for position entries AND trade exits, send Telegram alerts.
 
-    Tracks two state changes per engine:
-    - Position opened (was flat, now has_open_position) -> ENTRY alert
-    - Trade completed (num_trades incremented) -> EXIT alert with PnL
+    Tracks per-engine state lazily — tracking dicts are synced each iteration
+    so new engines added after a regime flip are picked up automatically.
 
     Args:
-        engines: List of running engines.
+        get_engines: Callable returning the current list of active engines.
         telegram: Telegram channel for alerts (or None to skip).
         stop_event: Signal to stop monitoring.
     """
     if telegram is None:
         return
 
-    # Track state per engine: trade count + whether position was open
-    last_counts: dict[str, int] = {e.strategy_id: 0 for e in engines}
-    had_position: dict[str, bool] = {e.strategy_id: False for e in engines}
+    # Lazy tracking: populated and synced on each iteration
+    last_counts: dict[str, int] = {}
+    had_position: dict[str, bool] = {}
 
     while not stop_event.is_set():
         try:
@@ -284,6 +397,15 @@ async def trade_monitor(
             break
         except asyncio.TimeoutError:
             pass
+
+        engines = get_engines()
+
+        # Sync tracking state: register any new engines (after regime flip)
+        for engine in engines:
+            sid = engine.strategy_id
+            if sid not in last_counts:
+                last_counts[sid] = 0
+                had_position[sid] = False
 
         for engine in engines:
             if not engine.is_running:
@@ -369,14 +491,14 @@ async def trade_monitor(
 
 
 async def hourly_summary(
-    engines: list[PaperTradingEngine],
+    get_engines: Callable[[], list[PaperTradingEngine]],
     telegram: TelegramChannel | None,
     stop_event: asyncio.Event,
 ) -> None:
     """Send hourly portfolio summary via Telegram.
 
     Args:
-        engines: List of running engines.
+        get_engines: Callable returning the current list of active engines.
         telegram: Telegram channel for alerts (or None to skip).
         stop_event: Signal to stop.
     """
@@ -392,11 +514,12 @@ async def hourly_summary(
         except asyncio.TimeoutError:
             pass
 
+        engines = get_engines()
         total_completed = 0
         total_open = 0
         total_realized = 0.0
         total_unrealized = 0.0
-        active_lines = []
+        active_lines: list[str] = []
 
         for engine in engines:
             status = engine.get_status()
@@ -449,21 +572,24 @@ async def hourly_summary(
 
 
 async def main(lite: bool = False) -> None:
-    """Main paper trading runner.
+    """Main paper trading runner — regime-aware.
 
-    Launches all Tier 1 strategies on approved symbols, monitors for trades,
-    and sends Telegram alerts. Runs until SIGINT/SIGTERM.
+    Creates a RegimeDetector + RegimeRouter which detect the current BTC regime
+    and start the appropriate strategy engines automatically. Monitoring tasks
+    call router.get_active_engines() dynamically so they observe the correct
+    sessions after any regime flip.
 
     Args:
-        lite: If True, use reduced symbol set (6 sessions vs 23).
+        lite: If True, use reduced symbol set (one symbol per strategy).
     """
     print("=" * 60)
     print("PARAVANT Paper Trading Runner")
-    print(f"Mode: {'LITE (6 sessions)' if lite else 'FULL (23 sessions)'}")
+    print(f"Mode: {'LITE' if lite else 'FULL'}  |  Regime: AUTO-DETECTED")
+    print(f"Universe: {len(FULL_STRATEGY_CONFIG)} strategies across all regimes")
     print(f"Started: {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S')} UTC")
     print("=" * 60)
 
-    # Initialize database (creates tables if they don't exist, idempotent)
+    # Initialize database (idempotent)
     init_db()
 
     # Initialize components
@@ -477,8 +603,7 @@ async def main(lite: bool = False) -> None:
         slippage_rate=0.0005,
     )
 
-    # Series provider: wraps MarketDataFetcher for the engine
-    async def series_provider(symbol: str, lookback_bars: int):
+    async def series_provider(symbol: str, lookback_bars: int) -> Any:
         """Fetch recent OHLCV bars for paper trading."""
         try:
             return await fetcher.fetch_ohlcv(
@@ -495,12 +620,14 @@ async def main(lite: bool = False) -> None:
             )
             return None
 
-    # Build engines
-    engines = build_engines(factory, series_provider, config, store, lite=lite)
-    print(f"Created {len(engines)} paper trading sessions")
-
-    for engine in engines:
-        print(f"  {engine.strategy_id}")
+    def engine_factory(template_ids: list[str]) -> list[PaperTradingEngine]:
+        """Build engines for the given template IDs from FULL_STRATEGY_CONFIG."""
+        subset = {
+            tid: cfg
+            for tid, cfg in FULL_STRATEGY_CONFIG.items()
+            if tid in template_ids
+        }
+        return build_engines(factory, series_provider, config, store, subset, lite=lite)
 
     # Telegram setup (optional)
     telegram: TelegramChannel | None = None
@@ -509,27 +636,8 @@ async def main(lite: bool = False) -> None:
     if bot_token and chat_id:
         telegram = TelegramChannel(bot_token=bot_token, chat_id=chat_id)
         print("Telegram alerts: ENABLED")
-
-        # Send startup alert
-        startup_alert = Alert(
-            level=AlertLevel.INFO,
-            title="Paper Trading Started",
-            message=(
-                f"Mode: {'LITE' if lite else 'FULL'}\n"
-                f"Sessions: {len(engines)}\n"
-                f"Capital: $10,000 per session\n"
-                f"Strategies: BTF, ICVP, CMF, RSI_BB v1.2"
-            ),
-        )
-        try:
-            await telegram.send(startup_alert)
-        except Exception:
-            pass
     else:
         print("Telegram alerts: DISABLED (set TELEGRAM_BOT_TOKEN + TELEGRAM_CHAT_ID)")
-
-    print("\nStarting engines... (Ctrl+C to stop)")
-    print("-" * 60)
 
     # Graceful shutdown event
     stop_event = asyncio.Event()
@@ -542,50 +650,79 @@ async def main(lite: bool = False) -> None:
     signal.signal(signal.SIGINT, handle_signal)
     signal.signal(signal.SIGTERM, handle_signal)
 
-    # Launch all engines as concurrent tasks
-    engine_tasks = [asyncio.create_task(engine.start()) for engine in engines]
+    # Create regime router — auto-detects regime and manages engine lifecycle
+    detector = RegimeDetector(fetcher=fetcher)
+    router = RegimeRouter(
+        detector=detector,
+        engine_factory=engine_factory,
+        full_config=FULL_STRATEGY_CONFIG,
+        stop_event=stop_event,
+        check_interval=86400,  # re-check daily
+        telegram=telegram,
+    )
 
-    # Launch monitoring tasks
+    print("\nDetecting initial regime and starting engines...")
+    print("(Regime check uses BTC daily EMA(50)/EMA(200) with 2-bar confirmation)")
+    print("-" * 60)
+
+    # Startup alert
+    if telegram:
+        startup_alert = Alert(
+            level=AlertLevel.INFO,
+            title="Paper Trading Started",
+            message=(
+                f"Mode: {'LITE' if lite else 'FULL'}\n"
+                f"Regime: AUTO-DETECTED (BTC EMA(50)/EMA(200))\n"
+                f"Universe: {len(FULL_STRATEGY_CONFIG)} strategy templates\n"
+                f"Capital: $10,000 per session"
+            ),
+        )
+        try:
+            await telegram.send(startup_alert)
+        except Exception:
+            pass
+
+    # Launch regime router (manages engine lifecycle) and monitoring tasks
+    router_task = asyncio.create_task(router.run())
+
     monitor_tasks = [
-        asyncio.create_task(status_reporter(engines, stop_event)),
-        asyncio.create_task(trade_monitor(engines, telegram, stop_event)),
-        asyncio.create_task(hourly_summary(engines, telegram, stop_event)),
+        asyncio.create_task(
+            status_reporter(router.get_active_engines, stop_event)
+        ),
+        asyncio.create_task(
+            trade_monitor(router.get_active_engines, telegram, stop_event)
+        ),
+        asyncio.create_task(
+            hourly_summary(router.get_active_engines, telegram, stop_event)
+        ),
     ]
 
-    # Wait for shutdown signal or engine completion
+    # Wait for shutdown signal
     try:
-        # Wait for the stop event
         await stop_event.wait()
     except asyncio.CancelledError:
         pass
 
-    # Graceful shutdown: stop all engines
-    print("\nStopping engines...")
-    for engine in engines:
-        try:
-            await engine.stop()
-        except Exception as exc:
-            logger.error("engine_stop_failed", error=str(exc))
-
-    # Wait for engine tasks to finish (they should exit after stop_event)
-    for task in engine_tasks:
-        try:
-            await asyncio.wait_for(task, timeout=30)
-        except (asyncio.TimeoutError, Exception):
-            task.cancel()
-
-    # Cancel monitor tasks
+    # Cancel monitoring tasks
     for task in monitor_tasks:
         task.cancel()
 
+    # Await router task (it stops engines on stop_event)
+    try:
+        await asyncio.wait_for(router_task, timeout=60)
+    except (asyncio.TimeoutError, Exception):
+        router_task.cancel()
+
     # Print final summary
+    final_engines = router.get_active_engines()
     print("\n" + "=" * 60)
     print("FINAL SUMMARY")
+    print(f"Regime at shutdown: {router.get_current_regime().value}")
     print("=" * 60)
 
     total_trades = 0
     total_pnl = 0.0
-    for engine in engines:
+    for engine in final_engines:
         status = engine.get_status()
         total_trades += status.num_trades
         total_pnl += status.current_pnl
@@ -599,7 +736,7 @@ async def main(lite: bool = False) -> None:
 
     print(f"\nTotal Trades: {total_trades}")
     print(f"Total PnL: ${total_pnl:+,.2f}")
-    elapsed = engines[0].get_status().days_elapsed if engines else 0
+    elapsed = final_engines[0].get_status().days_elapsed if final_engines else 0
     print(f"Elapsed: {elapsed:.1f} days")
 
     # Send shutdown alert
@@ -608,7 +745,7 @@ async def main(lite: bool = False) -> None:
             level=AlertLevel.INFO,
             title="Paper Trading Stopped",
             message=(
-                f"Sessions: {len(engines)}\n"
+                f"Sessions: {len(final_engines)}\n"
                 f"Total Trades: {total_trades}\n"
                 f"Total PnL: ${total_pnl:+,.2f}\n"
                 f"Duration: {elapsed:.1f} days"
@@ -630,19 +767,18 @@ if __name__ == "__main__":
     parser.add_argument(
         "--lite",
         action="store_true",
-        help="Run with reduced symbol set (6 sessions instead of 23)",
+        help="Run with reduced symbol set (one symbol per strategy)",
     )
     args = parser.parse_args()
 
-    # Crash-loop protection: max retries with cooldown to prevent
-    # Railway restart spam (Telegram alert flood on repeated crashes).
+    # Crash-loop protection: max retries with cooldown
     MAX_CRASH_RESTARTS = 5
     CRASH_COOLDOWN = 60
 
     for attempt in range(1, MAX_CRASH_RESTARTS + 1):
         try:
             asyncio.run(main(lite=args.lite))
-            break  # Clean exit
+            break
         except KeyboardInterrupt:
             break
         except Exception as fatal:
@@ -651,10 +787,7 @@ if __name__ == "__main__":
                 flush=True,
             )
             if attempt < MAX_CRASH_RESTARTS:
-                print(
-                    f"Restarting in {CRASH_COOLDOWN}s...",
-                    flush=True,
-                )
+                print(f"Restarting in {CRASH_COOLDOWN}s...", flush=True)
                 _time.sleep(CRASH_COOLDOWN)
             else:
                 print("Max restarts reached. Exiting.", flush=True)

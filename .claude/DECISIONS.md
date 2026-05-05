@@ -429,6 +429,53 @@ Each decision entry follows this structure:
 
 ---
 
+### DEC-2026-05-04-001: RegimeDetector Dual-EMA Composite 4-State Approach
+- **Decision:** Use EMA(50) + EMA(200) on BTC daily bars to classify regime into 4 states: STRONG_BULL, PULLBACK_BULL, BOUNCE_BEAR, STRONG_BEAR
+- **Context:** Single EMA(200) creates a long ambiguous zone where price straddles the average for weeks. Two EMAs capture both market structure velocity AND directional bias simultaneously, giving actionable signal for strategy selection.
+- **Rationale:**
+  - **4 states map to real strategy needs:** Bull pullback strategies (BTP, MACD_PB) work in PULLBACK_BULL but would burn capital in STRONG_BEAR
+  - **EMA(50)/EMA(200) golden/death cross is industry-standard** for macro regime identification
+  - **BTC as proxy:** BTC regime strongly correlates with altcoin conditions, making it the right signal source for the whole portfolio
+  - **Self-directing strategies (ICVP)** route via "all" tag and handle their own internal direction via Ichimoku cloud
+- **Alternatives Considered:**
+  - **Single EMA(200) threshold:** Rejected — long ambiguous zones where price oscillates around EMA200 create false switches
+  - **Manual regime tagging:** Replaced — required human intervention, caused -$2,323 loss when BTF was left active in bull (April 2026)
+  - **ADX + trend filter:** Rejected — adds parameters without solving the regime identification problem
+- **Status:** ACTIVE
+- **Date Decided:** 2026-05-04
+- **Implemented By:** `src/core/strategy/regime/detector.py`
+- **Affected Files:**
+  - `src/core/strategy/regime/detector.py` - RegimeState enum + RegimeDetector class
+  - `src/core/strategy/regime/router.py` - _get_template_ids_for_regime() uses is_bull/is_bear
+  - `scripts/run_paper_trading.py` - FULL_STRATEGY_CONFIG regime tags
+- **References:**
+  - Golden/death cross: standard technical analysis reference
+
+---
+
+### DEC-2026-05-04-002: 2-Consecutive-Close Confirmation for Regime Changes
+- **Decision:** A regime change is only acted upon after 2 consecutive daily closes on the same macro side (bull or bear). A single-bar disagreement returns UNKNOWN and no action is taken.
+- **Context:** Single-candle reversals (wicks, flash crashes, overnight gaps) can temporarily flip EMA relationships without representing true regime changes. Acting on them causes unnecessary engine restarts and potentially switches the wrong strategy set during intraday noise.
+- **Rationale:**
+  - **2 closes = 48h of price evidence** before committing to a regime change
+  - **Market-structure-driven:** Anchored to actual price evidence rather than calendar time (unlike a 2-day timer that ignores candle direction)
+  - **UNKNOWN fallback is safe:** If confirmation fails, existing engines keep running, avoiding partial-regime states
+  - **Empirical basis:** Q1 2026 bear → April 2026 bull transition took 3+ days of consecutive closes above EMA(200) before stabilizing
+- **Alternatives Considered:**
+  - **Single-close confirmation:** Rejected — too reactive to intraday spikes and wicks
+  - **3+ closes:** Rejected — adds 24h lag without proportional benefit; 2 closes proven sufficient for prior regime transitions
+  - **48-hour calendar timer:** Rejected — ignores price direction during the wait window
+- **Status:** ACTIVE
+- **Date Decided:** 2026-05-04
+- **Implemented By:** `src/core/strategy/regime/detector.py::get_confirmed_state()`
+- **Affected Files:**
+  - `src/core/strategy/regime/detector.py` - get_confirmed_state() checks last N closes
+  - `src/core/strategy/regime/router.py` - calls get_confirmed_state() before applying regime
+- **References:**
+  - See MEMORY.md: "Architecture plan — RegimeRouter (next sprint)"
+
+---
+
 ## Locked Decisions (DO NOT CHANGE Without PRD Update)
 
 These decisions are **LOCKED** per MVP scope control rules until specified review dates:
@@ -528,9 +575,9 @@ These decisions are **LOCKED** per MVP scope control rules until specified revie
 
 ---
 
-**Last Updated:** 2026-02-08
-**Total Decisions:** 15 active, 0 superseded, 5 locked
-**Next Decision ID:** DEC-2026-02-08-016
+**Last Updated:** 2026-05-04
+**Total Decisions:** 17 active, 0 superseded, 5 locked
+**Next Decision ID:** DEC-2026-05-04-003
 
 ---
 
