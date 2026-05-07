@@ -9,7 +9,7 @@
 id: "volatility_regime_breakout"
 name: "Volatility Regime Breakout"
 version: "2.0.0"
-type: "breakout"
+type: "volatility_breakout"
 description: >
   Detects the squeeze-release pattern using Bollinger Band width as the
   compression measure. BB width is price-normalized ((upper-lower)/middle*100),
@@ -25,8 +25,8 @@ description: >
 entry_logic: >
   LONG: BB width recently compressed below percentile(reference_lookback) AND
         current BB width > recent window mean AND
-        close > Donchian upper AND volume > vol_ma * volume_threshold
-  SHORT: Symmetric — compressed AND expanding AND close < Donchian lower
+        close > max(highs of squeeze window) AND volume > vol_ma * volume_threshold
+  SHORT: Symmetric — compressed AND expanding AND close < min(lows of squeeze window)
 
 exit_logic: >
   Stop loss: entry - (atr_stop_multiplier * ATR) for LONG
@@ -72,14 +72,6 @@ parameters:
     default: 100
     step: 25
     description: "Fixed bars used as reference distribution for the percentile. Anchors squeeze to recent volatility context rather than all-time history."
-
-  - name: "donchian_period"
-    type: "int"
-    min: 15
-    max: 30
-    default: 20
-    step: 5
-    description: "Donchian channel breakout period"
 
   - name: "volume_period"
     type: "int"

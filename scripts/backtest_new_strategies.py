@@ -276,7 +276,6 @@ BULL_TEMPLATES: dict[str, dict] = {
         "squeeze_lookback": 20,
         "squeeze_percentile": 20.0,
         "reference_lookback": 100,
-        "donchian_period": 20,
         "volume_period": 20,
         "volume_threshold": 1.5,
         "atr_period": 14,

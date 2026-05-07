@@ -13,7 +13,7 @@ measuring volatility relative to current price.
 Entry conditions (LONG):
     1. BB width recently compressed to a local percentile low (local squeeze)
     2. BB width is now expanding above its recent mean (squeeze releasing)
-    3. Price breaks above the Donchian upper channel (directional breakout)
+    3. Price breaks above the HIGH of the squeeze window (range breakout)
     4. Volume above vol_ma * volume_threshold (participation confirms move)
 
 SHORT conditions are the symmetric inverse.
@@ -25,6 +25,13 @@ Reference window:
     all-time history. Using all available history caused 0 trades in 90-day
     backtests: local consolidations never reached the 20th percentile of a
     2100-bar distribution spanning multiple volatility regimes.
+
+Breakout level:
+    Uses the squeeze window's own high/low (max/min of series.highs over the
+    squeeze_lookback bars) rather than a separate Donchian channel. The Donchian
+    upper includes bars BEFORE the squeeze (when price was higher), causing
+    zero breakout triggers even when price is only 0.17% below the level.
+    The squeeze-window high is the natural resistance to break.
 
 Optional: regime_ema_period > 0 restricts LONG to bull regime and SHORT
 to bear regime, preventing counter-trend entries.
@@ -39,7 +46,7 @@ from typing import Any
 import numpy as np
 
 from src.core.exceptions import SignalGenerationError
-from src.core.indicators import ATR, EMA, BollingerBands, DonchianChannel
+from src.core.indicators import ATR, EMA, BollingerBands
 from src.core.strategy.signals import SignalGenerator, TradingSignal
 from src.data.market_data import OHLCVSeries
 from src.data.models.signal import SignalDirection
@@ -62,8 +69,8 @@ class VolatilityRegimeBreakoutGenerator(SignalGenerator):
 
     Required parameters:
         bb_period, bb_std_dev,
-        squeeze_lookback, squeeze_percentile,
-        donchian_period, volume_period, volume_threshold,
+        squeeze_lookback, squeeze_percentile, reference_lookback,
+        volume_period, volume_threshold,
         atr_period, atr_stop_multiplier, risk_reward_ratio
 
     Optional parameters:
@@ -113,7 +120,6 @@ class VolatilityRegimeBreakoutGenerator(SignalGenerator):
             squeeze_lookback: int = int(params["squeeze_lookback"])
             squeeze_percentile: float = float(params["squeeze_percentile"])
             reference_lookback: int = int(params.get("reference_lookback", 100))
-            donchian_period: int = int(params["donchian_period"])
             volume_period: int = int(params["volume_period"])
             volume_threshold: float = float(params["volume_threshold"])
             atr_period: int = int(params["atr_period"])
@@ -122,7 +128,6 @@ class VolatilityRegimeBreakoutGenerator(SignalGenerator):
             regime_ema_period: int = int(params.get("regime_ema_period", 0))
 
             bb = BollingerBands(period=bb_period, multiplier=bb_std_dev).calculate(series)
-            dc = DonchianChannel(period=donchian_period).calculate(series)
             atr_result = ATR(period=atr_period).calculate(series)
 
             # Strip NaNs from BB width — these are price-normalized percentage values
@@ -180,13 +185,17 @@ class VolatilityRegimeBreakoutGenerator(SignalGenerator):
                 return None
             atr_curr = float(atr_vals[-1])
 
-            # Donchian breakout levels
-            dc_upper = dc.upper[~np.isnan(dc.upper)]
-            dc_lower = dc.lower[~np.isnan(dc.lower)]
-            if len(dc_upper) < 1 or len(dc_lower) < 1:
+            # Breakout levels: high/low of the squeeze window itself.
+            # Using Donchian-20 caused 0 triggers because it records the highest
+            # high over 20 bars including bars BEFORE the squeeze (when price was
+            # higher). The squeeze window high is the actual consolidation ceiling
+            # that price needs to break to confirm the squeeze-release move.
+            highs = series.highs
+            lows  = series.lows
+            if len(highs) < squeeze_lookback + 1:
                 return None
-            upper_curr = float(dc_upper[-1])
-            lower_curr = float(dc_lower[-1])
+            upper_curr = float(np.max(highs[-(squeeze_lookback + 1):-1]))
+            lower_curr = float(np.min(lows[-(squeeze_lookback + 1):-1]))
 
             price = float(series.closes[-1])
 
@@ -211,8 +220,8 @@ class VolatilityRegimeBreakoutGenerator(SignalGenerator):
                 "bb_width_min_recent": round(width_recent_min, 3),
                 "squeeze_depth_pct": round(squeeze_depth * 100, 1),
                 "width_expansion_ratio": round(width_expansion, 3),
-                "donchian_upper": upper_curr,
-                "donchian_lower": lower_curr,
+                "squeeze_range_high": upper_curr,
+                "squeeze_range_low": lower_curr,
                 "volume_ratio": round(vol_curr / vol_ma, 2),
                 "atr": atr_curr,
             }
@@ -240,7 +249,7 @@ class VolatilityRegimeBreakoutGenerator(SignalGenerator):
                     take_profit=take_profit,
                     indicators=indicators,
                     metadata={
-                        "trigger": "vrb_long_bb_squeeze_breakout",
+                        "trigger": "vrb_long_squeeze_range_break",
                         "squeeze_depth_pct": indicators["squeeze_depth_pct"],
                         "width_expansion_ratio": indicators["width_expansion_ratio"],
                         "vol_ratio": indicators["volume_ratio"],
@@ -262,7 +271,7 @@ class VolatilityRegimeBreakoutGenerator(SignalGenerator):
                     take_profit=take_profit,
                     indicators=indicators,
                     metadata={
-                        "trigger": "vrb_short_bb_squeeze_breakout",
+                        "trigger": "vrb_short_squeeze_range_break",
                         "squeeze_depth_pct": indicators["squeeze_depth_pct"],
                         "width_expansion_ratio": indicators["width_expansion_ratio"],
                         "vol_ratio": indicators["volume_ratio"],
