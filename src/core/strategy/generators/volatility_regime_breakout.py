@@ -18,6 +18,14 @@ Entry conditions (LONG):
 
 SHORT conditions are the symmetric inverse.
 
+Reference window:
+    The squeeze_percentile is evaluated against a FIXED reference_lookback
+    window of bars immediately before the squeeze window (default 100 bars).
+    This anchors "compressed" to recent volatility context rather than
+    all-time history. Using all available history caused 0 trades in 90-day
+    backtests: local consolidations never reached the 20th percentile of a
+    2100-bar distribution spanning multiple volatility regimes.
+
 Optional: regime_ema_period > 0 restricts LONG to bull regime and SHORT
 to bear regime, preventing counter-trend entries.
 
@@ -72,10 +80,10 @@ class VolatilityRegimeBreakoutGenerator(SignalGenerator):
     def min_bars_required(self) -> int:
         """Return minimum bars needed.
 
-        bb_period(20) warmup + squeeze_lookback(20) window + 30 reference
-        samples for percentile + donchian(20) + buffer = 100.
+        bb_period(20) warmup + reference_lookback(100) + squeeze_lookback(20)
+        + donchian(20) + buffer = 160.
         """
-        return 100
+        return 160
 
     def generate(
         self,
@@ -104,6 +112,7 @@ class VolatilityRegimeBreakoutGenerator(SignalGenerator):
             bb_std_dev: float = float(params["bb_std_dev"])
             squeeze_lookback: int = int(params["squeeze_lookback"])
             squeeze_percentile: float = float(params["squeeze_percentile"])
+            reference_lookback: int = int(params.get("reference_lookback", 100))
             donchian_period: int = int(params["donchian_period"])
             volume_period: int = int(params["volume_period"])
             volume_threshold: float = float(params["volume_threshold"])
@@ -119,19 +128,23 @@ class VolatilityRegimeBreakoutGenerator(SignalGenerator):
             # Strip NaNs from BB width — these are price-normalized percentage values
             bb_width_vals = bb.width[~np.isnan(bb.width)]
 
-            # Need: reference samples + squeeze window + current bar
-            if len(bb_width_vals) < _MIN_REFERENCE_SAMPLES + squeeze_lookback + 1:
+            # Need: reference window + squeeze window + current bar
+            if len(bb_width_vals) < reference_lookback + squeeze_lookback + 1:
                 return None
 
-            # Reference distribution: all prior widths before the recent squeeze window
-            # Using adaptive reference (all available history before window) means the
-            # percentile threshold self-adjusts as the series grows
-            prior_widths = bb_width_vals[:-(squeeze_lookback + 1)]
+            # Reference distribution: fixed window of reference_lookback bars ending just
+            # before the squeeze window. A fixed window (not all-time history) ensures
+            # "squeeze" means compressed relative to RECENT context, not the full series.
+            # All-time history caused 0 trades in 90d: local consolidations never reached
+            # the 20th percentile of a 2100-bar multi-regime distribution.
+            ref_end = -(squeeze_lookback + 1)
+            ref_start = ref_end - reference_lookback
+            prior_widths = bb_width_vals[ref_start:ref_end]
             if len(prior_widths) < _MIN_REFERENCE_SAMPLES:
                 return None
 
-            # Squeeze threshold: the Nth percentile of historical BB width
-            # Below this level = "compressed" (local low volatility)
+            # Squeeze threshold: the Nth percentile of the recent reference window
+            # Below this level = "compressed relative to recent volatility context"
             squeeze_threshold = float(np.percentile(prior_widths, squeeze_percentile))
 
             # Recent window: the squeeze_lookback bars before current bar (not including current)

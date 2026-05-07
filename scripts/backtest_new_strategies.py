@@ -267,14 +267,15 @@ BULL_TEMPLATES: dict[str, dict] = {
         "regime_ema_period": 200,
     },
     "volatility_regime_breakout": {
-        # Redesigned: ATR compression (absolute) replaced with BB width (price-normalized).
-        # BB width = (upper-lower)/middle * 100 — compresses during local consolidations
-        # inside trends, not just during sideways markets. squeeze_percentile=20 means
-        # "was the width in the bottom 20% of its history?" — adaptive, not hardcoded.
+        # Fix: reference_lookback=100 replaces all-time adaptive reference.
+        # Prior version used all available history (2100+ bars) — local consolidations
+        # never reached the 20th percentile of that long distribution, causing 0 trades.
+        # Fixed 100-bar window anchors "squeeze" to recent volatility context only.
         "bb_period": 20,
         "bb_std_dev": 2.0,
         "squeeze_lookback": 20,
         "squeeze_percentile": 20.0,
+        "reference_lookback": 100,
         "donchian_period": 20,
         "volume_period": 20,
         "volume_threshold": 1.5,

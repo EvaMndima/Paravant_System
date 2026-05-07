@@ -1,0 +1,156 @@
+# Volatility Regime Breakout Strategy Template
+# BB width squeeze-release into Donchian channel breakout
+#
+# Entry Logic: BB width compresses relative to a fixed recent reference window,
+#              then expands above that window's mean, coinciding with a Donchian
+#              channel breakout on elevated volume.
+# Exit Logic: ATR-based stop loss + risk-reward take profit
+
+id: "volatility_regime_breakout"
+name: "Volatility Regime Breakout"
+version: "2.0.0"
+type: "breakout"
+description: >
+  Detects the squeeze-release pattern using Bollinger Band width as the
+  compression measure. BB width is price-normalized ((upper-lower)/middle*100),
+  making it regime-agnostic: it compresses during local consolidations inside
+  trending markets as well as during sideways ranges.
+  Squeeze is evaluated against a fixed reference_lookback window (not all-time
+  history) so local mini-consolidations register as squeezes relative to recent
+  volatility context. When the squeeze releases (BB expands above the recent
+  window mean) and price simultaneously breaks the Donchian channel on volume,
+  the breakout is confirmed.
+  Optional regime_ema_period restricts LONG to above EMA, SHORT to below EMA.
+
+entry_logic: >
+  LONG: BB width recently compressed below percentile(reference_lookback) AND
+        current BB width > recent window mean AND
+        close > Donchian upper AND volume > vol_ma * volume_threshold
+  SHORT: Symmetric — compressed AND expanding AND close < Donchian lower
+
+exit_logic: >
+  Stop loss: entry - (atr_stop_multiplier * ATR) for LONG
+  Take profit: entry + (atr_stop_multiplier * ATR * risk_reward_ratio) for LONG
+
+parameters:
+  - name: "bb_period"
+    type: "int"
+    min: 15
+    max: 30
+    default: 20
+    step: 5
+    description: "Bollinger Band period"
+
+  - name: "bb_std_dev"
+    type: "float"
+    min: 1.5
+    max: 2.5
+    default: 2.0
+    step: 0.5
+    description: "Bollinger Band standard deviation multiplier"
+
+  - name: "squeeze_lookback"
+    type: "int"
+    min: 10
+    max: 30
+    default: 20
+    step: 5
+    description: "Bars in the recent window checked for squeeze"
+
+  - name: "squeeze_percentile"
+    type: "float"
+    min: 10.0
+    max: 35.0
+    default: 20.0
+    step: 5.0
+    description: "Percentile threshold within reference window — below = squeezed"
+
+  - name: "reference_lookback"
+    type: "int"
+    min: 50
+    max: 200
+    default: 100
+    step: 25
+    description: "Fixed bars used as reference distribution for the percentile. Anchors squeeze to recent volatility context rather than all-time history."
+
+  - name: "donchian_period"
+    type: "int"
+    min: 15
+    max: 30
+    default: 20
+    step: 5
+    description: "Donchian channel breakout period"
+
+  - name: "volume_period"
+    type: "int"
+    min: 10
+    max: 30
+    default: 20
+    step: 5
+    description: "Volume moving average period"
+
+  - name: "volume_threshold"
+    type: "float"
+    min: 1.2
+    max: 2.5
+    default: 1.5
+    step: 0.25
+    description: "Volume must exceed vol_ma * this threshold"
+
+  - name: "atr_period"
+    type: "int"
+    min: 10
+    max: 20
+    default: 14
+    step: 2
+    description: "ATR period for stop/target sizing"
+
+  - name: "atr_stop_multiplier"
+    type: "float"
+    min: 1.5
+    max: 3.0
+    default: 2.0
+    step: 0.5
+    description: "ATR multiplier for stop loss distance"
+
+  - name: "risk_reward_ratio"
+    type: "float"
+    min: 1.5
+    max: 4.0
+    default: 2.5
+    step: 0.5
+    description: "Risk-reward ratio for take profit"
+
+  - name: "regime_ema_period"
+    type: "int"
+    min: 0
+    max: 200
+    default: 0
+    step: 50
+    description: "EMA period for regime gate. 0 = disabled. When > 0, restricts LONG to price > EMA and SHORT to price < EMA."
+
+expected_performance:
+  min_sharpe: 0.5
+  max_drawdown_pct: 25.0
+  min_win_rate_pct: 40.0
+
+recommended_for:
+  - "trending_up"
+  - "trending_down"
+  - "volatile"
+
+not_recommended_for:
+  - "ranging"
+
+symbols:
+  - "BTCUSDT"
+  - "ETHUSDT"
+  - "BNBUSDT"
+  - "SOLUSDT"
+  - "XRPUSDT"
+  - "AVAXUSDT"
+  - "DOGEUSDT"
+  - "DOTUSDT"
+
+timeframes:
+  - "1h"
