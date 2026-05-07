@@ -1,15 +1,15 @@
 #!/usr/bin/env python
 """Full strategy universe backtest runner.
 
-Fetches 1H OHLCV data from Binance mainnet, runs ALL 13 strategy templates
+Fetches 1H OHLCV data from Binance mainnet, runs ALL 17 strategy templates
 against an expanded symbol universe, and prints a comparison table with
 SUPERVISED threshold pass/fail status.
 
 Usage:
-    # Default: all 13 strategies x 2 symbols x 90 days
+    # Default: all 17 strategies x 2 symbols x 90 days (recommended for bull strategies)
     python scripts/backtest_new_strategies.py
 
-    # Extended: all 13 strategies x 8 symbols x 90 days
+    # Extended: all 17 strategies x 8 symbols x 90 days
     python scripts/backtest_new_strategies.py --extended
 
     # Custom:
@@ -20,6 +20,9 @@ Usage:
 
     # Original 7 only:
     python scripts/backtest_new_strategies.py --group original
+
+    # Bull-regime only (5 bull strategies):
+    python scripts/backtest_new_strategies.py --group bull
 
 Requires:
     - BINANCE_TESTNET=false in .env (mainnet)
@@ -38,7 +41,10 @@ from src.core.strategy.backtest.types import BacktestConfig
 from src.core.strategy.backtest.validator import SUPERVISED_THRESHOLDS
 from src.core.strategy.factory import SignalGeneratorFactory
 from src.data.market_data import MarketDataFetcher
-from src.utils.logging import get_logger
+from src.utils.logging import get_logger, setup_logging
+
+# Suppress debug/info noise from bar-level simulation logs during backtests
+setup_logging(level="WARNING")
 
 logger = get_logger(__name__)
 
@@ -56,8 +62,9 @@ EXTENDED_SYMBOLS = [
 # ---------------------------------------------------------------------------
 ORIGINAL_TEMPLATES: dict[str, dict] = {
     "ema_trend_rsi": {
+        # 12/21 pair validated by bull sweep (Sharpe=5.748 on ETH vs 4.163 for 12/26)
         "fast_ema_period": 12,
-        "slow_ema_period": 26,
+        "slow_ema_period": 21,
         "rsi_period": 14,
         "rsi_buy_threshold": 45.0,
         "rsi_sell_threshold": 55.0,
@@ -65,6 +72,7 @@ ORIGINAL_TEMPLATES: dict[str, dict] = {
         "rsi_oversold": 25.0,
         "atr_multiplier": 2.0,
         "atr_period": 14,
+        "risk_reward_ratio": 2.0,
     },
     "bb_squeeze_breakout": {
         "bb_period": 20,
@@ -82,7 +90,9 @@ ORIGINAL_TEMPLATES: dict[str, dict] = {
         "macd_signal": 9,
         "pullback_ema_period": 21,
         "atr_period": 14,
-        "atr_stop_multiplier": 1.5,
+        # stop=2.5 validated by bull sweep: wider trail survives 1H bar noise
+        # without degrading entry selectivity (tol=0.5 kept tight)
+        "atr_stop_multiplier": 2.5,
         "risk_reward_ratio": 2.0,
         "pullback_tolerance_pct": 0.5,
     },
@@ -182,6 +192,7 @@ BEAR_TEMPLATES: dict[str, dict] = {
         "supertrend_period": 10,
         "supertrend_multiplier": 3.0,
         "atr_period": 14,
+        "atr_stop_multiplier": 2.5,
     },
     "regime_aware_mean_reversion": {
         "htf_ema_period": 200,
@@ -219,9 +230,90 @@ BEAR_TEMPLATES: dict[str, dict] = {
 }
 
 # ---------------------------------------------------------------------------
+# Bull-regime strategy templates (long-only, EMA regime gate)
+# ---------------------------------------------------------------------------
+BULL_TEMPLATES: dict[str, dict] = {
+    "bull_trend_pullback": {
+        # htf_ema=150 + rsi_high=60: best combo from sweep (DOGE PF=2.79, Sharpe=4.5, Trades=11)
+        # htf_ema=200 produces 0-4 trades; 150 reaches 10-11 trades with quality intact
+        "htf_ema_period": 150,
+        "trend_ema_period": 50,
+        "rsi_period": 14,
+        "rsi_pullback_low": 30.0,
+        "rsi_pullback_high": 60.0,
+        "macd_fast": 12,
+        "macd_slow": 26,
+        "macd_signal": 9,
+        "atr_period": 14,
+        "atr_stop_multiplier": 2.0,
+        "risk_reward_ratio": 2.5,
+    },
+    "trend_acceleration_momentum": {
+        # vol=2.0 + stop=2.5: best combo from sweep (BTC PF=1.38, Sharpe=3.44, Trades=14)
+        # vol=1.2 produces PF<1 everywhere; vol=2.0 filters to high-conviction entries only
+        "fast_ema_period": 8,
+        "slow_ema_period": 21,
+        "rsi_period": 14,
+        "rsi_bull_min": 50.0,
+        "rsi_bull_max": 72.0,
+        "volume_period": 20,
+        "volume_threshold": 2.0,
+        "atr_period": 14,
+        "acceleration_lookback": 5,
+        "atr_acceleration_lookback": 5,
+        "atr_stop_multiplier": 2.5,
+        "risk_reward_ratio": 2.5,
+        # Regime gate: LONG only above EMA(200), SHORT only below EMA(200)
+        "regime_ema_period": 200,
+    },
+    "volatility_regime_breakout": {
+        # Redesigned: ATR compression (absolute) replaced with BB width (price-normalized).
+        # BB width = (upper-lower)/middle * 100 — compresses during local consolidations
+        # inside trends, not just during sideways markets. squeeze_percentile=20 means
+        # "was the width in the bottom 20% of its history?" — adaptive, not hardcoded.
+        "bb_period": 20,
+        "bb_std_dev": 2.0,
+        "squeeze_lookback": 20,
+        "squeeze_percentile": 20.0,
+        "donchian_period": 20,
+        "volume_period": 20,
+        "volume_threshold": 1.5,
+        "atr_period": 14,
+        "atr_stop_multiplier": 2.0,
+        "risk_reward_ratio": 2.5,
+    },
+    "multi_tf_confluence": {
+        # rsi_min=40/rsi_max=65: best RSI zone from sweep (adds 2-3 trades vs default)
+        # 4H MACD-only gate still limits to 15-17 trades in 45d; daily EMA is the true bottleneck
+        "daily_ema_period": 21,
+        "macd_fast": 12,
+        "macd_slow": 26,
+        "macd_signal": 9,
+        "rsi_period": 14,
+        "rsi_pullback_min": 40.0,
+        "rsi_pullback_max": 65.0,
+        "atr_period": 14,
+        "atr_stop_multiplier": 2.0,
+        "risk_reward_ratio": 2.5,
+    },
+    "rsi_divergence_reversal": {
+        # Confirmed signal quality (BTC PF=1.57/Sharpe=4.15, AVAX PF=1.35/Sharpe=1.91)
+        # Only 4 trades in 45d — needs 90+ day window to accumulate enough for SUPERVISED
+        "rsi_period": 14,
+        "swing_bars": 5,
+        "divergence_lookback": 50,
+        "atr_period": 14,
+        "atr_stop_multiplier": 2.0,
+        "risk_reward_ratio": 3.0,
+        # Regime gate: bullish divergence only in bull, bearish only in bear
+        "regime_ema_period": 200,
+    },
+}
+
+# ---------------------------------------------------------------------------
 # Combined template registry + short labels
 # ---------------------------------------------------------------------------
-ALL_TEMPLATES: dict[str, dict] = {**ORIGINAL_TEMPLATES, **BEAR_TEMPLATES}
+ALL_TEMPLATES: dict[str, dict] = {**ORIGINAL_TEMPLATES, **BEAR_TEMPLATES, **BULL_TEMPLATES}
 
 LABELS: dict[str, str] = {
     # Original 7
@@ -239,6 +331,12 @@ LABELS: dict[str, str] = {
     "bear_trend_follower": "BTF",
     "regime_aware_mean_reversion": "RAMR",
     "cascading_momentum_filter": "CMF",
+    # Bull-regime 5
+    "bull_trend_pullback": "BTP",
+    "trend_acceleration_momentum": "TAM",
+    "volatility_regime_breakout": "VRB",
+    "multi_tf_confluence": "MTC",
+    "rsi_divergence_reversal": "RDR",
 }
 
 
@@ -461,9 +559,9 @@ async def main() -> None:
     parser.add_argument(
         "--group",
         type=str,
-        choices=["all", "original", "bear"],
+        choices=["all", "original", "bear", "bull"],
         default="all",
-        help="Strategy group to test: all (default), original (7), bear (6)",
+        help="Strategy group to test: all (default), original (7), bear (6), bull (5)",
     )
     args = parser.parse_args()
 
@@ -480,6 +578,8 @@ async def main() -> None:
         templates = ORIGINAL_TEMPLATES
     elif args.group == "bear":
         templates = BEAR_TEMPLATES
+    elif args.group == "bull":
+        templates = BULL_TEMPLATES
     else:
         templates = ALL_TEMPLATES
 

@@ -143,13 +143,17 @@ class DonchianAtrGenerator(SignalGenerator):
                 and volatility_ok
                 and volume_ok
             ):
-                stop_loss = price - (atr_stop_mult * atr_curr)
+                risk = atr_stop_mult * atr_curr
+                stop_loss = price - risk
+                # TP at 2:1 R:R above entry.
+                take_profit = price + 2.0 * risk
                 return TradingSignal(
                     direction=SignalDirection.LONG,
                     symbol=symbol,
                     price=price,
                     strength=min(1.0, atr_relative / (atr_threshold * 2)),
                     stop_loss=max(stop_loss, price * 0.001),
+                    take_profit=take_profit,
                     indicators=indicators,
                     metadata={
                         "trigger": "donchian_breakout_long",
@@ -165,13 +169,17 @@ class DonchianAtrGenerator(SignalGenerator):
                 and volatility_ok
                 and volume_ok
             ):
-                stop_loss = price + (atr_stop_mult * atr_curr)
+                risk = atr_stop_mult * atr_curr
+                stop_loss = price + risk
+                # TP at 2:1 R:R below entry.
+                take_profit = price - 2.0 * risk
                 return TradingSignal(
                     direction=SignalDirection.SHORT,
                     symbol=symbol,
                     price=price,
                     strength=min(1.0, atr_relative / (atr_threshold * 2)),
                     stop_loss=stop_loss,
+                    take_profit=take_profit,
                     indicators=indicators,
                     metadata={
                         "trigger": "donchian_breakout_short",

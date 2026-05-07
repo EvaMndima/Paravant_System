@@ -13,15 +13,20 @@ from src.core.exceptions import TemplateNotFoundError
 from src.core.strategy.generators import (BbSqueezeBreakoutGenerator,
                                           BbSqueezeMomentumGenerator,
                                           BearTrendFollowerGenerator,
+                                          BullTrendPullbackGenerator,
                                           CascadingMomentumFilterGenerator,
                                           DonchianAtrGenerator,
                                           EmaTrendRsiGenerator,
                                           IchimokuCloudTrendGenerator,
                                           KeltnerFadeAdxGenerator,
                                           MacdPullbackGenerator,
+                                          MultiTfConfluenceGenerator,
                                           RegimeAwareMeanReversionGenerator,
                                           RsiBbMeanReversionGenerator,
+                                          RsiDivergenceReversalGenerator,
                                           SupertrendVolumeMacdGenerator,
+                                          TrendAccelerationMomentumGenerator,
+                                          VolatilityRegimeBreakoutGenerator,
                                           VwapPullbackVolumeGenerator)
 from src.core.strategy.signals import SignalGenerator
 from src.utils.logging import get_logger
@@ -45,6 +50,12 @@ _DEFAULT_GENERATORS: dict[str, type[SignalGenerator]] = {
     "bear_trend_follower": BearTrendFollowerGenerator,
     "regime_aware_mean_reversion": RegimeAwareMeanReversionGenerator,
     "cascading_momentum_filter": CascadingMomentumFilterGenerator,
+    # Bull-regime strategies
+    "bull_trend_pullback": BullTrendPullbackGenerator,
+    "trend_acceleration_momentum": TrendAccelerationMomentumGenerator,
+    "volatility_regime_breakout": VolatilityRegimeBreakoutGenerator,
+    "multi_tf_confluence": MultiTfConfluenceGenerator,
+    "rsi_divergence_reversal": RsiDivergenceReversalGenerator,
 }
 
 

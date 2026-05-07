@@ -311,6 +311,9 @@ async def startup_event() -> None:
     init_pnl_routes(store=store)
     init_event_routes(event_bus=event_bus)
 
+    from src.api.routes.regime import init_regime_routes
+    init_regime_routes(store=store)
+
     logger.info(
         "api_startup_details",
         environment=ENVIRONMENT,
@@ -359,6 +362,7 @@ from src.api.routes.dashboard import router as dashboard_router
 from src.api.routes.accounts import router as accounts_router
 from src.api.routes.pnl import router as pnl_router
 from src.api.routes.events import router as events_router
+from src.api.routes.regime import router as regime_router
 
 app.include_router(risk_router, prefix="/api/v1/risk", tags=["risk"])
 app.include_router(orders_router, prefix="/api/v1/orders", tags=["orders"])
@@ -372,3 +376,4 @@ app.include_router(dashboard_router, prefix="/api/v1/dashboard", tags=["dashboar
 app.include_router(accounts_router, prefix="/api/v1/accounts", tags=["accounts"])
 app.include_router(pnl_router, prefix="/api/v1/pnl", tags=["pnl"])
 app.include_router(events_router, prefix="/api/v1/events", tags=["events"])
+app.include_router(regime_router, prefix="/api/v1/regime", tags=["regime"])

@@ -13,7 +13,7 @@ from .models.base import Base
 load_dotenv()
 
 # Get database URL from environment
-DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///data/trading.db")
+DATABASE_URL = os.getenv("DATABASE_URL") or "sqlite:///data/trading.db"
 
 # Create engine
 engine = create_engine(

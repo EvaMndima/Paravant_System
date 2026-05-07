@@ -184,6 +184,8 @@ class SimulatedTrader:
             commission=commission,
             slippage_cost=slippage_cost,
             timestamp=next_bar.timestamp,
+            stop_loss=signal.stop_loss,
+            take_profit=signal.take_profit,
         )
 
         logger.debug(
@@ -193,6 +195,8 @@ class SimulatedTrader:
             quantity=quantity,
             fill_price=fill_price,
             commission=commission,
+            stop_loss=signal.stop_loss,
+            take_profit=signal.take_profit,
         )
 
     def _close_position(
@@ -303,6 +307,132 @@ class SimulatedTrader:
             symbol=pos.symbol,
             fill_price=fill_price,
             realized_pnl=trade.realized_pnl,
+        )
+
+        return trade
+
+    def check_stop_take_profit(
+        self,
+        portfolio: PortfolioState,
+        bar: OHLCV,
+        config: BacktestConfig,
+    ) -> TradeRecord | None:
+        """Check if current bar triggers stop-loss or take-profit.
+
+        Uses intrabar high/low to detect if price crossed stop or TP
+        levels. When both are hit in the same bar (extreme volatility),
+        stop-loss takes priority — conservative worst-case assumption.
+
+        For LONG positions:
+          - Stop hit when bar.low <= stop_loss
+          - TP hit when bar.high >= take_profit
+
+        For SHORT positions:
+          - Stop hit when bar.high >= stop_loss
+          - TP hit when bar.low <= take_profit
+
+        Args:
+            portfolio: Portfolio with potential open position.
+            bar: Current OHLCV bar with high/low for intrabar check.
+            config: Backtest configuration for commission/slippage.
+
+        Returns:
+            TradeRecord if stop or TP triggered, None otherwise.
+        """
+        if not portfolio.has_position():
+            return None
+
+        pos = portfolio.position
+        if pos is None:
+            return None
+
+        # --- Trailing stop ratchet (before hit check) ---
+        # When trail_distance is set, move stop in the favorable direction
+        # based on the bar's extreme. The stop can only tighten, never widen.
+        if pos.trail_distance is not None and pos.stop_loss is not None:
+            if pos.direction == SignalDirection.LONG:
+                new_stop = bar.high - pos.trail_distance
+                if new_stop > pos.stop_loss:
+                    logger.debug(
+                        "trailing_stop_ratcheted",
+                        symbol=pos.symbol,
+                        direction="long",
+                        old_stop=pos.stop_loss,
+                        new_stop=new_stop,
+                        bar_high=bar.high,
+                    )
+                    pos.stop_loss = new_stop
+            else:
+                new_stop = bar.low + pos.trail_distance
+                if new_stop < pos.stop_loss:
+                    logger.debug(
+                        "trailing_stop_ratcheted",
+                        symbol=pos.symbol,
+                        direction="short",
+                        old_stop=pos.stop_loss,
+                        new_stop=new_stop,
+                        bar_low=bar.low,
+                    )
+                    pos.stop_loss = new_stop
+
+        # --- Check stop-loss and take-profit hits ---
+        stop_hit = False
+        tp_hit = False
+        exit_price = 0.0
+
+        if pos.direction == SignalDirection.LONG:
+            if pos.stop_loss is not None and bar.low <= pos.stop_loss:
+                stop_hit = True
+                exit_price = pos.stop_loss
+            if pos.take_profit is not None and bar.high >= pos.take_profit:
+                tp_hit = True
+                if not stop_hit:
+                    exit_price = pos.take_profit
+        else:
+            # SHORT position
+            if pos.stop_loss is not None and bar.high >= pos.stop_loss:
+                stop_hit = True
+                exit_price = pos.stop_loss
+            if pos.take_profit is not None and bar.low <= pos.take_profit:
+                tp_hit = True
+                if not stop_hit:
+                    exit_price = pos.take_profit
+
+        if not stop_hit and not tp_hit:
+            return None
+
+        # Stop takes priority over TP (worst-case assumption)
+        exit_reason = "stop_loss" if stop_hit else "take_profit"
+
+        # Apply slippage to exit price
+        close_direction = (
+            SignalDirection.SHORT
+            if pos.direction == SignalDirection.LONG
+            else SignalDirection.LONG
+        )
+        fill_price, slippage_per_unit = self._calculate_fill_price(
+            exit_price, close_direction, config.slippage_rate
+        )
+
+        commission = pos.quantity * fill_price * config.commission_rate
+        slippage_cost = slippage_per_unit * pos.quantity
+
+        trade = portfolio.close_position(
+            fill_price=fill_price,
+            commission=commission,
+            slippage_cost=slippage_cost,
+            timestamp=bar.timestamp,
+        )
+
+        logger.info(
+            "stop_tp_triggered",
+            reason=exit_reason,
+            symbol=pos.symbol,
+            direction=pos.direction.value,
+            exit_price=fill_price,
+            realized_pnl=trade.realized_pnl,
+            stop_loss=pos.stop_loss,
+            take_profit=pos.take_profit,
         )
 
         return trade

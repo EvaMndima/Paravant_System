@@ -104,6 +104,10 @@ class PaperTradingEngine:
         self._stopped_at: datetime | None = None
         self._stop_event = asyncio.Event()
         self._last_bar_index = 0
+        # Tracks the timestamp of the last bar processed by _process_live_bar.
+        # Used to replay missed bars after Railway restarts so stop/TP checks
+        # are applied to every bar, not just the latest one.
+        self._last_bar_timestamp: datetime | None = None
 
         logger.info(
             "paper_trading_engine_created",
@@ -313,6 +317,13 @@ class PaperTradingEngine:
             if self._stop_event.is_set():
                 break
 
+            # Check stop-loss / take-profit on current bar before signals
+            self._trader.check_stop_take_profit(
+                portfolio=self._portfolio,
+                bar=series[i],
+                config=self._config,
+            )
+
             visible = series.slice(0, i + 1)
             signal = self._generator.generate(
                 visible,
@@ -383,22 +394,38 @@ class PaperTradingEngine:
         # Restore open position if one was saved
         if saved.position_data:
             p = saved.position_data
-            try:
-                self._portfolio._position = OpenPosition(
-                    symbol=p["symbol"],
-                    direction=SignalDirection(p["direction"]),
-                    quantity=p["quantity"],
-                    entry_price=p["entry_price"],
-                    entry_commission=p["entry_commission"],
-                    entry_slippage=p["entry_slippage"],
-                    entry_time=datetime.fromisoformat(p["entry_time"]),
-                )
-            except Exception as exc:
-                logger.warning(
-                    "paper_state_position_restore_failed",
-                    strategy_id=self._strategy.id,
-                    error=str(exc),
-                )
+
+            # Restore last-processed bar timestamp for gap-replay on restart
+            last_ts_str = p.get("last_bar_timestamp")
+            if last_ts_str:
+                try:
+                    self._last_bar_timestamp = datetime.fromisoformat(last_ts_str)
+                except (ValueError, TypeError):
+                    pass
+
+            # Restore position when sentinel is present, or (backward-compat)
+            # when old data has "symbol" key directly in the dict
+            has_position = p.get("in_position_marker", bool(p.get("symbol")))
+            if has_position:
+                try:
+                    self._portfolio._position = OpenPosition(
+                        symbol=p["symbol"],
+                        direction=SignalDirection(p["direction"]),
+                        quantity=p["quantity"],
+                        entry_price=p["entry_price"],
+                        entry_commission=p["entry_commission"],
+                        entry_slippage=p["entry_slippage"],
+                        entry_time=datetime.fromisoformat(p["entry_time"]),
+                        stop_loss=p.get("stop_loss"),
+                        take_profit=p.get("take_profit"),
+                        trail_distance=p.get("trail_distance"),
+                    )
+                except Exception as exc:
+                    logger.warning(
+                        "paper_state_position_restore_failed",
+                        strategy_id=self._strategy.id,
+                        error=str(exc),
+                    )
 
         # Restore completed trade log
         restored_trades: list[TradeRecord] = []
@@ -456,11 +483,20 @@ class PaperTradingEngine:
             return
 
         try:
-            # Serialize open position if any
-            position_data: dict[str, Any] | None = None
+            # Always persist last_bar_timestamp for gap-replay on restart.
+            # When a position is open the sentinel "in_position_marker" is added
+            # so _load_state() can distinguish "position present" from "timestamp only".
+            last_ts_str = (
+                self._last_bar_timestamp.isoformat()
+                if self._last_bar_timestamp is not None
+                else None
+            )
+            position_data: dict[str, Any] = {"last_bar_timestamp": last_ts_str}
+
             if self._portfolio.has_position() and self._portfolio.position is not None:
                 pos = self._portfolio.position
-                position_data = {
+                position_data.update({
+                    "in_position_marker": True,
                     "symbol": pos.symbol,
                     "direction": pos.direction.value,
                     "quantity": pos.quantity,
@@ -468,7 +504,10 @@ class PaperTradingEngine:
                     "entry_commission": pos.entry_commission,
                     "entry_slippage": pos.entry_slippage,
                     "entry_time": pos.entry_time.isoformat(),
-                }
+                    "stop_loss": pos.stop_loss,
+                    "take_profit": pos.take_profit,
+                    "trail_distance": pos.trail_distance,
+                })
 
             # Cap equity curve at 500 most recent points
             curve_slice = self._portfolio.equity_curve[-500:]
@@ -573,13 +612,56 @@ class PaperTradingEngine:
     def _process_live_bar(self, series: OHLCVSeries) -> None:
         """Process a single live data update.
 
-        Uses the second-to-last bar for signal generation and
-        the last bar for fill price.
+        Replays every bar since the last poll before generating new signals.
+        This closes the gap-replay bug: if Railway restarted and 6 hours of
+        candles arrived while the service was down, stop/TP checks are applied
+        to each missed bar in chronological order — not just the latest one.
+
+        Uses the second-to-last bar for signal generation (no-lookahead)
+        and the last bar as the fill bar for entry/exit orders.
 
         Args:
             series: Latest OHLCV series data.
         """
-        # Use all but last bar for signal generation
+        current_bar = series[-1]
+
+        # --- Gap-replay: check stop/TP on every bar since last poll ---
+        # Iterate over all bars newer than _last_bar_timestamp. On the very
+        # first run (timestamp is None) fall back to only the current bar so
+        # behaviour is identical to the old code for fresh sessions.
+        if self._last_bar_timestamp is not None:
+            for bar in series:
+                if bar.timestamp <= self._last_bar_timestamp:
+                    continue
+                trade = self._trader.check_stop_take_profit(
+                    portfolio=self._portfolio,
+                    bar=bar,
+                    config=self._config,
+                )
+                if trade is not None:
+                    logger.info(
+                        "gap_replay_stop_tp_triggered",
+                        strategy_id=self._strategy.id,
+                        symbol=series.symbol,
+                        bar_timestamp=bar.timestamp.isoformat(),
+                        realized_pnl=trade.realized_pnl,
+                    )
+                    # Position closed — stop replaying; remaining bars are
+                    # irrelevant for the now-flat portfolio
+                    break
+        else:
+            # First run — no timestamp reference; check current bar only
+            self._trader.check_stop_take_profit(
+                portfolio=self._portfolio,
+                bar=current_bar,
+                config=self._config,
+            )
+
+        # Advance timestamp cursor BEFORE signal generation so a crash here
+        # does not replay the same bars again on the next restart
+        self._last_bar_timestamp = current_bar.timestamp
+
+        # --- Signal generation (no-lookahead: exclude latest bar) ---
         signal_series = series.slice(0, len(series) - 1)
         signal = self._generator.generate(
             signal_series,
@@ -597,7 +679,6 @@ class PaperTradingEngine:
             )
 
         # Record equity
-        current_bar = series[-1]
         self._portfolio.record_equity(
             timestamp=current_bar.timestamp,
             current_price=current_bar.close,

@@ -173,17 +173,28 @@ class TestSignalGeneratorFactory:
     """Tests for SignalGeneratorFactory."""
 
     def test_get_all_builtin_generators(self):
-        """Test that all 7 built-in generators are registered."""
+        """Test that all 17 built-in generators are registered."""
         factory = SignalGeneratorFactory()
         template_ids = factory.list_template_ids()
 
         expected = [
             "bb_squeeze_breakout",
+            "bb_squeeze_momentum",
+            "bear_trend_follower",
+            "bull_trend_pullback",
+            "cascading_momentum_filter",
             "donchian_atr",
             "ema_trend_rsi",
+            "ichimoku_cloud_trend",
+            "keltner_fade_adx",
             "macd_pullback",
+            "multi_tf_confluence",
+            "regime_aware_mean_reversion",
             "rsi_bb_mean_reversion",
+            "rsi_divergence_reversal",
             "supertrend_volume_macd",
+            "trend_acceleration_momentum",
+            "volatility_regime_breakout",
             "vwap_pullback_volume",
         ]
 

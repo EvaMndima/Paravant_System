@@ -18,6 +18,7 @@ from src.utils.logging import get_logger
 
 if TYPE_CHECKING:
     from src.core.alerting.channels.telegram import TelegramChannel
+    from src.data.store import DataStore
 
 logger = get_logger(__name__)
 
@@ -57,6 +58,7 @@ class RegimeRouter:
         stop_event: asyncio.Event,
         check_interval: int = 86400,
         telegram: TelegramChannel | None = None,
+        store: DataStore | None = None,
     ) -> None:
         self._detector = detector
         self._engine_factory = engine_factory
@@ -64,6 +66,7 @@ class RegimeRouter:
         self._stop_event = stop_event
         self._check_interval = check_interval
         self._telegram = telegram
+        self._store = store
 
         self._current_regime: RegimeState = RegimeState.UNKNOWN
         self._active_engines: list[PaperTradingEngine] = []
@@ -197,6 +200,7 @@ class RegimeRouter:
                 regime=regime.value,
             )
             self._current_regime = regime
+            self._persist_regime_state(regime)
             return
 
         engines = self._engine_factory(template_ids)
@@ -205,6 +209,7 @@ class RegimeRouter:
             asyncio.create_task(engine.start()) for engine in engines
         ]
         self._current_regime = regime
+        self._persist_regime_state(regime)
 
         logger.info(
             "regime_engines_started",
@@ -212,6 +217,37 @@ class RegimeRouter:
             template_ids=template_ids,
             engine_count=len(engines),
         )
+
+    def _persist_regime_state(self, regime: RegimeState) -> None:
+        """Write current regime into SystemState.circuit_breakers["auto_regime"].
+
+        Decision: DEC-2026-02-08-003 - Timezone-aware timestamps
+
+        The API server reads this key to expose the current regime without
+        requiring in-process access to the router. Pattern mirrors manual
+        regime tagging in src.core.strategy.regime.manual.
+
+        Args:
+            regime: The regime state to persist.
+        """
+        if self._store is None:
+            return
+
+        try:
+            state = self._store.get_system_state()
+            cb = dict(state.circuit_breakers)
+            cb["auto_regime"] = {
+                "state": regime.value,
+                "updated_at": datetime.now(timezone.utc).isoformat(),
+            }
+            self._store.update_system_state(circuit_breakers=cb)
+            logger.info("regime_state_persisted", regime=regime.value)
+        except Exception as exc:
+            logger.error(
+                "regime_state_persist_failed",
+                regime=regime.value,
+                error=str(exc),
+            )
 
     async def _stop_all_engines(self) -> None:
         """Gracefully stop all currently active engines and await their tasks."""

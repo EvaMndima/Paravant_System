@@ -217,7 +217,11 @@ class BbSqueezeMomentumGenerator(SignalGenerator):
                 strength = self._calc_strength(
                     vol_ratio, vol_threshold, hist_current, price,
                 )
-                stop_loss = price - 2.0 * atr_current
+                stop_loss = price - 2.5 * atr_current
+                # TP at 2.5×ATR: symmetric with stop (R:R = 1:1).
+                # BB upper at squeeze fire is near price (bands just expanded),
+                # so using ATR avoids trivially small TP distances.
+                take_profit = price + 2.5 * atr_current
 
                 return TradingSignal(
                     direction=SignalDirection.LONG,
@@ -225,11 +229,12 @@ class BbSqueezeMomentumGenerator(SignalGenerator):
                     price=price,
                     strength=strength,
                     stop_loss=max(stop_loss, price * 0.001),
+                    take_profit=take_profit,
                     indicators=indicators,
                     metadata={
                         "trigger": "bb_squeeze_momentum_long",
                         "squeeze_type": "ttm",
-                        "atr_stop_distance": 2.0 * atr_current,
+                        "atr_stop_distance": 2.5 * atr_current,
                         "time_stop_bars": time_stop_bars,
                     },
                 )
@@ -240,7 +245,9 @@ class BbSqueezeMomentumGenerator(SignalGenerator):
                 strength = self._calc_strength(
                     vol_ratio, vol_threshold, hist_current, price,
                 )
-                stop_loss = price + 2.0 * atr_current
+                stop_loss = price + 2.5 * atr_current
+                # TP at 2.5×ATR: symmetric with stop (R:R = 1:1).
+                take_profit = price - 2.5 * atr_current
 
                 return TradingSignal(
                     direction=SignalDirection.SHORT,
@@ -248,11 +255,12 @@ class BbSqueezeMomentumGenerator(SignalGenerator):
                     price=price,
                     strength=strength,
                     stop_loss=stop_loss,
+                    take_profit=take_profit,
                     indicators=indicators,
                     metadata={
                         "trigger": "bb_squeeze_momentum_short",
                         "squeeze_type": "ttm",
-                        "atr_stop_distance": 2.0 * atr_current,
+                        "atr_stop_distance": 2.5 * atr_current,
                         "time_stop_bars": time_stop_bars,
                     },
                 )

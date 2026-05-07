@@ -218,7 +218,10 @@ class CascadingMomentumFilterGenerator(SignalGenerator):
 
                 if st_flipped_bull and macd_bullish:
                     strength = self._calc_strength(adx_4h, htf_adx_min, ema_slope)
-                    stop_loss = price - 2.0 * atr_val
+                    stop_loss = price - 3.0 * atr_val
+                    # TP at 2.5×ATR locks in gains before trailing whipsaw;
+                    # R:R = 0.83 — viable for high-conviction triple-TF entry.
+                    take_profit = price + 2.5 * atr_val
 
                     return TradingSignal(
                         direction=SignalDirection.LONG,
@@ -226,6 +229,7 @@ class CascadingMomentumFilterGenerator(SignalGenerator):
                         price=price,
                         strength=strength,
                         stop_loss=max(stop_loss, price * 0.001),
+                        take_profit=take_profit,
                         indicators=indicators,
                         metadata={
                             "trigger": "cmf_cascade_long",
@@ -246,7 +250,9 @@ class CascadingMomentumFilterGenerator(SignalGenerator):
 
                 if st_flipped_bear and macd_bearish:
                     strength = self._calc_strength(adx_4h, htf_adx_min, ema_slope)
-                    stop_loss = price + 2.0 * atr_val
+                    stop_loss = price + 3.0 * atr_val
+                    # TP at 2.5×ATR mirrors LONG logic for symmetry.
+                    take_profit = price - 2.5 * atr_val
 
                     return TradingSignal(
                         direction=SignalDirection.SHORT,
@@ -254,6 +260,7 @@ class CascadingMomentumFilterGenerator(SignalGenerator):
                         price=price,
                         strength=strength,
                         stop_loss=stop_loss,
+                        take_profit=take_profit,
                         indicators=indicators,
                         metadata={
                             "trigger": "cmf_cascade_short",

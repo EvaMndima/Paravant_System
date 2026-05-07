@@ -20,6 +20,13 @@ Available generators:
     - BearTrendFollowerGenerator: Multi-TF bear trend follower (1H+4H)
     - RegimeAwareMeanReversionGenerator: Multi-TF regime-aware mean reversion
     - CascadingMomentumFilterGenerator: Triple-TF cascade filter (1H+4H+Daily)
+
+    Bull-Regime Strategies (5):
+    - BullTrendPullbackGenerator: Long-only RSI pullback within confirmed bull trend
+    - TrendAccelerationMomentumGenerator: EMA spread + volume + ATR acceleration
+    - VolatilityRegimeBreakoutGenerator: ATR squeeze-release Donchian breakout
+    - MultiTfConfluenceGenerator: Daily EMA + 4H MACD + 1H RSI pullback
+    - RsiDivergenceReversalGenerator: Price/RSI divergence at confirmed swing pivots
 """
 from src.core.strategy.generators.bb_squeeze_breakout import \
     BbSqueezeBreakoutGenerator
@@ -44,6 +51,16 @@ from src.core.strategy.generators.supertrend_volume_macd import \
     SupertrendVolumeMacdGenerator
 from src.core.strategy.generators.vwap_pullback_volume import \
     VwapPullbackVolumeGenerator
+from src.core.strategy.generators.bull_trend_pullback import \
+    BullTrendPullbackGenerator
+from src.core.strategy.generators.trend_acceleration_momentum import \
+    TrendAccelerationMomentumGenerator
+from src.core.strategy.generators.volatility_regime_breakout import \
+    VolatilityRegimeBreakoutGenerator
+from src.core.strategy.generators.multi_tf_confluence import \
+    MultiTfConfluenceGenerator
+from src.core.strategy.generators.rsi_divergence_reversal import \
+    RsiDivergenceReversalGenerator
 
 __all__ = [
     # Original generators
@@ -61,4 +78,10 @@ __all__ = [
     "BearTrendFollowerGenerator",
     "RegimeAwareMeanReversionGenerator",
     "CascadingMomentumFilterGenerator",
+    # Bull-regime generators
+    "BullTrendPullbackGenerator",
+    "TrendAccelerationMomentumGenerator",
+    "VolatilityRegimeBreakoutGenerator",
+    "MultiTfConfluenceGenerator",
+    "RsiDivergenceReversalGenerator",
 ]

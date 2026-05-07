@@ -132,6 +132,13 @@ class BacktestEngine:
         # Signal at bar[i] -> fill at bar[i+1]
         try:
             for i in range(min_bars - 1, len(series) - 1):
+                # Check stop-loss / take-profit on current bar before signals
+                self._trader.check_stop_take_profit(
+                    portfolio=portfolio,
+                    bar=series[i],
+                    config=config,
+                )
+
                 # Slice series up to and including bar[i] — no lookahead
                 visible_series = series.slice(0, i + 1)
 

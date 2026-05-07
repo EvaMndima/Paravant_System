@@ -142,12 +142,17 @@ class SupertrendVolumeMacdGenerator(SignalGenerator):
                 and macd_curr > 0
                 and volume_ok
             ):
+                long_stop = max(st_value, price * 0.001)
+                # TP at 2:1 R:R using actual stop distance from entry.
+                long_risk = price - long_stop
+                long_tp = price + 2.0 * long_risk if long_risk > 0 else price * 1.02
                 return TradingSignal(
                     direction=SignalDirection.LONG,
                     symbol=symbol,
                     price=price,
                     strength=min(1.0, macd_curr / (price * 0.001 + 1)),
-                    stop_loss=max(st_value, price * 0.001),  # SuperTrend as stop
+                    stop_loss=long_stop,
+                    take_profit=long_tp,
                     indicators=indicators,
                     metadata={"trigger": "supertrend_macd_volume_long"},
                 )
@@ -159,12 +164,16 @@ class SupertrendVolumeMacdGenerator(SignalGenerator):
                 and macd_curr < 0
                 and volume_ok
             ):
+                short_risk = st_value - price
+                # TP at 2:1 R:R below entry.
+                short_tp = price - 2.0 * short_risk if short_risk > 0 else price * 0.98
                 return TradingSignal(
                     direction=SignalDirection.SHORT,
                     symbol=symbol,
                     price=price,
                     strength=min(1.0, abs(macd_curr) / (price * 0.001 + 1)),
-                    stop_loss=st_value,  # SuperTrend as stop
+                    stop_loss=st_value,
+                    take_profit=short_tp,
                     indicators=indicators,
                     metadata={"trigger": "supertrend_macd_volume_short"},
                 )

@@ -216,7 +216,7 @@ class RegimeAwareMeanReversionGenerator(SignalGenerator):
                             rsi_val, rsi_ob_bear, 100.0,
                             price, htf_ema_value, atr_val,
                         )
-                        stop_loss = price + 1.5 * atr_val
+                        stop_loss = price + 2.5 * atr_val
 
                         return TradingSignal(
                             direction=SignalDirection.SHORT,
@@ -237,7 +237,7 @@ class RegimeAwareMeanReversionGenerator(SignalGenerator):
                 if rsi_val < rsi_os_bear and at_lower_bb:
                     if abs(vwap_dev) > vwap_dev_pct and vwap_dev < 0:
                         strength = self._secondary_strength(rsi_val, rsi_os_bear)
-                        stop_loss = price - 1.5 * atr_val
+                        stop_loss = price - 2.5 * atr_val
 
                         return TradingSignal(
                             direction=SignalDirection.LONG,
@@ -265,7 +265,7 @@ class RegimeAwareMeanReversionGenerator(SignalGenerator):
                             rsi_val, 0.0, rsi_os_bull,
                             price, htf_ema_value, atr_val,
                         )
-                        stop_loss = price - 1.5 * atr_val
+                        stop_loss = price - 2.5 * atr_val
 
                         return TradingSignal(
                             direction=SignalDirection.LONG,
@@ -288,7 +288,7 @@ class RegimeAwareMeanReversionGenerator(SignalGenerator):
                         strength = self._secondary_strength(
                             rsi_val, rsi_ob_bull, invert=True,
                         )
-                        stop_loss = price + 1.5 * atr_val
+                        stop_loss = price + 2.5 * atr_val
 
                         return TradingSignal(
                             direction=SignalDirection.SHORT,

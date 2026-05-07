@@ -1312,3 +1312,21 @@ class DataStore:
                     cash=result.cash,
                 )
             return result
+
+    def list_paper_sessions(self) -> list[PaperTradingSession]:
+        """Return all persisted paper trading sessions, newest first.
+
+        Used by the dashboard API to surface active session summaries
+        without requiring in-process access to PaperTradingEngine.
+
+        Returns:
+            List of PaperTradingSession sorted by started_at descending.
+        """
+        with self.session() as db:
+            stmt = select(PaperTradingSession).order_by(
+                PaperTradingSession.started_at.desc()
+            )
+            results = list(db.scalars(stmt).all())
+            for r in results:
+                db.expunge(r)
+            return results

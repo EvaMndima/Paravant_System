@@ -109,6 +109,9 @@ class BearTrendFollowerGenerator(SignalGenerator):
             st_period = int(params["supertrend_period"])
             st_multiplier = float(params["supertrend_multiplier"])
             atr_period = int(params["atr_period"])
+            # Trailing stop distance in ATR units. Default 2.5 from sweep
+            # optimisation (best Sharpe on DOGE/ETH without over-fitting).
+            atr_stop_mult = float(params.get("atr_stop_multiplier", 2.5))
 
             # --- Higher Timeframe: Resample 1H -> 4H for regime ---
             series_4h = resample_ohlcv(series, "4h")
@@ -220,7 +223,7 @@ class BearTrendFollowerGenerator(SignalGenerator):
                     strength = min(1.0, 0.55 + regime_strength + (adx_val - adx_min) * 0.005)
                     strength = max(0.4, min(1.0, strength))
 
-                    stop_loss = float(kc_upper) + 1.5 * atr_current
+                    stop_loss = float(kc_upper) + atr_stop_mult * atr_current
 
                     return TradingSignal(
                         direction=SignalDirection.SHORT,
@@ -255,7 +258,7 @@ class BearTrendFollowerGenerator(SignalGenerator):
                     # Lower conviction for counter-trend in bull regime
                     strength = max(0.3, min(0.6, 0.35 + (rsi_oversold - rsi_val) * 0.005))
 
-                    stop_loss = float(kc_lower) - 1.5 * atr_current
+                    stop_loss = float(kc_lower) - atr_stop_mult * atr_current
 
                     return TradingSignal(
                         direction=SignalDirection.LONG,

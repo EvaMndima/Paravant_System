@@ -25,7 +25,7 @@ class TestBacktestConfig:
         assert config.slippage_rate == 0.0005
         assert config.use_next_bar_open is True
         assert config.risk_free_rate == 0.02
-        assert config.position_size_pct == 0.95
+        assert config.position_size_pct == 0.35
 
     def test_custom_values(self) -> None:
         """Config accepts custom values."""

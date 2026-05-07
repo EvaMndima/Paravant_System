@@ -93,6 +93,9 @@ class IchimokuCloudTrendGenerator(SignalGenerator):
             atr_period = int(params["atr_period"])
             volume_period = int(params["volume_period"])
             vol_threshold = float(params["volume_threshold"])
+            # Trailing stop distance in ATR units. Default 2.5 preserves
+            # original behaviour; sweep range 2.5-5.0 for optimisation.
+            atr_stop_mult = float(params.get("atr_stop_multiplier", 2.5))
 
             # Calculate indicators
             ichimoku = IchimokuCloud(
@@ -169,8 +172,10 @@ class IchimokuCloudTrendGenerator(SignalGenerator):
                     price, cloud_top, atr_current,
                     current_volume / vol_ma, vol_threshold,
                 )
-                # Stop below cloud bottom or 2*ATR, whichever is tighter
-                stop_loss = max(cloud_bottom, price - 2.0 * atr_current)
+                # Stop below cloud bottom or atr_stop_mult*ATR, whichever is tighter
+                stop_loss = max(cloud_bottom, price - atr_stop_mult * atr_current)
+                # TP at same ATR distance above entry → R:R ≈ 1:1.
+                take_profit = price + atr_stop_mult * atr_current
 
                 return TradingSignal(
                     direction=SignalDirection.LONG,
@@ -178,6 +183,7 @@ class IchimokuCloudTrendGenerator(SignalGenerator):
                     price=price,
                     strength=strength,
                     stop_loss=stop_loss,
+                    take_profit=take_profit,
                     indicators=indicators,
                     metadata={
                         "trigger": "ichimoku_cloud_trend_long",
@@ -194,8 +200,10 @@ class IchimokuCloudTrendGenerator(SignalGenerator):
                     price, cloud_bottom, atr_current,
                     current_volume / vol_ma, vol_threshold,
                 )
-                # Stop above cloud top or 2*ATR, whichever is tighter
-                stop_loss = min(cloud_top, price + 2.0 * atr_current)
+                # Stop above cloud top or atr_stop_mult*ATR, whichever is tighter
+                stop_loss = min(cloud_top, price + atr_stop_mult * atr_current)
+                # TP mirrors stop distance below entry → R:R ≈ 1:1.
+                take_profit = price - atr_stop_mult * atr_current
 
                 return TradingSignal(
                     direction=SignalDirection.SHORT,
@@ -203,6 +211,7 @@ class IchimokuCloudTrendGenerator(SignalGenerator):
                     price=price,
                     strength=strength,
                     stop_loss=stop_loss,
+                    take_profit=take_profit,
                     indicators=indicators,
                     metadata={
                         "trigger": "ichimoku_cloud_trend_short",

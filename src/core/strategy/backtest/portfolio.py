@@ -36,6 +36,12 @@ class OpenPosition:
         entry_commission: Commission paid at entry in USDT.
         entry_slippage: Slippage cost at entry in USDT.
         entry_time: Timezone-aware UTC entry timestamp.
+        stop_loss: Stop loss price level (None if not set).
+        take_profit: Take profit price level (None if not set).
+        trail_distance: Fixed trailing distance in price units. When set,
+            stop_loss ratchets in the favorable direction each bar.
+            Computed automatically at open when stop_loss is set but
+            take_profit is not (trend-following strategies).
     """
 
     symbol: str
@@ -45,6 +51,9 @@ class OpenPosition:
     entry_commission: float
     entry_slippage: float
     entry_time: datetime
+    stop_loss: float | None = None
+    take_profit: float | None = None
+    trail_distance: float | None = None
 
 
 class PortfolioState:
@@ -125,6 +134,8 @@ class PortfolioState:
         commission: float,
         slippage_cost: float,
         timestamp: datetime,
+        stop_loss: float | None = None,
+        take_profit: float | None = None,
     ) -> None:
         """Open a new simulated position.
 
@@ -139,6 +150,8 @@ class PortfolioState:
             commission: Commission in USDT.
             slippage_cost: Slippage cost in USDT.
             timestamp: Timezone-aware UTC entry timestamp.
+            stop_loss: Stop loss price level (None if not set).
+            take_profit: Take profit price level (None if not set).
 
         Raises:
             ValueError: If a position is already open, or if cost
@@ -158,6 +171,14 @@ class PortfolioState:
             )
 
         self.cash -= total_cost
+
+        # Auto-enable trailing stop for trend-following strategies:
+        # if stop_loss is set but take_profit is not, the initial
+        # stop distance becomes the trailing distance.
+        trail_distance: float | None = None
+        if stop_loss is not None and take_profit is None:
+            trail_distance = abs(fill_price - stop_loss)
+
         self._position = OpenPosition(
             symbol=symbol,
             direction=direction,
@@ -166,6 +187,9 @@ class PortfolioState:
             entry_commission=commission,
             entry_slippage=slippage_cost,
             entry_time=timestamp,
+            stop_loss=stop_loss,
+            take_profit=take_profit,
+            trail_distance=trail_distance,
         )
 
         logger.debug(
@@ -175,6 +199,8 @@ class PortfolioState:
             quantity=quantity,
             fill_price=fill_price,
             commission=commission,
+            stop_loss=stop_loss,
+            take_profit=take_profit,
             cash_remaining=self.cash,
         )
 

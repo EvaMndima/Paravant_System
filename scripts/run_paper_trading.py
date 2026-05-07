@@ -659,6 +659,7 @@ async def main(lite: bool = False) -> None:
         stop_event=stop_event,
         check_interval=86400,  # re-check daily
         telegram=telegram,
+        store=store,
     )
 
     print("\nDetecting initial regime and starting engines...")

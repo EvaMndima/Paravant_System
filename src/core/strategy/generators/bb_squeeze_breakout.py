@@ -138,24 +138,31 @@ class BbSqueezeBreakoutGenerator(SignalGenerator):
 
             # LONG: price above upper BB + MACD histogram positive + volume
             if price > upper_band and hist_current > 0 and volume_ok:
+                long_stop = max(middle_band, price * 0.001)
+                # TP at 2:1 R:R: project the breakout distance (price−middle) above entry.
+                long_tp = price + 2.0 * (price - middle_band)
                 return TradingSignal(
                     direction=SignalDirection.LONG,
                     symbol=symbol,
                     price=price,
                     strength=min(1.0, hist_current / (upper_band * 0.001 + 1)),
-                    stop_loss=max(middle_band, price * 0.001),
+                    stop_loss=long_stop,
+                    take_profit=long_tp,
                     indicators=indicators,
                     metadata={"trigger": "bb_squeeze_breakout_long"},
                 )
 
             # SHORT: price below lower BB + MACD histogram negative + volume
             if price < lower_band and hist_current < 0 and volume_ok:
+                # TP at 2:1 R:R: project the breakdown distance below entry.
+                short_tp = price - 2.0 * (middle_band - price)
                 return TradingSignal(
                     direction=SignalDirection.SHORT,
                     symbol=symbol,
                     price=price,
                     strength=min(1.0, abs(hist_current) / (lower_band * 0.001 + 1)),
                     stop_loss=middle_band,
+                    take_profit=short_tp,
                     indicators=indicators,
                     metadata={"trigger": "bb_squeeze_breakout_short"},
                 )

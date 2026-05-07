@@ -84,7 +84,7 @@ class BacktestConfig:
     slippage_rate: float = 0.0005
     use_next_bar_open: bool = True
     risk_free_rate: float = 0.02
-    position_size_pct: float = 0.95
+    position_size_pct: float = 0.35
 
     def __post_init__(self) -> None:
         """Validate config fields after initialization.

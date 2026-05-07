@@ -14,8 +14,9 @@ from src.core.strategy.factory import SignalGeneratorFactory
 from src.core.strategy.paper.engine import PaperTradingEngine
 from src.core.strategy.paper.types import PaperTradingMode, PaperTradingStatus
 from src.data.market_data import OHLCV, OHLCVSeries
+from src.core.strategy.signals import TradingSignal
 from src.data.models import Strategy, StrategyStatus
-from src.data.models.signal import Signal, SignalDirection
+from src.data.models.signal import SignalDirection
 
 
 # ---------------------------------------------------------------------------
@@ -67,24 +68,18 @@ def mock_factory() -> MagicMock:
     def generate_signal(series, params, symbol):
         # Generate a BUY signal on the 10th bar, SELL on 20th
         if len(series) > 10 and len(series) % 20 == 10:
-             return Signal(
-                 strategy_id="test-strategy-001",
+             return TradingSignal(
                  symbol="BTCUSDT",
                  direction=SignalDirection.LONG,
                  timestamp=series[-1].timestamp,
-                 metadata={},
                  price=series[-1].close,
-                 indicators={}
              )
         if len(series) > 20 and len(series) % 20 == 0:
-             return Signal(
-                 strategy_id="test-strategy-001",
+             return TradingSignal(
                  symbol="BTCUSDT",
                  direction=SignalDirection.SHORT,
                  timestamp=series[-1].timestamp,
-                 metadata={},
                  price=series[-1].close,
-                 indicators={}
              )
         return None
 

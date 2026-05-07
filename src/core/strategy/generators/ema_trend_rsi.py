@@ -32,6 +32,11 @@ class EmaTrendRsiGenerator(SignalGenerator):
         rsi_buy_threshold, rsi_sell_threshold,
         rsi_overbought, rsi_oversold,
         atr_multiplier, atr_period
+
+    Optional parameters:
+        risk_reward_ratio: Take-profit distance as multiple of stop risk.
+            Default 2.0 (2:1 R:R). Increase to 3.0-4.0 in strong trends
+            where the fixed TP exits too early.
     """
 
     @property
@@ -75,6 +80,7 @@ class EmaTrendRsiGenerator(SignalGenerator):
             rsi_oversold: float = float(params["rsi_oversold"])
             atr_mult: float = float(params["atr_multiplier"])
             atr_period: int = int(params["atr_period"])
+            rr_ratio: float = float(params.get("risk_reward_ratio", 2.0))
 
             # Calculate indicators
             fast_ema = EMA(period=fast_period).calculate(series)
@@ -99,26 +105,32 @@ class EmaTrendRsiGenerator(SignalGenerator):
 
             # LONG entry: fast EMA crosses above slow EMA + RSI > buy threshold
             if fast_prev <= slow_prev and fast_curr > slow_curr and rsi_curr > rsi_buy:
-                stop_loss = price - (atr_mult * atr_curr)
+                risk = atr_mult * atr_curr
+                stop_loss = price - risk
+                take_profit = price + rr_ratio * risk
                 return TradingSignal(
                     direction=SignalDirection.LONG,
                     symbol=symbol,
                     price=price,
                     strength=min(1.0, (rsi_curr - rsi_buy) / (rsi_overbought - rsi_buy)),
-                    stop_loss=max(stop_loss, price * 0.001),  # Floor at 0.1% of price
+                    stop_loss=max(stop_loss, price * 0.001),
+                    take_profit=take_profit,
                     indicators=indicators,
                     metadata={"trigger": "ema_crossover_bullish"},
                 )
 
             # SHORT entry: fast EMA crosses below slow EMA + RSI < sell threshold
             if fast_prev >= slow_prev and fast_curr < slow_curr and rsi_curr < rsi_sell:
-                stop_loss = price + (atr_mult * atr_curr)
+                risk = atr_mult * atr_curr
+                stop_loss = price + risk
+                take_profit = price - rr_ratio * risk
                 return TradingSignal(
                     direction=SignalDirection.SHORT,
                     symbol=symbol,
                     price=price,
                     strength=min(1.0, (rsi_sell - rsi_curr) / (rsi_sell - rsi_oversold)),
                     stop_loss=stop_loss,
+                    take_profit=take_profit,
                     indicators=indicators,
                     metadata={"trigger": "ema_crossover_bearish"},
                 )
