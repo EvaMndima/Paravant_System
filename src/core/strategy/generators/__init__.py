@@ -21,12 +21,15 @@ Available generators:
     - RegimeAwareMeanReversionGenerator: Multi-TF regime-aware mean reversion
     - CascadingMomentumFilterGenerator: Triple-TF cascade filter (1H+4H+Daily)
 
-    Bull-Regime Strategies (5):
+    Bull-Regime Strategies (8):
     - BullTrendPullbackGenerator: Long-only RSI pullback within confirmed bull trend
     - TrendAccelerationMomentumGenerator: EMA spread + volume + ATR acceleration
-    - VolatilityRegimeBreakoutGenerator: ATR squeeze-release Donchian breakout
+    - VolatilityRegimeBreakoutGenerator: BB squeeze-release into squeeze-window breakout
     - MultiTfConfluenceGenerator: Daily EMA + 4H MACD + 1H RSI pullback
     - RsiDivergenceReversalGenerator: Price/RSI divergence at confirmed swing pivots
+    - EmaRibbonExpansionGenerator: EMA ribbon compression-expansion in bull alignment
+    - VolumeBalanceBreakoutGenerator: Up-volume ratio + range breakout confirmation
+    - RocMomentumSurgeGenerator: ROC acceleration in RSI 60-75 power zone
 """
 from src.core.strategy.generators.bb_squeeze_breakout import \
     BbSqueezeBreakoutGenerator
@@ -61,6 +64,12 @@ from src.core.strategy.generators.multi_tf_confluence import \
     MultiTfConfluenceGenerator
 from src.core.strategy.generators.rsi_divergence_reversal import \
     RsiDivergenceReversalGenerator
+from src.core.strategy.generators.ema_ribbon_expansion import \
+    EmaRibbonExpansionGenerator
+from src.core.strategy.generators.volume_balance_breakout import \
+    VolumeBalanceBreakoutGenerator
+from src.core.strategy.generators.roc_momentum_surge import \
+    RocMomentumSurgeGenerator
 
 __all__ = [
     # Original generators
@@ -84,4 +93,7 @@ __all__ = [
     "VolatilityRegimeBreakoutGenerator",
     "MultiTfConfluenceGenerator",
     "RsiDivergenceReversalGenerator",
+    "EmaRibbonExpansionGenerator",
+    "VolumeBalanceBreakoutGenerator",
+    "RocMomentumSurgeGenerator",
 ]

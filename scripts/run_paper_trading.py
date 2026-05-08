@@ -90,9 +90,10 @@ BULL_STRATEGY_CONFIG: dict[str, dict[str, Any]] = {
         # Quality-validated (90d): BTC PF=1.79/Sharpe=1.60, ETH PF=2.21/Sharpe=2.27,
         # BNB PF=1.72/Sharpe=1.73. DD <2.5% on all three. Observing Gate 2 (40 trades).
         # htf_ema=150 and rsi_high=60 are sweep-optimal from 272-run parameter scan.
+        # DOGE added 2026-05-07: 45d bull PF=5.10, Sharpe=7.15, WR=66.7% — Gate1=10.
         "label": "BTP",
         "regime": "bull",
-        "symbols": ["BTCUSDT", "ETHUSDT", "BNBUSDT"],
+        "symbols": ["BTCUSDT", "ETHUSDT", "BNBUSDT", "DOGEUSDT"],
         "params": {
             "htf_ema_period": 150,
             "trend_ema_period": 50,
@@ -105,6 +106,27 @@ BULL_STRATEGY_CONFIG: dict[str, dict[str, Any]] = {
             "atr_period": 14,
             "atr_stop_multiplier": 2.0,
             "risk_reward_ratio": 2.5,
+        },
+    },
+    "volatility_regime_breakout": {
+        # Promoted 2026-05-07. BTC: 90d PF=1.55/WR=43.5% with EMA-200 gate.
+        # Low-frequency strategy (~1 trade per 4-5 bull days). Gate1=10 trades.
+        # Squeeze-window high/low breakout after BB width compression release.
+        "label": "VRB",
+        "regime": "bull",
+        "symbols": ["BTCUSDT"],
+        "params": {
+            "bb_period": 20,
+            "bb_std_dev": 2.0,
+            "squeeze_lookback": 20,
+            "squeeze_percentile": 20.0,
+            "reference_lookback": 100,
+            "volume_period": 20,
+            "volume_threshold": 1.5,
+            "atr_period": 14,
+            "atr_stop_multiplier": 2.0,
+            "risk_reward_ratio": 2.5,
+            "regime_ema_period": 200,
         },
     },
 }

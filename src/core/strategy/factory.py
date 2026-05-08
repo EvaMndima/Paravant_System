@@ -16,17 +16,20 @@ from src.core.strategy.generators import (BbSqueezeBreakoutGenerator,
                                           BullTrendPullbackGenerator,
                                           CascadingMomentumFilterGenerator,
                                           DonchianAtrGenerator,
+                                          EmaRibbonExpansionGenerator,
                                           EmaTrendRsiGenerator,
                                           IchimokuCloudTrendGenerator,
                                           KeltnerFadeAdxGenerator,
                                           MacdPullbackGenerator,
                                           MultiTfConfluenceGenerator,
                                           RegimeAwareMeanReversionGenerator,
+                                          RocMomentumSurgeGenerator,
                                           RsiBbMeanReversionGenerator,
                                           RsiDivergenceReversalGenerator,
                                           SupertrendVolumeMacdGenerator,
                                           TrendAccelerationMomentumGenerator,
                                           VolatilityRegimeBreakoutGenerator,
+                                          VolumeBalanceBreakoutGenerator,
                                           VwapPullbackVolumeGenerator)
 from src.core.strategy.signals import SignalGenerator
 from src.utils.logging import get_logger
@@ -56,6 +59,10 @@ _DEFAULT_GENERATORS: dict[str, type[SignalGenerator]] = {
     "volatility_regime_breakout": VolatilityRegimeBreakoutGenerator,
     "multi_tf_confluence": MultiTfConfluenceGenerator,
     "rsi_divergence_reversal": RsiDivergenceReversalGenerator,
+    # New bull-regime strategies (2026-05-07)
+    "ema_ribbon_expansion": EmaRibbonExpansionGenerator,
+    "volume_balance_breakout": VolumeBalanceBreakoutGenerator,
+    "roc_momentum_surge": RocMomentumSurgeGenerator,
 }
 
 

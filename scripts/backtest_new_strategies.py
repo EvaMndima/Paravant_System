@@ -267,10 +267,11 @@ BULL_TEMPLATES: dict[str, dict] = {
         "regime_ema_period": 200,
     },
     "volatility_regime_breakout": {
-        # Fix: reference_lookback=100 replaces all-time adaptive reference.
-        # Prior version used all available history (2100+ bars) — local consolidations
-        # never reached the 20th percentile of that long distribution, causing 0 trades.
-        # Fixed 100-bar window anchors "squeeze" to recent volatility context only.
+        # EMA(200) regime gate: LONG only above EMA-200 (bull confirmation).
+        # Without the gate VRB fires on both directions in mixed regimes —
+        # SHORT entries in bull markets hit the WR floor (19-26%) and drag PF below 1.
+        # BTC showed edge at 34.5% WR / PF=1.16 with no gate; bull-only gate
+        # should raise WR by removing counter-trend short entries.
         "bb_period": 20,
         "bb_std_dev": 2.0,
         "squeeze_lookback": 20,
@@ -281,6 +282,7 @@ BULL_TEMPLATES: dict[str, dict] = {
         "atr_period": 14,
         "atr_stop_multiplier": 2.0,
         "risk_reward_ratio": 2.5,
+        "regime_ema_period": 200,
     },
     "multi_tf_confluence": {
         # rsi_min=40/rsi_max=65: best RSI zone from sweep (adds 2-3 trades vs default)
@@ -308,6 +310,62 @@ BULL_TEMPLATES: dict[str, dict] = {
         # Regime gate: bullish divergence only in bull, bearish only in bear
         "regime_ema_period": 200,
     },
+    # --- New bull strategies (2026-05-07) ---
+    "ema_ribbon_expansion": {
+        # EMA ribbon compression-expansion in bull alignment.
+        # Three EMAs (8/21/50): ribbon contracts during pullbacks, expands on resumption.
+        # Distinct from VRB (BB width) and BTP (RSI dips) — measures trend momentum geometry.
+        "fast_ema_period": 8,
+        "medium_ema_period": 21,
+        "slow_ema_period": 50,
+        "ribbon_lookback": 20,
+        "ribbon_percentile": 25.0,
+        "volume_period": 20,
+        "volume_threshold": 1.3,
+        "atr_period": 14,
+        "atr_stop_multiplier": 2.0,
+        "risk_reward_ratio": 2.5,
+    },
+    "volume_balance_breakout": {
+        # Up-volume ratio + range breakout. 65%+ of recent volume on rising candles
+        # = institutional accumulation. When price then breaks the range on elevated
+        # volume, the markup phase is confirmed. RSI 45-65 = room to run.
+        "balance_period": 15,
+        "balance_threshold": 0.65,
+        "breakout_lookback": 15,
+        "ema_period": 50,
+        "rsi_period": 14,
+        "rsi_min": 45.0,
+        "rsi_max": 65.0,
+        "volume_period": 20,
+        "volume_threshold": 1.5,
+        "atr_period": 14,
+        "atr_stop_multiplier": 2.0,
+        "risk_reward_ratio": 3.0,
+    },
+    "roc_momentum_surge": {
+        # ROC acceleration + RSI in 60-75 power zone.
+        # Counter-intuitive: buys "overbought" RSI as bull-strength confirmation.
+        # In crypto, RSI 60-75 = mid-bull acceleration, not exhaustion.
+        "roc_period": 5,
+        "roc_threshold": 2.0,
+        "roc_accel_period": 3,
+        "rsi_period": 14,
+        "rsi_bull_min": 60.0,
+        "rsi_bull_max": 75.0,
+        "ema_period": 50,
+        "volume_period": 20,
+        "volume_threshold": 1.2,
+        "atr_period": 14,
+        "atr_stop_multiplier": 1.5,
+        "risk_reward_ratio": 3.5,
+    },
+}
+
+# New bull strategies for targeted backtest
+NEW_BULL_TEMPLATES: dict[str, dict] = {
+    k: BULL_TEMPLATES[k]
+    for k in ["ema_ribbon_expansion", "volume_balance_breakout", "roc_momentum_surge"]
 }
 
 # ---------------------------------------------------------------------------
@@ -331,12 +389,15 @@ LABELS: dict[str, str] = {
     "bear_trend_follower": "BTF",
     "regime_aware_mean_reversion": "RAMR",
     "cascading_momentum_filter": "CMF",
-    # Bull-regime 5
+    # Bull-regime 8
     "bull_trend_pullback": "BTP",
     "trend_acceleration_momentum": "TAM",
     "volatility_regime_breakout": "VRB",
     "multi_tf_confluence": "MTC",
     "rsi_divergence_reversal": "RDR",
+    "ema_ribbon_expansion": "EREE",
+    "volume_balance_breakout": "VBB",
+    "roc_momentum_surge": "RMS",
 }
 
 
@@ -559,9 +620,9 @@ async def main() -> None:
     parser.add_argument(
         "--group",
         type=str,
-        choices=["all", "original", "bear", "bull"],
+        choices=["all", "original", "bear", "bull", "new_bull"],
         default="all",
-        help="Strategy group to test: all (default), original (7), bear (6), bull (5)",
+        help="Strategy group: all, original (7), bear (6), bull (8), new_bull (3 new)",
     )
     args = parser.parse_args()
 
@@ -580,6 +641,8 @@ async def main() -> None:
         templates = BEAR_TEMPLATES
     elif args.group == "bull":
         templates = BULL_TEMPLATES
+    elif args.group == "new_bull":
+        templates = NEW_BULL_TEMPLATES
     else:
         templates = ALL_TEMPLATES
 

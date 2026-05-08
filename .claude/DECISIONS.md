@@ -575,9 +575,33 @@ These decisions are **LOCKED** per MVP scope control rules until specified revie
 
 ---
 
-**Last Updated:** 2026-05-04
-**Total Decisions:** 17 active, 0 superseded, 5 locked
-**Next Decision ID:** DEC-2026-05-04-003
+### DEC-2026-05-07-001: Three New Bull-Regime Signal Generators
+- **Decision:** Add EmaRibbonExpansion, VolumeBalanceBreakout, and RocMomentumSurge as new bull-regime generators targeting three orthogonal signal dimensions.
+- **Context:** Existing bull generators (BTP, TAM, VRB) all detect slightly overlapping patterns. Adding orthogonal signals — trend structure, order flow, and price velocity — reduces correlated losses and provides diversified entries across different bull market phases.
+- **Rationale:** (1) EREE measures EMA ribbon compression/expansion (trend momentum geometry), not used by any prior strategy. (2) VBB measures up-volume fraction over a rolling window (institutional order flow), not used by any prior strategy. (3) RMS uses ROC acceleration in the RSI 60-75 "power zone" — counter-intuitively buys elevated RSI as a strength signal specific to crypto bull markets, not used by any prior strategy. Three distinct market dimensions with zero indicator overlap.
+- **Alternatives Considered:** Candle pattern recognition (too noisy for 1H crypto), funding rate analysis (no data source), on-chain metrics (no data source), VWAP reclaim (close to existing strategies).
+- **Status:** ACTIVE
+- **Date Decided:** 2026-05-07
+- **Implemented By:** Strategy generator layer
+- **Affected Files:** `src/core/strategy/generators/ema_ribbon_expansion.py`, `src/core/strategy/generators/volume_balance_breakout.py`, `src/core/strategy/generators/roc_momentum_surge.py`, `src/core/strategy/generators/__init__.py`, `src/core/strategy/factory.py`
+- **References:** Backtest validation pending (90d × 8 symbols vigorous test)
+
+### DEC-2026-05-07-002: VRB BTC + BTP DOGE Promoted to Paper Trading
+- **Decision:** Promote VolatilityRegimeBreakout on BTCUSDT and BullTrendPullback on DOGEUSDT to paper trading observation with relaxed gates (Gate1=10, Gate2=20) due to low-frequency nature.
+- **Context:** VRB BTC showed consistent edge (PF 1.16-1.55, WR 40-43%) across 45d and 90d backtest windows. BTP DOGE showed exceptional 45d bull performance (PF=5.10, Sharpe=7.15, WR=66.7%). Both are low-frequency strategies that cannot hit the standard 30-trade SUPERVISED threshold in 45-90 days.
+- **Rationale:** Relaxed paper trading gates (10 trades for Gate1 instead of 20) are appropriate for regime-gated strategies that only fire in bull phases. The quality metrics (WR, PF, Sharpe) are strong enough to warrant live observation.
+- **Alternatives Considered:** Loose parameters to generate more trades (rejected — degrades quality), skip paper trading and defer (rejected — strong enough evidence for observation).
+- **Status:** ACTIVE
+- **Date Decided:** 2026-05-07
+- **Implemented By:** `scripts/run_paper_trading.py` BULL_STRATEGY_CONFIG
+- **Affected Files:** `scripts/run_paper_trading.py`
+- **References:** Backtest results 2026-05-07
+
+---
+
+**Last Updated:** 2026-05-07
+**Total Decisions:** 19 active, 0 superseded, 5 locked
+**Next Decision ID:** DEC-2026-05-07-003
 
 ---
 
