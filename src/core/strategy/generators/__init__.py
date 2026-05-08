@@ -79,6 +79,16 @@ from src.core.strategy.generators.keltner_channel_continuation import \
     KeltnerChannelContinuationGenerator
 from src.core.strategy.generators.stoch_rsi_bull_cross import \
     StochRsiBullCrossGenerator
+from src.core.strategy.generators.crypto_wick_reversal import \
+    CryptoWickReversalGenerator
+from src.core.strategy.generators.obv_trend_divergence import \
+    ObvTrendDivergenceGenerator
+from src.core.strategy.generators.heikin_ashi_trend_pulse import \
+    HeikinAshiTrendPulseGenerator
+from src.core.strategy.generators.vpt_momentum import \
+    VptMomentumGenerator
+from src.core.strategy.generators.realized_vol_compression_breakout import \
+    RealizedVolCompressionBreakoutGenerator
 
 __all__ = [
     # Original generators
@@ -108,4 +118,10 @@ __all__ = [
     "AdxDirectionalThrustGenerator",
     "KeltnerChannelContinuationGenerator",
     "StochRsiBullCrossGenerator",
+    # Crypto-native bull-regime generators (2026-05-08)
+    "CryptoWickReversalGenerator",
+    "ObvTrendDivergenceGenerator",
+    "HeikinAshiTrendPulseGenerator",
+    "VptMomentumGenerator",
+    "RealizedVolCompressionBreakoutGenerator",
 ]

@@ -184,6 +184,87 @@ BULL_STRATEGY_CONFIG: dict[str, dict[str, Any]] = {
             "risk_reward_ratio": 3.0,
         },
     },
+    "heikin_ashi_trend_pulse": {
+        # Promoted 2026-05-08 (batch 3). 3-round 90d backtest — HA no-wick trend pulse.
+        # BTC PF=1.70/Sharpe=1.767/16T, BNB PF=1.55/Sharpe=1.343/13T,
+        # AVAX PF=1.40/Sharpe=1.251/17T — all R3 confirmed. XRP PF=1.32 (just under).
+        # ha_prior_wick_min=6 (tight): requires 6 of 7 prior bars with lower wicks =
+        # deep, sustained pullback before the clean no-wick thrust bar.
+        # Fails on SOL/DOGE/DOT/ETH — large-caps + AVAX only.
+        # Gate1=10 trades per symbol.
+        "label": "HATP",
+        "regime": "bull",
+        "symbols": ["BTCUSDT", "BNBUSDT", "AVAXUSDT"],
+        "params": {
+            "ha_wick_lookback": 7,
+            "ha_prior_wick_min": 6,
+            "wick_tolerance": 0.05,
+            "ema_period": 50,
+            "regime_ema_period": 200,
+            "rsi_period": 14,
+            "rsi_min": 50.0,
+            "rsi_max": 75.0,
+            "volume_period": 20,
+            "volume_threshold": 1.4,
+            "atr_period": 14,
+            "atr_stop_multiplier": 2.0,
+            "risk_reward_ratio": 2.0,
+        },
+    },
+    "vpt_momentum": {
+        # Promoted 2026-05-08 (batch 3). 3-round 90d backtest — VPT contribution surge.
+        # BTC: IDENTICAL across all 3 rounds — PF=1.42/Sharpe=1.418/25T.
+        # This cross-round stability is the strongest signal reproducibility of any
+        # strategy in the portfolio. DOGE stable at PF=1.23 (below threshold — not promoted).
+        # All altcoins negative — BTC-only signal (wash-trade resistant via VPT vs OBV).
+        # Gate1=10 trades.
+        "label": "VPT",
+        "regime": "bull",
+        "symbols": ["BTCUSDT"],
+        "params": {
+            "vpt_ema_period": 20,
+            "vpt_lookback": 15,
+            "vpt_contrib_period": 20,
+            "vpt_contrib_threshold": 1.5,
+            "ema_period": 50,
+            "regime_ema_period": 200,
+            "rsi_period": 14,
+            "rsi_min": 50.0,
+            "rsi_max": 75.0,
+            "volume_period": 20,
+            "volume_threshold": 1.3,
+            "atr_period": 14,
+            "atr_stop_multiplier": 2.0,
+            "risk_reward_ratio": 2.5,
+        },
+    },
+    "realized_vol_compression_breakout": {
+        # Promoted 2026-05-08 (batch 3). 2-round 90d backtest — HV compression breakout.
+        # AVAX: R2 PF=4.32, R3 PF=4.62 — signal STRENGTHENED across rounds (not decay).
+        # 75% WR, Sharpe=2.295, 4T in R3. Ultra-low frequency. Gate1=5 trades.
+        # BTC PF=0.23 (8T) — clearly wrong instrument. ETH Sharpe=0.432 (not ready).
+        # Realized vol compression = statistical vol (std of log returns), not BB width.
+        # hv_short < 0.65 × hv_medium for 3+ consecutive bars = real regime compression.
+        "label": "RVCB",
+        "regime": "bull",
+        "symbols": ["AVAXUSDT"],
+        "params": {
+            "hv_short_period": 20,
+            "hv_medium_period": 60,
+            "hv_compression_ratio": 0.65,
+            "hv_min_compression_bars": 3,
+            "breakout_lookback": 20,
+            "regime_ema_period": 200,
+            "rsi_period": 14,
+            "rsi_min": 50.0,
+            "rsi_max": 78.0,
+            "volume_period": 20,
+            "volume_threshold": 1.3,
+            "atr_period": 14,
+            "atr_stop_multiplier": 2.0,
+            "risk_reward_ratio": 2.5,
+        },
+    },
 }
 
 # ---------------------------------------------------------------------------
@@ -309,6 +390,9 @@ LITE_SYMBOLS: dict[str, list[str]] = {
     "bear_trend_follower": ["BTCUSDT"],
     "cascading_momentum_filter": ["SOLUSDT"],
     "rsi_bb_mean_reversion": ["ETHUSDT"],
+    "heikin_ashi_trend_pulse": ["BTCUSDT"],
+    "vpt_momentum": ["BTCUSDT"],
+    "realized_vol_compression_breakout": ["AVAXUSDT"],
 }
 
 # Status report interval (seconds)

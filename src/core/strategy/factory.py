@@ -16,14 +16,18 @@ from src.core.strategy.generators import (AdxDirectionalThrustGenerator,
                                           BearTrendFollowerGenerator,
                                           BullTrendPullbackGenerator,
                                           CascadingMomentumFilterGenerator,
+                                          CryptoWickReversalGenerator,
                                           DonchianAtrGenerator,
                                           EmaRibbonExpansionGenerator,
                                           EmaTrendRsiGenerator,
+                                          HeikinAshiTrendPulseGenerator,
                                           IchimokuCloudTrendGenerator,
                                           KeltnerChannelContinuationGenerator,
                                           KeltnerFadeAdxGenerator,
                                           MacdPullbackGenerator,
                                           MultiTfConfluenceGenerator,
+                                          ObvTrendDivergenceGenerator,
+                                          RealizedVolCompressionBreakoutGenerator,
                                           RegimeAwareMeanReversionGenerator,
                                           RocMomentumSurgeGenerator,
                                           RsiBbMeanReversionGenerator,
@@ -33,6 +37,7 @@ from src.core.strategy.generators import (AdxDirectionalThrustGenerator,
                                           TrendAccelerationMomentumGenerator,
                                           VolatilityRegimeBreakoutGenerator,
                                           VolumeBalanceBreakoutGenerator,
+                                          VptMomentumGenerator,
                                           VwapPullbackVolumeGenerator)
 from src.core.strategy.signals import SignalGenerator
 from src.utils.logging import get_logger
@@ -66,10 +71,16 @@ _DEFAULT_GENERATORS: dict[str, type[SignalGenerator]] = {
     "ema_ribbon_expansion": EmaRibbonExpansionGenerator,
     "volume_balance_breakout": VolumeBalanceBreakoutGenerator,
     "roc_momentum_surge": RocMomentumSurgeGenerator,
-    # New bull-regime strategies (2026-05-08)
+    # New bull-regime strategies (2026-05-08 batch 2)
     "adx_directional_thrust": AdxDirectionalThrustGenerator,
     "keltner_channel_continuation": KeltnerChannelContinuationGenerator,
     "stoch_rsi_bull_cross": StochRsiBullCrossGenerator,
+    # Crypto-native bull-regime strategies (2026-05-08 batch 3)
+    "crypto_wick_reversal": CryptoWickReversalGenerator,
+    "obv_trend_divergence": ObvTrendDivergenceGenerator,
+    "heikin_ashi_trend_pulse": HeikinAshiTrendPulseGenerator,
+    "vpt_momentum": VptMomentumGenerator,
+    "realized_vol_compression_breakout": RealizedVolCompressionBreakoutGenerator,
 }
 
 

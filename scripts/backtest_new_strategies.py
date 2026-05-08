@@ -458,10 +458,115 @@ NEW_BULL2_TEMPLATES: dict[str, dict] = {
 }
 
 # ---------------------------------------------------------------------------
+# Template registry — crypto-native bull strategies (2026-05-08 batch 3)
+# ---------------------------------------------------------------------------
+NEW_BULL3_TEMPLATES: dict[str, dict] = {
+    "crypto_wick_reversal": {
+        # R3: restore wick_body_ratio 2.0->2.5 (R2 loosening destroyed edge:
+        # BTC PF 3.01->0.77; the 2 added trades at 2.0x ratio were both losers).
+        # The 2.5x threshold IS the signal definition — smaller wicks are not stop-hunts.
+        # volume/rsi kept from R2 (1.4/30-70) — only the wick ratio reverts.
+        "wick_body_ratio": 2.5,
+        "wick_atr_min": 1.0,
+        "ema_period": 50,
+        "regime_ema_period": 200,
+        "rsi_period": 14,
+        "rsi_min": 30.0,
+        "rsi_max": 70.0,
+        "volume_period": 20,
+        "volume_threshold": 1.4,
+        "atr_period": 14,
+        "atr_stop_multiplier": 2.0,
+        "risk_reward_ratio": 2.5,
+    },
+    "obv_trend_divergence": {
+        # R3: divergence logic fix applied in generator (OBV must peak obv_lead_min
+        # to obv_lead_max bars BEFORE price breakout, not simultaneously).
+        # obv_lead_min=2, obv_lead_max=8 expose the lead-window params to config.
+        # Restore volume_threshold 1.2->1.5 and rr 2.0->2.5 (R2 loosening was
+        # pre-fix; with correct divergence logic the original params are correct).
+        # rsi_min 45->50: divergence + price breakout = mid-momentum, not oversold.
+        "obv_period": 20,
+        "obv_ema_period": 10,
+        "obv_lead_min": 2,
+        "obv_lead_max": 8,
+        "regime_ema_period": 200,
+        "rsi_period": 14,
+        "rsi_min": 50.0,
+        "rsi_max": 75.0,
+        "volume_period": 20,
+        "volume_threshold": 1.5,
+        "atr_period": 14,
+        "atr_stop_multiplier": 2.0,
+        "risk_reward_ratio": 2.5,
+    },
+    "heikin_ashi_trend_pulse": {
+        # R3: one more tightening step on prior-wick count.
+        # ha_prior_wick_min 5->6 (require 6 of 7 prior bars with lower wicks —
+        # captures deeper, more sustained pullbacks before the no-wick bar).
+        # rr 2.5->2.0 (R2 ETH PF=1.32/Sharpe=1.165 with 2.5x was barely under 1.35;
+        # 2.0x target is more consistent with 1H HA trend pulse move size).
+        "ha_wick_lookback": 7,
+        "ha_prior_wick_min": 6,
+        "wick_tolerance": 0.05,
+        "ema_period": 50,
+        "regime_ema_period": 200,
+        "rsi_period": 14,
+        "rsi_min": 50.0,
+        "rsi_max": 75.0,
+        "volume_period": 20,
+        "volume_threshold": 1.4,
+        "atr_period": 14,
+        "atr_stop_multiplier": 2.0,
+        "risk_reward_ratio": 2.0,
+    },
+    "vpt_momentum": {
+        # R3: restore exact R1 params (R2 loosening dropped BTC PF 1.42->1.21;
+        # DOGE was identical across both rounds = confirmed stable signal).
+        # contrib_threshold 1.3->1.5 and volume_threshold 1.1->1.3 both revert.
+        # Loosening added marginal-quality VPT bars that diluted the edge.
+        "vpt_ema_period": 20,
+        "vpt_lookback": 15,
+        "vpt_contrib_period": 20,
+        "vpt_contrib_threshold": 1.5,
+        "ema_period": 50,
+        "regime_ema_period": 200,
+        "rsi_period": 14,
+        "rsi_min": 50.0,
+        "rsi_max": 75.0,
+        "volume_period": 20,
+        "volume_threshold": 1.3,
+        "atr_period": 14,
+        "atr_stop_multiplier": 2.0,
+        "risk_reward_ratio": 2.5,
+    },
+    "realized_vol_compression_breakout": {
+        # R3: hold R2 params unchanged — testing stability of ETH PF=1.42 and
+        # AVAX PF=4.32 signals. If results repeat, the signal is real.
+        # If they diverge, the R2 result was lucky (4-6 trade sample is thin).
+        "hv_short_period": 20,
+        "hv_medium_period": 60,
+        "hv_compression_ratio": 0.65,
+        "hv_min_compression_bars": 3,
+        "breakout_lookback": 20,
+        "regime_ema_period": 200,
+        "rsi_period": 14,
+        "rsi_min": 50.0,
+        "rsi_max": 78.0,
+        "volume_period": 20,
+        "volume_threshold": 1.3,
+        "atr_period": 14,
+        "atr_stop_multiplier": 2.0,
+        "risk_reward_ratio": 2.5,
+    },
+}
+
+# ---------------------------------------------------------------------------
 # Combined template registry + short labels
 # ---------------------------------------------------------------------------
 ALL_TEMPLATES: dict[str, dict] = {
-    **ORIGINAL_TEMPLATES, **BEAR_TEMPLATES, **BULL_TEMPLATES, **NEW_BULL2_TEMPLATES,
+    **ORIGINAL_TEMPLATES, **BEAR_TEMPLATES, **BULL_TEMPLATES,
+    **NEW_BULL2_TEMPLATES, **NEW_BULL3_TEMPLATES,
 }
 
 LABELS: dict[str, str] = {
@@ -489,10 +594,16 @@ LABELS: dict[str, str] = {
     "ema_ribbon_expansion": "EREE",
     "volume_balance_breakout": "VBB",
     "roc_momentum_surge": "RMS",
-    # New bull-regime batch 2
+    # Bull-regime batch 2
     "adx_directional_thrust": "ADT",
     "keltner_channel_continuation": "KCC",
     "stoch_rsi_bull_cross": "SRC",
+    # Crypto-native bull-regime batch 3
+    "crypto_wick_reversal": "CWR",
+    "obv_trend_divergence": "OBV_TD",
+    "heikin_ashi_trend_pulse": "HATP",
+    "vpt_momentum": "VPT",
+    "realized_vol_compression_breakout": "RVCB",
 }
 
 
@@ -715,9 +826,9 @@ async def main() -> None:
     parser.add_argument(
         "--group",
         type=str,
-        choices=["all", "original", "bear", "bull", "new_bull", "new_bull2"],
+        choices=["all", "original", "bear", "bull", "new_bull", "new_bull2", "new_bull3"],
         default="all",
-        help="Strategy group: all, original (7), bear (6), bull (8), new_bull, new_bull2 (3 new)",
+        help="Strategy group: all, original (7), bear (6), bull (8), new_bull, new_bull2 (3), new_bull3 (5 crypto-native)",
     )
     args = parser.parse_args()
 
@@ -740,6 +851,8 @@ async def main() -> None:
         templates = NEW_BULL_TEMPLATES
     elif args.group == "new_bull2":
         templates = NEW_BULL2_TEMPLATES
+    elif args.group == "new_bull3":
+        templates = NEW_BULL3_TEMPLATES
     else:
         templates = ALL_TEMPLATES
 
