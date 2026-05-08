@@ -315,19 +315,29 @@ BULL_TEMPLATES: dict[str, dict] = {
         # EMA ribbon compression-expansion in bull alignment.
         # Three EMAs (8/21/50): ribbon contracts during pullbacks, expands on resumption.
         # Distinct from VRB (BB width) and BTP (RSI dips) — measures trend momentum geometry.
-        # regime_ema_period=200: blocks entries in bear-market relief bounces where
-        # short-term EMAs briefly align bullishly but the macro trend is down.
+        # regime_ema_period=200: blocks entries in bear-market relief bounces.
+        # ribbon_percentile=10: deeper compression required (vs 25) — only fires when
+        #   ribbon is in the lowest 10% of its recent range, not just any dip.
+        # ribbon_min_expansion=1.15: expansion must be 15% above recent mean — filters
+        #   weak "expansions" that are just noise off the compressed baseline.
+        # rsi 50-75: momentum positive (above midline) and not overbought.
+        # volume_threshold=1.5: stricter breakout volume confirmation.
+        # rr=3.5: wider target to capture the full trend resumption move.
         "fast_ema_period": 8,
         "medium_ema_period": 21,
         "slow_ema_period": 50,
         "ribbon_lookback": 20,
-        "ribbon_percentile": 25.0,
+        "ribbon_percentile": 10.0,
+        "ribbon_min_expansion": 1.15,
         "volume_period": 20,
-        "volume_threshold": 1.3,
+        "volume_threshold": 1.5,
         "atr_period": 14,
         "atr_stop_multiplier": 2.0,
-        "risk_reward_ratio": 2.5,
+        "risk_reward_ratio": 3.5,
         "regime_ema_period": 200,
+        "rsi_period": 14,
+        "rsi_min": 50.0,
+        "rsi_max": 75.0,
     },
     "volume_balance_breakout": {
         # Up-volume ratio + range breakout.
@@ -350,24 +360,26 @@ BULL_TEMPLATES: dict[str, dict] = {
         "risk_reward_ratio": 3.0,
     },
     "roc_momentum_surge": {
-        # ROC acceleration + RSI in 65-75 power zone (tightened from 60-75).
+        # ROC acceleration + RSI in 60-78 power zone (widened for more trades).
         # Counter-intuitive: buys "overbought" RSI as bull-strength confirmation.
-        # In crypto, RSI 65-75 = mid-bull acceleration, not exhaustion.
-        # rsi_bull_min=65 (raised from 60): eliminates bear bounces that reach 60.
-        # roc_threshold=2.5 (raised from 2.0): requires stronger price velocity.
+        # In crypto, RSI 60-78 = mid-bull acceleration, not exhaustion.
+        # rsi_bull_min=60 (vs 65): captures earlier stage of power zone.
+        # rsi_bull_max=78 (vs 75): captures the top of acceleration before exhaustion.
+        # roc_threshold=1.5 (lowered from 2.5): mixed regime has fewer 2.5%+ moves.
         # regime_ema_period=200: blocks dead-cat bounces in macro downtrends.
+        # risk_reward_ratio=4.0: high target to benefit from strong momentum runs.
         "roc_period": 5,
-        "roc_threshold": 2.5,
+        "roc_threshold": 1.5,
         "roc_accel_period": 3,
         "rsi_period": 14,
-        "rsi_bull_min": 65.0,
-        "rsi_bull_max": 75.0,
+        "rsi_bull_min": 60.0,
+        "rsi_bull_max": 78.0,
         "ema_period": 50,
         "volume_period": 20,
         "volume_threshold": 1.2,
         "atr_period": 14,
         "atr_stop_multiplier": 1.5,
-        "risk_reward_ratio": 3.5,
+        "risk_reward_ratio": 4.0,
         "regime_ema_period": 200,
     },
 }

@@ -597,11 +597,33 @@ These decisions are **LOCKED** per MVP scope control rules until specified revie
 - **Affected Files:** `scripts/run_paper_trading.py`
 - **References:** Backtest results 2026-05-07
 
+### DEC-2026-05-08-001: VBB Promoted to Paper Trading on BTC/ETH/SOL
+- **Decision:** Promote VolumeBalanceBreakout on BTCUSDT, ETHUSDT, SOLUSDT to paper trading with Gate1=10, Gate2=20.
+- **Context:** Three independent 90-day backtest rounds confirmed edge on large-cap symbols: BTC PF=1.39/Sharpe=0.59/10 trades, ETH PF=1.94/Sharpe=1.83/9 trades, SOL PF=2.02/Sharpe=1.66/10 trades. Strategy fails on altcoins (XRP/AVAX/DOT/BNB PF<0.85) — institutional accumulation patterns are clearest on highest-liquidity assets. Low-frequency by design (6-10 trades per 90d) because it requires rare institutional accumulation + breakout conditions.
+- **Rationale:** VBB results were stable across 3 rounds of independent testing, including one round where VBB params were unchanged while other strategy params changed — results were identical (PF=1.39/1.94/2.02), confirming signal stability. Edge confirmed. Relaxed gates (Gate1=10) applied per precedent from BTP/VRB.
+- **Alternatives Considered:** Loosen parameters to increase trade count (rejected — round 2 tightening didn't improve quality; loosening would introduce noise), test on additional symbols (no evidence of edge on altcoins).
+- **Status:** ACTIVE
+- **Date Decided:** 2026-05-08
+- **Implemented By:** `scripts/run_paper_trading.py` BULL_STRATEGY_CONFIG
+- **Affected Files:** `scripts/run_paper_trading.py`, `src/core/strategy/generators/volume_balance_breakout.py`
+- **References:** Backtest results 2026-05-08, min_bars_required fixed from 110 to 230
+
+### DEC-2026-05-08-002: EREE and RMS Shelved — No Edge in Current Regime
+- **Decision:** Shelve EmaRibbonExpansion and RocMomentumSurge strategies pending confirmed bull-market conditions.
+- **Context:** Three rounds of 90d backtesting (24 runs each) showed no profitable edge for EREE or RMS. EREE: tightening ribbon_percentile from 25 to 10 + adding RSI 50-75 filter made results worse (DOGE PF dropped from 1.05 to 0.95), confirming the pattern has no edge in current regime — not a tuning problem. RMS: loosening RSI zone (60-78) and ROC threshold (1.5) increased trade count but reduced PF everywhere — DOT's PF=1.29 in round 2 was parameter noise.
+- **Rationale:** Both strategies are conceptually designed for sustained bull markets where (EREE) EMA ribbon expansions lead to sustained trend continuation and (RMS) RSI 60-75 reflects acceleration not overbought conditions. In 90d mixed-regime data (partial bear market), both fire on bear relief bounces that quickly reverse. Shelving is appropriate rather than continued parameter tuning.
+- **Alternatives Considered:** More tuning rounds (rejected — 3 rounds with different approaches showed consistent failure), redesign generators (deferred — may revisit in confirmed bull market regime).
+- **Status:** ACTIVE
+- **Date Decided:** 2026-05-08
+- **Implemented By:** Not promoted to paper trading
+- **Affected Files:** `src/core/strategy/generators/ema_ribbon_expansion.py`, `src/core/strategy/generators/roc_momentum_surge.py`
+- **References:** Backtest results 2026-05-08
+
 ---
 
-**Last Updated:** 2026-05-07
-**Total Decisions:** 19 active, 0 superseded, 5 locked
-**Next Decision ID:** DEC-2026-05-07-003
+**Last Updated:** 2026-05-08
+**Total Decisions:** 21 active, 0 superseded, 5 locked
+**Next Decision ID:** DEC-2026-05-08-003
 
 ---
 

@@ -103,10 +103,11 @@ class EmaRibbonExpansionGenerator(SignalGenerator):
             atr_period: int     = int(params["atr_period"])
             atr_stop_mult: float = float(params["atr_stop_multiplier"])
             rr_ratio: float     = float(params["risk_reward_ratio"])
-            regime_ema_period: int = int(params.get("regime_ema_period", 0))
-            rsi_period: int     = int(params.get("rsi_period", 0))
-            rsi_min: float      = float(params.get("rsi_min", 40.0))
-            rsi_max: float      = float(params.get("rsi_max", 70.0))
+            regime_ema_period: int  = int(params.get("regime_ema_period", 0))
+            rsi_period: int         = int(params.get("rsi_period", 0))
+            rsi_min: float          = float(params.get("rsi_min", 40.0))
+            rsi_max: float          = float(params.get("rsi_max", 70.0))
+            ribbon_min_expansion: float = float(params.get("ribbon_min_expansion", 1.0))
 
             ema_fast = EMA(period=fast_period).calculate(series)
             ema_med  = EMA(period=medium_period).calculate(series)
@@ -179,8 +180,12 @@ class EmaRibbonExpansionGenerator(SignalGenerator):
             # Compressed: at least one recent bar reached the compressed state
             was_compressed = recent_min < compress_threshold
 
-            # Expanding: current ribbon wider than the lookback mean (resuming)
-            is_expanding = ribbon_curr > recent_mean
+            # Expanding: current ribbon must exceed mean by minimum factor.
+            # ribbon_min_expansion=1.0 means just above mean (very loose).
+            # ribbon_min_expansion=1.15 requires 15% above mean — filters noise
+            # from weak expansions that are just random mean-reversion off a
+            # slightly compressed state.
+            is_expanding = ribbon_curr > recent_mean * ribbon_min_expansion
 
             if not (was_compressed and is_expanding):
                 return None

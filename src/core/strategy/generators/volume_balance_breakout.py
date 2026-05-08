@@ -65,8 +65,8 @@ class VolumeBalanceBreakoutGenerator(SignalGenerator):
 
     @property
     def min_bars_required(self) -> int:
-        """EMA(50) warmup + balance_period(15) + breakout_lookback(15) + buffer."""
-        return 110
+        """EMA(200) warmup + balance_period(15) + breakout_lookback(15) + buffer."""
+        return 230
 
     def generate(
         self,

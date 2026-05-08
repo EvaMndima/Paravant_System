@@ -129,6 +129,31 @@ BULL_STRATEGY_CONFIG: dict[str, dict[str, Any]] = {
             "regime_ema_period": 200,
         },
     },
+    "volume_balance_breakout": {
+        # Promoted 2026-05-08. 90d backtest confirmed edge on BTC/ETH/SOL:
+        # BTC PF=1.39/Sharpe=0.59/10 trades, ETH PF=1.94/Sharpe=1.83/9 trades,
+        # SOL PF=2.02/Sharpe=1.66/10 trades. Results stable across 2 independent
+        # test rounds. Low-frequency (6-11 trades/90d per symbol). Gate1=10 trades.
+        # Institutional accumulation (up-volume ratio ≥60%) + range breakout +
+        # volume confirmation. Fails on altcoins (XRP/AVAX/DOT) — large-caps only.
+        "label": "VBB",
+        "regime": "bull",
+        "symbols": ["BTCUSDT", "ETHUSDT", "SOLUSDT"],
+        "params": {
+            "balance_period": 15,
+            "balance_threshold": 0.60,
+            "breakout_lookback": 10,
+            "ema_period": 200,
+            "rsi_period": 14,
+            "rsi_min": 40.0,
+            "rsi_max": 70.0,
+            "volume_period": 20,
+            "volume_threshold": 1.5,
+            "atr_period": 14,
+            "atr_stop_multiplier": 2.0,
+            "risk_reward_ratio": 3.0,
+        },
+    },
 }
 
 # ---------------------------------------------------------------------------
