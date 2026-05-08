@@ -21,7 +21,7 @@ Available generators:
     - RegimeAwareMeanReversionGenerator: Multi-TF regime-aware mean reversion
     - CascadingMomentumFilterGenerator: Triple-TF cascade filter (1H+4H+Daily)
 
-    Bull-Regime Strategies (8):
+    Bull-Regime Strategies (11):
     - BullTrendPullbackGenerator: Long-only RSI pullback within confirmed bull trend
     - TrendAccelerationMomentumGenerator: EMA spread + volume + ATR acceleration
     - VolatilityRegimeBreakoutGenerator: BB squeeze-release into squeeze-window breakout
@@ -30,6 +30,9 @@ Available generators:
     - EmaRibbonExpansionGenerator: EMA ribbon compression-expansion in bull alignment
     - VolumeBalanceBreakoutGenerator: Up-volume ratio + range breakout confirmation
     - RocMomentumSurgeGenerator: ROC acceleration in RSI 60-75 power zone
+    - AdxDirectionalThrustGenerator: ADX rising + +DI/-DI spread dominance
+    - KeltnerChannelContinuationGenerator: First close above upper KC in bull regime
+    - StochRsiBullCrossGenerator: StochRSI K/D cross from oversold in bull trend
 """
 from src.core.strategy.generators.bb_squeeze_breakout import \
     BbSqueezeBreakoutGenerator
@@ -70,6 +73,12 @@ from src.core.strategy.generators.volume_balance_breakout import \
     VolumeBalanceBreakoutGenerator
 from src.core.strategy.generators.roc_momentum_surge import \
     RocMomentumSurgeGenerator
+from src.core.strategy.generators.adx_directional_thrust import \
+    AdxDirectionalThrustGenerator
+from src.core.strategy.generators.keltner_channel_continuation import \
+    KeltnerChannelContinuationGenerator
+from src.core.strategy.generators.stoch_rsi_bull_cross import \
+    StochRsiBullCrossGenerator
 
 __all__ = [
     # Original generators
@@ -96,4 +105,7 @@ __all__ = [
     "EmaRibbonExpansionGenerator",
     "VolumeBalanceBreakoutGenerator",
     "RocMomentumSurgeGenerator",
+    "AdxDirectionalThrustGenerator",
+    "KeltnerChannelContinuationGenerator",
+    "StochRsiBullCrossGenerator",
 ]

@@ -10,7 +10,8 @@ Decision: DEC-2026-02-08-008 - Structured logging
 from __future__ import annotations
 
 from src.core.exceptions import TemplateNotFoundError
-from src.core.strategy.generators import (BbSqueezeBreakoutGenerator,
+from src.core.strategy.generators import (AdxDirectionalThrustGenerator,
+                                          BbSqueezeBreakoutGenerator,
                                           BbSqueezeMomentumGenerator,
                                           BearTrendFollowerGenerator,
                                           BullTrendPullbackGenerator,
@@ -19,6 +20,7 @@ from src.core.strategy.generators import (BbSqueezeBreakoutGenerator,
                                           EmaRibbonExpansionGenerator,
                                           EmaTrendRsiGenerator,
                                           IchimokuCloudTrendGenerator,
+                                          KeltnerChannelContinuationGenerator,
                                           KeltnerFadeAdxGenerator,
                                           MacdPullbackGenerator,
                                           MultiTfConfluenceGenerator,
@@ -26,6 +28,7 @@ from src.core.strategy.generators import (BbSqueezeBreakoutGenerator,
                                           RocMomentumSurgeGenerator,
                                           RsiBbMeanReversionGenerator,
                                           RsiDivergenceReversalGenerator,
+                                          StochRsiBullCrossGenerator,
                                           SupertrendVolumeMacdGenerator,
                                           TrendAccelerationMomentumGenerator,
                                           VolatilityRegimeBreakoutGenerator,
@@ -59,10 +62,14 @@ _DEFAULT_GENERATORS: dict[str, type[SignalGenerator]] = {
     "volatility_regime_breakout": VolatilityRegimeBreakoutGenerator,
     "multi_tf_confluence": MultiTfConfluenceGenerator,
     "rsi_divergence_reversal": RsiDivergenceReversalGenerator,
-    # New bull-regime strategies (2026-05-07)
+    # New bull-regime strategies (2026-05-07/08)
     "ema_ribbon_expansion": EmaRibbonExpansionGenerator,
     "volume_balance_breakout": VolumeBalanceBreakoutGenerator,
     "roc_momentum_surge": RocMomentumSurgeGenerator,
+    # New bull-regime strategies (2026-05-08)
+    "adx_directional_thrust": AdxDirectionalThrustGenerator,
+    "keltner_channel_continuation": KeltnerChannelContinuationGenerator,
+    "stoch_rsi_bull_cross": StochRsiBullCrossGenerator,
 }
 
 

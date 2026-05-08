@@ -619,11 +619,33 @@ These decisions are **LOCKED** per MVP scope control rules until specified revie
 - **Affected Files:** `src/core/strategy/generators/ema_ribbon_expansion.py`, `src/core/strategy/generators/roc_momentum_surge.py`
 - **References:** Backtest results 2026-05-08
 
+### DEC-2026-05-08-003: SRC Promoted to Paper Trading on BTC/ETH/SOL
+- **Decision:** Promote StochRsiBullCross on BTCUSDT, ETHUSDT, SOLUSDT to paper trading with Gate1=10, Gate2=20.
+- **Context:** Three independent 90-day backtest rounds confirmed exceptional large-cap edge. R1: BTC PF=6.77/5 trades, ETH PF=2.21/6 trades, SOL PF=2.72/5 trades. R2: ETH PF=2.21 (identical), SOL PF=2.82 (BTC missed due to API timeout). R3: BTC PF=8.71/Sharpe=3.185, ETH PF=2.21/Sharpe=1.285, SOL PF=2.80/Sharpe=1.687 — all with DD <3%. ETH producing exactly PF=2.21 across all three independent rounds is near-definitive signal stability. Fails on altcoins (BNB/XRP/AVAX/DOGE/DOT PF<0.90) — same large-cap selectivity as VBB.
+- **Rationale:** The StochasticRSI oversold-cross-in-trend pattern is highly selective on liquid large-caps: genuine pullbacks to oversold levels in confirmed bull trends (EMA-50 above EMA-200) are rare, high-quality re-entry points. Altcoins have noisier StochRSI (frequent false oversold signals from high volatility) and weaker trend structure. Low frequency (5-6 trades per 90d per symbol = ~2/month) consistent with Gate1=10 precedent from VBB/BTP/VRB.
+- **Alternatives Considered:** Loosen parameters to increase trade count (rejected — would include altcoins' false signals), test stoch_oversold=30 (rejected — wider threshold catches mid-range oscillations, destroying the edge).
+- **Status:** ACTIVE
+- **Date Decided:** 2026-05-08
+- **Implemented By:** `scripts/run_paper_trading.py` BULL_STRATEGY_CONFIG
+- **Affected Files:** `scripts/run_paper_trading.py`, `src/core/strategy/generators/stoch_rsi_bull_cross.py`
+- **References:** Backtest results 2026-05-08 (3 rounds), stoch_rsi_bull_cross.py generator
+
+### DEC-2026-05-08-004: ADT and KCC Shelved — No Edge in Current Regime
+- **Decision:** Shelve AdxDirectionalThrust and KeltnerChannelContinuation strategies — no viable edge found across 3 rounds.
+- **Context:** ADT: R1 showed marginal positive (ETH PF=1.05, SOL PF=1.03), R2 similar, R3 dropped to ETH PF=0.89/SOL PF=0.48 after loosening di_min_spread from 8.0 to 5.0 and reducing adx_rise_bars from 3 to 2. Loosening made results worse, not better — a parameter-insensitive failure. KCC: R3 catastrophic WR collapse on ETH (15.8%), BNB (15.0%), SOL (22.2%) after widening kc_multiplier to 2.0. BTC held at PF=1.11 across all rounds but never approached promotion threshold (1.35). Best single result across 3×8=24 runs was ADT ETH PF=1.05.
+- **Rationale:** ADT's +DI/-DI spread oscillates frequently in the current bull market — many false accelerations where ADX rises briefly then reverses. KCC's wider band (2.0 multiplier) filters out weaker breakouts but the remaining breakouts appear to be momentum exhaustion moves rather than continuation signals. Both strategies conceptually sound but empirically fail in current mixed-regime 90d windows.
+- **Alternatives Considered:** Further tuning (rejected — 3 rounds with systematically different approaches showed consistent failure or worsening); redesign entry conditions (deferred — generators exist in codebase and can be reactivated/redesigned if market regime changes).
+- **Status:** ACTIVE
+- **Date Decided:** 2026-05-08
+- **Implemented By:** Not promoted to paper trading
+- **Affected Files:** `src/core/strategy/generators/adx_directional_thrust.py`, `src/core/strategy/generators/keltner_channel_continuation.py`
+- **References:** Backtest results 2026-05-08 (3 rounds, 24 runs each)
+
 ---
 
 **Last Updated:** 2026-05-08
-**Total Decisions:** 21 active, 0 superseded, 5 locked
-**Next Decision ID:** DEC-2026-05-08-003
+**Total Decisions:** 23 active, 0 superseded, 5 locked
+**Next Decision ID:** DEC-2026-05-08-005
 
 ---
 

@@ -384,16 +384,85 @@ BULL_TEMPLATES: dict[str, dict] = {
     },
 }
 
-# New bull strategies for targeted backtest
+# New bull strategies for targeted backtest (batch 1: 2026-05-07)
 NEW_BULL_TEMPLATES: dict[str, dict] = {
     k: BULL_TEMPLATES[k]
     for k in ["ema_ribbon_expansion", "volume_balance_breakout", "roc_momentum_surge"]
 }
 
+# New bull strategies batch 2 (2026-05-08): ADX DI system, KC continuation, StochRSI cross
+NEW_BULL2_TEMPLATES: dict[str, dict] = {
+    "adx_directional_thrust": {
+        # ADX rising + +DI/-DI spread dominance in bull regime.
+        # R3: lowered rr 3.0->2.0 (WR 21-35% doesn't sustain 3x ATR targets),
+        #     di_min_spread 8->5 (more qualifying bars while still requiring dominance),
+        #     adx_rise_bars 3->2 (reduces lag — trend might already be fading by bar 3).
+        "adx_period": 14,
+        "adx_threshold": 20.0,
+        "adx_rise_bars": 2,
+        "di_min_spread": 5.0,
+        "ema_period": 50,
+        "regime_ema_period": 200,
+        "rsi_period": 14,
+        "rsi_min": 45.0,
+        "rsi_max": 70.0,
+        "volume_period": 20,
+        "volume_threshold": 1.3,
+        "atr_period": 14,
+        "atr_stop_multiplier": 2.0,
+        "risk_reward_ratio": 2.0,
+    },
+    "keltner_channel_continuation": {
+        # First close ABOVE upper KC band in confirmed bull trend.
+        # R3: kc_multiplier 1.5->2.0 (wider band = higher-conviction breaks only),
+        #     kc_reset_bars 3->5 (longer inside-band window before next breakout),
+        #     rr 2.5->3.0 (bigger bands = bigger moves when it does break out).
+        "kc_ema_period": 20,
+        "kc_atr_period": 14,
+        "kc_multiplier": 2.0,
+        "kc_reset_bars": 5,
+        "regime_ema_period": 200,
+        "rsi_period": 14,
+        "rsi_min": 50.0,
+        "rsi_max": 78.0,
+        "volume_period": 20,
+        "volume_threshold": 1.5,
+        "atr_period": 14,
+        "atr_stop_multiplier": 2.0,
+        "risk_reward_ratio": 3.0,
+    },
+    "stoch_rsi_bull_cross": {
+        # StochRSI K/D cross from oversold in confirmed bull trend.
+        # Detects micro-pullback inflection points faster than RSI(14).
+        # stoch_oversold=20: K must reach below 20 in lookback = real pullback.
+        # stoch_max=70: K must still be below 70 at cross = not chasing.
+        # stoch_lookback=5: checks last 5 bars for the oversold condition.
+        # regime_ema_period=200: macro bull gate.
+        "rsi_period": 14,
+        "stoch_period": 14,
+        "smooth_k": 3,
+        "smooth_d": 3,
+        "stoch_oversold": 20.0,
+        "stoch_max": 70.0,
+        "stoch_lookback": 5,
+        "ema_period": 50,
+        "regime_ema_period": 200,
+        "rsi_min": 40.0,
+        "rsi_max": 70.0,
+        "volume_period": 20,
+        "volume_threshold": 1.2,
+        "atr_period": 14,
+        "atr_stop_multiplier": 2.0,
+        "risk_reward_ratio": 3.0,
+    },
+}
+
 # ---------------------------------------------------------------------------
 # Combined template registry + short labels
 # ---------------------------------------------------------------------------
-ALL_TEMPLATES: dict[str, dict] = {**ORIGINAL_TEMPLATES, **BEAR_TEMPLATES, **BULL_TEMPLATES}
+ALL_TEMPLATES: dict[str, dict] = {
+    **ORIGINAL_TEMPLATES, **BEAR_TEMPLATES, **BULL_TEMPLATES, **NEW_BULL2_TEMPLATES,
+}
 
 LABELS: dict[str, str] = {
     # Original 7
@@ -420,6 +489,10 @@ LABELS: dict[str, str] = {
     "ema_ribbon_expansion": "EREE",
     "volume_balance_breakout": "VBB",
     "roc_momentum_surge": "RMS",
+    # New bull-regime batch 2
+    "adx_directional_thrust": "ADT",
+    "keltner_channel_continuation": "KCC",
+    "stoch_rsi_bull_cross": "SRC",
 }
 
 
@@ -642,9 +715,9 @@ async def main() -> None:
     parser.add_argument(
         "--group",
         type=str,
-        choices=["all", "original", "bear", "bull", "new_bull"],
+        choices=["all", "original", "bear", "bull", "new_bull", "new_bull2"],
         default="all",
-        help="Strategy group: all, original (7), bear (6), bull (8), new_bull (3 new)",
+        help="Strategy group: all, original (7), bear (6), bull (8), new_bull, new_bull2 (3 new)",
     )
     args = parser.parse_args()
 
@@ -665,6 +738,8 @@ async def main() -> None:
         templates = BULL_TEMPLATES
     elif args.group == "new_bull":
         templates = NEW_BULL_TEMPLATES
+    elif args.group == "new_bull2":
+        templates = NEW_BULL2_TEMPLATES
     else:
         templates = ALL_TEMPLATES
 

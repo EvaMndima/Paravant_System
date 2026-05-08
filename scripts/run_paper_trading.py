@@ -154,6 +154,36 @@ BULL_STRATEGY_CONFIG: dict[str, dict[str, Any]] = {
             "risk_reward_ratio": 3.0,
         },
     },
+    "stoch_rsi_bull_cross": {
+        # Promoted 2026-05-08. 3-round 90d backtest — exceptional large-cap edge:
+        # BTC PF=8.71/Sharpe=3.185 (R3), 6.77 (R1) — best signal in portfolio
+        # ETH PF=2.21/Sharpe=1.285 — identical across all 3 independent rounds
+        # SOL PF=2.80/Sharpe=1.687 (R3), 2.72/2.82 prior rounds
+        # All 3 with DD <3%, WR 50-60% on large-caps. Gate1=10 trades.
+        # StochRSI K/D cross from oversold (<20) in confirmed bull trend (EMA-50/200).
+        # Fails on altcoins (XRP/AVAX/DOT) — large-caps only, same as VBB pattern.
+        "label": "SRC",
+        "regime": "bull",
+        "symbols": ["BTCUSDT", "ETHUSDT", "SOLUSDT"],
+        "params": {
+            "rsi_period": 14,
+            "stoch_period": 14,
+            "smooth_k": 3,
+            "smooth_d": 3,
+            "stoch_oversold": 20.0,
+            "stoch_max": 70.0,
+            "stoch_lookback": 5,
+            "ema_period": 50,
+            "regime_ema_period": 200,
+            "rsi_min": 40.0,
+            "rsi_max": 70.0,
+            "volume_period": 20,
+            "volume_threshold": 1.2,
+            "atr_period": 14,
+            "atr_stop_multiplier": 2.0,
+            "risk_reward_ratio": 3.0,
+        },
+    },
 }
 
 # ---------------------------------------------------------------------------
