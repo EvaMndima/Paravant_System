@@ -101,6 +101,7 @@ class RocMomentumSurgeGenerator(SignalGenerator):
             atr_period: int         = int(params["atr_period"])
             atr_stop_mult: float    = float(params["atr_stop_multiplier"])
             rr_ratio: float         = float(params["risk_reward_ratio"])
+            regime_ema_period: int  = int(params.get("regime_ema_period", 0))
 
             ema_result = EMA(period=ema_period).calculate(series)
             rsi_result = RSI(period=rsi_period).calculate(series)
@@ -120,9 +121,18 @@ class RocMomentumSurgeGenerator(SignalGenerator):
             rsi_past = float(rsi_vals[-roc_accel_period - 1])
             atr_curr = float(atr_vals[-1])
 
-            # Macro trend gate: price above EMA
+            # Macro trend gate: price above short-term EMA
             if price <= ema_curr:
                 return None
+
+            # Regime gate: restrict to confirmed macro bull trend.
+            # RSI 60-75 on a bear-market relief bounce looks identical to a bull
+            # surge — the EMA-200 gate separates them cleanly.
+            if regime_ema_period > 0 and len(series) >= regime_ema_period:
+                regime_ema_calc = EMA(period=regime_ema_period).calculate(series)
+                regime_vals = regime_ema_calc.values[~np.isnan(regime_ema_calc.values)]
+                if len(regime_vals) >= 1 and price <= float(regime_vals[-1]):
+                    return None
 
             # RSI power zone: 60-75 = trend strength in crypto bull markets
             if not (rsi_bull_min <= rsi_curr <= rsi_bull_max):

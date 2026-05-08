@@ -31,7 +31,7 @@ from typing import Any
 import numpy as np
 
 from src.core.exceptions import SignalGenerationError
-from src.core.indicators import ATR, EMA
+from src.core.indicators import ATR, EMA, RSI
 from src.core.strategy.signals import SignalGenerator, TradingSignal
 from src.data.market_data import OHLCVSeries
 from src.data.models.signal import SignalDirection
@@ -54,6 +54,10 @@ class EmaRibbonExpansionGenerator(SignalGenerator):
         ribbon_lookback, ribbon_percentile,
         volume_period, volume_threshold,
         atr_period, atr_stop_multiplier, risk_reward_ratio
+
+    Optional parameters:
+        regime_ema_period: When > 0, restricts LONG to price > EMA. Default 0 disables.
+        rsi_period, rsi_min, rsi_max: RSI confirmation filter. rsi_period=0 disables.
     """
 
     @property
@@ -89,16 +93,20 @@ class EmaRibbonExpansionGenerator(SignalGenerator):
             return None
 
         try:
-            fast_period: int = int(params["fast_ema_period"])
-            medium_period: int = int(params["medium_ema_period"])
-            slow_period: int = int(params["slow_ema_period"])
+            fast_period: int    = int(params["fast_ema_period"])
+            medium_period: int  = int(params["medium_ema_period"])
+            slow_period: int    = int(params["slow_ema_period"])
             ribbon_lookback: int = int(params["ribbon_lookback"])
             ribbon_percentile: float = float(params["ribbon_percentile"])
-            volume_period: int = int(params["volume_period"])
+            volume_period: int  = int(params["volume_period"])
             volume_threshold: float = float(params["volume_threshold"])
-            atr_period: int = int(params["atr_period"])
+            atr_period: int     = int(params["atr_period"])
             atr_stop_mult: float = float(params["atr_stop_multiplier"])
-            rr_ratio: float = float(params["risk_reward_ratio"])
+            rr_ratio: float     = float(params["risk_reward_ratio"])
+            regime_ema_period: int = int(params.get("regime_ema_period", 0))
+            rsi_period: int     = int(params.get("rsi_period", 0))
+            rsi_min: float      = float(params.get("rsi_min", 40.0))
+            rsi_max: float      = float(params.get("rsi_max", 70.0))
 
             ema_fast = EMA(period=fast_period).calculate(series)
             ema_med  = EMA(period=medium_period).calculate(series)
@@ -123,11 +131,29 @@ class EmaRibbonExpansionGenerator(SignalGenerator):
             atr_curr  = float(atr_vals[-1])
             price     = float(series.closes[-1])
 
-            # Bull alignment: all three EMAs ordered and price above fast EMA
+            # Bull alignment: all three EMAs ordered and price above slow EMA
             if not (fast_curr > med_curr > slow_curr):
                 return None
-            if price < fast_curr:
+            if price < slow_curr:
                 return None
+
+            # Macro regime gate: restrict LONG to price > EMA(regime_ema_period)
+            # Prevents entries during bear-market relief bounces where the short-term
+            # EMA ribbon can briefly align bullishly even in a downtrend.
+            if regime_ema_period > 0 and len(series) >= regime_ema_period:
+                regime_ema = EMA(period=regime_ema_period).calculate(series)
+                regime_vals = regime_ema.values[~np.isnan(regime_ema.values)]
+                if len(regime_vals) >= 1 and price <= float(regime_vals[-1]):
+                    return None
+
+            # RSI confirmation: optional band filter (rsi_period=0 disables)
+            if rsi_period > 0:
+                rsi_result = RSI(period=rsi_period).calculate(series)
+                rsi_vals   = rsi_result.values[~np.isnan(rsi_result.values)]
+                if len(rsi_vals) >= 1:
+                    rsi_curr = float(rsi_vals[-1])
+                    if not (rsi_min <= rsi_curr <= rsi_max):
+                        return None
 
             # Ribbon width: percentage spread between fast and slow EMA
             # Measures trend momentum geometry — compresses during pullbacks,
