@@ -10,6 +10,8 @@ from __future__ import annotations
 
 from typing import Any
 
+import numpy as np
+
 from src.core.exceptions import SignalGenerationError
 from src.core.indicators import ATR, EMA, MACD
 from src.core.strategy.signals import SignalGenerator, TradingSignal
@@ -31,6 +33,13 @@ class MacdPullbackGenerator(SignalGenerator):
         macd_fast, macd_slow, macd_signal, pullback_ema_period,
         atr_period, atr_stop_multiplier, risk_reward_ratio,
         pullback_tolerance_pct
+
+    Optional parameters:
+        regime_ema_period (int, default 0): When > 0, acts as a macro regime
+            gate. LONG signals are blocked when price <= regime EMA (bear
+            macro context). SHORT signals are blocked when price >= regime EMA
+            (bull macro context). Set to 200 in bull-regime paper trading to
+            prevent spurious SHORT signals during MACD dips.
     """
 
     @property
@@ -73,6 +82,7 @@ class MacdPullbackGenerator(SignalGenerator):
             atr_stop_mult: float = float(params["atr_stop_multiplier"])
             rr_ratio: float = float(params["risk_reward_ratio"])
             pullback_tol: float = float(params["pullback_tolerance_pct"])
+            regime_ema_period: int = int(params.get("regime_ema_period", 0))
 
             # Calculate indicators
             macd_result = MACD(
@@ -87,21 +97,37 @@ class MacdPullbackGenerator(SignalGenerator):
             ema_val = pullback_ema.current
             atr_val = atr_result.current
 
+            # --- Optional macro regime gate ---
+            # When regime_ema_period > 0, compute a slow EMA to classify the
+            # macro trend. LONG signals are blocked below the regime EMA (bear
+            # macro); SHORT signals are blocked above it (bull macro). Setting
+            # regime_ema_period=200 in the bull-regime paper-trading config
+            # eliminates spurious SHORT signals during transient MACD dips.
+            in_bull_regime: bool | None = None
+            if regime_ema_period > 0 and len(series) >= regime_ema_period:
+                regime_ema_result = EMA(period=regime_ema_period).calculate(series)
+                regime_vals = regime_ema_result.values[~np.isnan(regime_ema_result.values)]
+                if len(regime_vals) >= 1:
+                    in_bull_regime = price > float(regime_vals[-1])
+
+            long_allowed  = in_bull_regime is None or in_bull_regime
+            short_allowed = in_bull_regime is None or not in_bull_regime
+
             # MACD state
             macd_curr = macd_result.current
             macd_signal_val = float(
                 macd_result.signal_line[
-                    ~(__import__("numpy").isnan(macd_result.signal_line))
+                    ~(np.isnan(macd_result.signal_line))
                 ][-1]
             )
             hist_curr = float(
                 macd_result.histogram[
-                    ~(__import__("numpy").isnan(macd_result.histogram))
+                    ~(np.isnan(macd_result.histogram))
                 ][-1]
             )
             hist_prev = float(
                 macd_result.histogram[
-                    ~(__import__("numpy").isnan(macd_result.histogram))
+                    ~(np.isnan(macd_result.histogram))
                 ][-2]
             )
 
@@ -121,14 +147,19 @@ class MacdPullbackGenerator(SignalGenerator):
             # LONG: MACD > signal (bullish) + price pulled back to EMA +
             # histogram positive and increasing
             if (
-                macd_curr > macd_signal_val
+                long_allowed
+                and macd_curr > macd_signal_val
                 and hist_curr > 0
                 and hist_curr > hist_prev
                 and is_near_ema
             ):
                 stop_loss = ema_val - (atr_stop_mult * atr_val)
                 risk = price - stop_loss
-                take_profit = price + (risk * rr_ratio) if risk > 0 else None
+                # Fallback: if risk ≤ 0 (flat market / zero ATR edge case),
+                # use a full ATR unit so take_profit is never None.
+                if risk <= 0:
+                    risk = atr_stop_mult * atr_val
+                take_profit = price + (risk * rr_ratio)
 
                 return TradingSignal(
                     direction=SignalDirection.LONG,
@@ -142,16 +173,21 @@ class MacdPullbackGenerator(SignalGenerator):
                 )
 
             # SHORT: MACD < signal (bearish) + price rallied to EMA +
-            # histogram negative and decreasing
+            # histogram negative and decreasing.
+            # Blocked when in bull macro regime (regime_ema_period > 0 and
+            # price > regime EMA) to prevent spurious shorts during bull dips.
             if (
-                macd_curr < macd_signal_val
+                short_allowed
+                and macd_curr < macd_signal_val
                 and hist_curr < 0
                 and hist_curr < hist_prev
                 and is_near_ema
             ):
                 stop_loss = ema_val + (atr_stop_mult * atr_val)
                 risk = stop_loss - price
-                take_profit = price - (risk * rr_ratio) if risk > 0 else None
+                if risk <= 0:
+                    risk = atr_stop_mult * atr_val
+                take_profit = price - (risk * rr_ratio)
 
                 return TradingSignal(
                     direction=SignalDirection.SHORT,
@@ -159,7 +195,7 @@ class MacdPullbackGenerator(SignalGenerator):
                     price=price,
                     strength=min(1.0, abs(hist_curr) / (atr_val * 0.5 + 1)),
                     stop_loss=stop_loss,
-                    take_profit=max(take_profit, price * 0.001) if take_profit else None,
+                    take_profit=max(take_profit, price * 0.001),
                     indicators=indicators,
                     metadata={"trigger": "macd_pullback_short"},
                 )

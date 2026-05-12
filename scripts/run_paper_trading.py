@@ -72,6 +72,9 @@ BULL_STRATEGY_CONFIG: dict[str, dict[str, Any]] = {
     "macd_pullback": {
         # SUPERVISED-validated: 2 passes (DOGE Sharpe=3.8/PF=1.60, AVAX Sharpe=2.1/PF=1.45)
         # stop=2.5x ATR (sweep-validated, widened from 2.0), tol=0.5% pullback zone
+        # regime_ema_period=200: blocks SHORT signals when price > EMA(200) — prevents
+        # spurious bearish entries during bull-market MACD dips which would open a SHORT
+        # position in the wrong direction and run against the prevailing trend.
         "label": "MACD_PB",
         "regime": "bull",
         "symbols": ["DOGEUSDT", "AVAXUSDT"],
@@ -84,6 +87,7 @@ BULL_STRATEGY_CONFIG: dict[str, dict[str, Any]] = {
             "atr_stop_multiplier": 2.5,
             "risk_reward_ratio": 2.0,
             "pullback_tolerance_pct": 0.5,
+            "regime_ema_period": 200,
         },
     },
     "bull_trend_pullback": {

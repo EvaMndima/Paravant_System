@@ -95,6 +95,7 @@ ORIGINAL_TEMPLATES: dict[str, dict] = {
         "atr_stop_multiplier": 2.5,
         "risk_reward_ratio": 2.0,
         "pullback_tolerance_pct": 0.5,
+        "regime_ema_period": 200,
     },
     "rsi_bb_mean_reversion": {
         "rsi_period": 14,

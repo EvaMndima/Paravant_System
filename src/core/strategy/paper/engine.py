@@ -338,6 +338,7 @@ class PaperTradingEngine:
                     portfolio=self._portfolio,
                     next_bar=next_bar,
                     config=self._config,
+                    allow_flip=False,
                 )
 
             self._portfolio.record_equity(
@@ -676,6 +677,7 @@ class PaperTradingEngine:
                 portfolio=self._portfolio,
                 next_bar=last_bar,
                 config=self._config,
+                allow_flip=False,
             )
 
         # Record equity

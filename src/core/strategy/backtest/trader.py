@@ -45,6 +45,7 @@ class SimulatedTrader:
         portfolio: PortfolioState,
         next_bar: OHLCV,
         config: BacktestConfig,
+        allow_flip: bool = True,
     ) -> TradeRecord | None:
         """Execute a trading signal against the simulated portfolio.
 
@@ -53,15 +54,25 @@ class SimulatedTrader:
         For CLOSE signals: closes the current position if one exists.
 
         If a LONG/SHORT signal arrives while a position is open in the
-        opposite direction, the existing position is first closed, then
-        the new one opened. If the signal matches the current position
-        direction, it is ignored (already positioned).
+        opposite direction and allow_flip=True (default, used in backtests),
+        the existing position is first closed, then the new one opened.
+
+        When allow_flip=False (used in live paper trading), an opposite-direction
+        signal closes the existing position but does NOT open a new one in the
+        opposite direction — the engine stays flat until the next qualifying
+        same-direction signal arrives. This prevents unintended direction flips
+        (e.g., a SHORT opened in a bull regime by a transient bearish MACD dip).
+
+        If the signal matches the current position direction, it is ignored.
 
         Args:
             signal: The trading signal to execute.
             portfolio: Current portfolio state.
             next_bar: The next bar after the signal bar (for fill price).
             config: Backtest configuration with commission/slippage rates.
+            allow_flip: When True (default), opposite signals close the current
+                position AND open a new one in the opposite direction.
+                When False, opposite signals only close — no new position opened.
 
         Returns:
             A TradeRecord if a position was closed (completing a round-trip),
@@ -95,10 +106,21 @@ class SimulatedTrader:
                 )
                 return None
 
-            # Close existing position before opening new one
+            # Close existing position before considering a new one
             closed_trade = self._close_position(
                 portfolio, next_bar, config
             )
+
+            if not allow_flip:
+                # Stay flat after closing — do not open opposite position.
+                # The strategy will re-enter on the next qualifying signal.
+                logger.debug(
+                    "opposite_signal_close_only",
+                    reason="allow_flip=False",
+                    signal_direction=signal.direction.value,
+                    symbol=signal.symbol,
+                )
+                return closed_trade
 
         # Open new position
         self._open_position(signal, portfolio, next_bar, config)
