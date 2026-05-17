@@ -238,6 +238,50 @@ class TestClosePosition:
         # Cash should be less than initial due to commissions
         assert portfolio.cash < initial_cash
 
+    def test_cash_accounting_roundtrip_short_win(self, portfolio: PortfolioState) -> None:
+        """Cash after a winning short round-trip must equal initial + realized_pnl."""
+        ts = datetime(2025, 1, 1, 10, 0, tzinfo=timezone.utc)
+        initial_cash = portfolio.cash
+        portfolio.open_position(
+            symbol="BTCUSDT",
+            direction=SignalDirection.SHORT,
+            quantity=0.1,
+            fill_price=42000.0,
+            commission=4.2,
+            slippage_cost=2.1,
+            timestamp=ts,
+        )
+        trade = portfolio.close_position(
+            fill_price=41000.0,  # price fell — SHORT profits
+            commission=4.1,
+            slippage_cost=2.0,
+            timestamp=ts + timedelta(hours=4),
+        )
+        assert trade.realized_pnl > 0
+        assert portfolio.cash == pytest.approx(initial_cash + trade.realized_pnl, abs=0.01)
+
+    def test_cash_accounting_roundtrip_short_loss(self, portfolio: PortfolioState) -> None:
+        """Cash after a losing short round-trip must equal initial + realized_pnl (negative)."""
+        ts = datetime(2025, 1, 1, 10, 0, tzinfo=timezone.utc)
+        initial_cash = portfolio.cash
+        portfolio.open_position(
+            symbol="BTCUSDT",
+            direction=SignalDirection.SHORT,
+            quantity=0.1,
+            fill_price=42000.0,
+            commission=4.2,
+            slippage_cost=2.1,
+            timestamp=ts,
+        )
+        trade = portfolio.close_position(
+            fill_price=43000.0,  # price rose — SHORT loses
+            commission=4.3,
+            slippage_cost=2.0,
+            timestamp=ts + timedelta(hours=4),
+        )
+        assert trade.realized_pnl < 0
+        assert portfolio.cash == pytest.approx(initial_cash + trade.realized_pnl, abs=0.01)
+
 
 class TestEquityCurve:
     """Tests for equity curve recording."""

@@ -248,9 +248,13 @@ class PortfolioState:
         entry_value = pos.entry_price * pos.quantity
         return_pct = (realized_pnl / entry_value) * 100.0 if entry_value > 0 else 0.0
 
-        # Return proceeds to cash (entry value + P&L - exit commission)
-        proceeds = pos.quantity * fill_price - commission
-        self.cash += proceeds
+        # Return original collateral to cash, adjusted by the realized P&L.
+        # For LONG this resolves to fill_price * qty - exit_commission (identity with
+        # the naive formula).  For SHORT the collateral was entry_price * qty, not
+        # exit_price * qty, so using fill_price here would invert the settlement
+        # direction: a profitable short would drain cash instead of adding to it.
+        # Decision: DEC-2026-05-17-001
+        self.cash += pos.entry_price * pos.quantity + pos.entry_commission + realized_pnl
 
         trade = TradeRecord(
             entry_time=pos.entry_time,

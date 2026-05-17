@@ -1959,11 +1959,32 @@ parameters:
 
 ---
 
+### DEC-2026-05-17-001: Short Position Cash Settlement Fix in PortfolioState
+
+- **Decision:** On `close_position`, return `pos.entry_price * pos.quantity + pos.entry_commission + realized_pnl` to cash instead of the direction-blind `pos.quantity * fill_price - commission`.
+- **Context:** The original proceeds formula treated SHORT closes identically to LONG closes — crediting `exit_price × qty` back to cash. For a LONG this is correct (you sold the asset at exit price). For a SHORT, the collateral deposited was `entry_price × qty`; using `exit_price` inverts the settlement direction, making profitable shorts drain cash and losing shorts inflate it.
+- **Rationale:**
+  - The new formula reduces algebraically to the old one for LONG positions (no regression).
+  - Net cash change after any trade (both directions) is now exactly `realized_pnl`, which is the correct invariant.
+  - The equity curve (used for Sharpe, drawdown) was wrong between trades for SHORT-heavy strategies; this fix corrects those metrics.
+  - `realized_pnl` was already computed correctly using a direction-aware formula (lines 237–245); only the cash-return was wrong.
+- **Alternatives Considered:**
+  - Direction-specific `if/else` block for proceeds: correct but verbose; the unified formula is equivalent and cleaner.
+- **Status:** ACTIVE
+- **Date Decided:** 2026-05-17
+- **Implemented By:** Bug fix — `close_position` in `PortfolioState`
+- **Affected Files:**
+  - `src/core/strategy/backtest/portfolio.py` — `close_position` lines 251-256
+  - `tests/unit/backtest/test_portfolio.py` — added `test_cash_accounting_roundtrip_short_win` and `test_cash_accounting_roundtrip_short_loss`
+- **References:** Confirmed against 10 days of live paper trading data (Neon DB) — LONG sessions had zero discrepancy; all SHORT sessions had systematic cash errors proportional to realized_pnl magnitude.
+
+---
+
 **End of Decisions Log**
 
-**Total Decisions:** 58 active, 0 superseded, 5 locked
-**Last Updated:** 2026-03-11
-**Next Decision ID:** DEC-2026-03-11-001
+**Total Decisions:** 59 active, 0 superseded, 5 locked
+**Last Updated:** 2026-05-17
+**Next Decision ID:** DEC-2026-05-17-002
 
 ## Phase 5 Decisions (Backtesting & Simulation)
 
