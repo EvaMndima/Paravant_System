@@ -46,6 +46,8 @@ import math
 import os
 import signal as signal_mod
 import sys
+from collections.abc import Callable, Coroutine
+from dataclasses import dataclass, field as dc_field
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -58,6 +60,7 @@ from src.core.alerting.manager import Alert, AlertLevel
 from src.core.strategy.backtest.types import BacktestConfig
 from src.core.strategy.factory import SignalGeneratorFactory
 from src.core.risk.types import OrderRequest
+from src.core.strategy.regime.detector import RegimeDetector, RegimeState
 from src.data.database import init_db
 from src.data.market_data import OHLCV, MarketDataFetcher
 from src.data.models.paper_session import PaperTradingSession
@@ -97,7 +100,7 @@ HOURLY_INTERVAL: int = 3600
 # State file path (must be on a Railway persistent volume)
 STATE_FILE: Path = Path(os.getenv("LIVE_STATE_FILE", "/app/data/live_state.json"))
 
-# BTF strategy parameters (matching paper trading config)
+# Strategy parameters (matching paper trading config)
 BTF_PARAMS: dict[str, Any] = {
     "htf_ema_period": 200,
     "kc_ema_period": 20,
@@ -110,18 +113,115 @@ BTF_PARAMS: dict[str, Any] = {
     "supertrend_period": 10,
     "supertrend_multiplier": 3.0,
     "atr_period": 14,
+    "atr_stop_multiplier": 2.5,
 }
 
-# Minimum bars each strategy needs (BTF needs 810 for 4H EMA200 warmup)
+CMF_PARAMS: dict[str, Any] = {
+    "daily_st_period": 10,
+    "daily_st_multiplier": 3.0,
+    "htf_ema_period": 21,
+    "htf_adx_period": 14,
+    "htf_adx_min": 15.0,
+    "htf_slope_lookback": 5,
+    "st_period_1h": 10,
+    "st_multiplier_1h": 3.0,
+    "macd_fast": 12,
+    "macd_slow": 26,
+    "macd_signal": 9,
+    "atr_period": 14,
+}
+
+RSI_BB_PARAMS: dict[str, Any] = {
+    "rsi_period": 14,
+    "rsi_oversold": 25.0,
+    "rsi_overbought": 75.0,
+    "rsi_exit_long": 50.0,
+    "rsi_exit_short": 50.0,
+    "bb_period": 20,
+    "bb_std_dev": 2.0,
+    "adx_threshold": 25.0,
+    "stop_loss_pct": 2.5,
+    "ema_regime_period": 200,
+}
+
+BTP_PARAMS: dict[str, Any] = {
+    "htf_ema_period": 150,
+    "trend_ema_period": 50,
+    "rsi_period": 14,
+    "rsi_pullback_low": 30.0,
+    "rsi_pullback_high": 60.0,
+    "macd_fast": 12,
+    "macd_slow": 26,
+    "macd_signal": 9,
+    "atr_period": 14,
+    "atr_stop_multiplier": 2.0,
+    "risk_reward_ratio": 2.5,
+}
+
+SRC_PARAMS: dict[str, Any] = {
+    "rsi_period": 14,
+    "stoch_period": 14,
+    "smooth_k": 3,
+    "smooth_d": 3,
+    "stoch_oversold": 20.0,
+    "stoch_max": 70.0,
+    "stoch_lookback": 5,
+    "ema_period": 50,
+    "regime_ema_period": 200,
+    "rsi_min": 40.0,
+    "rsi_max": 70.0,
+    "volume_period": 20,
+    "volume_threshold": 1.2,
+    "atr_period": 14,
+    "atr_stop_multiplier": 2.0,
+    "risk_reward_ratio": 3.0,
+}
+
+HATP_PARAMS: dict[str, Any] = {
+    "ha_wick_lookback": 7,
+    "ha_prior_wick_min": 6,
+    "wick_tolerance": 0.05,
+    "ema_period": 50,
+    "regime_ema_period": 200,
+    "rsi_period": 14,
+    "rsi_min": 50.0,
+    "rsi_max": 75.0,
+    "volume_period": 20,
+    "volume_threshold": 1.4,
+    "atr_period": 14,
+    "atr_stop_multiplier": 2.0,
+    "risk_reward_ratio": 2.0,
+}
+
+ICVP_PARAMS: dict[str, Any] = {
+    "tenkan_period": 20,
+    "kijun_period": 60,
+    "senkou_b_period": 120,
+    "displacement": 30,
+    "atr_period": 14,
+    "volume_period": 20,
+    "volume_threshold": 1.3,
+}
+
+# Minimum lookback bars per strategy (for OHLCV fetch)
 MIN_BARS_LOOKUP: dict[str, int] = {
     "bear_trend_follower": 860,
-    "ichimoku_cloud_trend": 220,
     "cascading_momentum_filter": 400,
     "rsi_bb_mean_reversion": 260,
+    "bull_trend_pullback": 300,
+    "stoch_rsi_bull_cross": 260,
+    "heikin_ashi_trend_pulse": 260,
+    "ichimoku_cloud_trend": 220,
 }
 
 STRATEGY_PARAMS_LOOKUP: dict[str, dict[str, Any]] = {
     "bear_trend_follower": BTF_PARAMS,
+    "cascading_momentum_filter": CMF_PARAMS,
+    "rsi_bb_mean_reversion": RSI_BB_PARAMS,
+    "bull_trend_pullback": BTP_PARAMS,
+    "stoch_rsi_bull_cross": SRC_PARAMS,
+    "heikin_ashi_trend_pulse": HATP_PARAMS,
+    "ichimoku_cloud_trend": ICVP_PARAMS,
 }
 
 
@@ -130,22 +230,198 @@ STRATEGY_PARAMS_LOOKUP: dict[str, dict[str, Any]] = {
 # ---------------------------------------------------------------------------
 
 
+@dataclass
+class LiveTier:
+    """One live-trading strategy-symbol slot.
+
+    Each tier runs independently with its own state, session ID, and fixed
+    capital allocation. Tiers activate when total portfolio equity crosses
+    their threshold AND the current regime matches their regime_tag.
+
+    Attributes:
+        label: Human-readable name shown in Telegram alerts (e.g. "BTF/BTC").
+        template: Strategy template ID used by SignalGeneratorFactory.
+        symbol: Binance trading pair (e.g. "BTCUSDT").
+        capital: Fixed USDT allocation for this tier (independent of others).
+        activation_threshold: Total portfolio equity required to activate.
+        regime_tag: "bear", "bull", or "all".
+        params: Strategy-specific parameter dict.
+        lookback_bars: OHLCV bars to fetch per poll cycle.
+        state: Mutable live position state (loaded from DB on activation).
+        active: Whether this tier is currently running.
+        generator: SignalGenerator instance (set at runtime).
+        session_id: Neon/SQLite session key (e.g. "live_bear_trend_follower_BTCUSDT").
+        state_file: JSON backup path (one file per tier on the persistent volume).
+    """
+
+    label: str
+    template: str
+    symbol: str
+    capital: float
+    activation_threshold: float
+    regime_tag: str
+    params: dict[str, Any]
+    lookback_bars: int
+    state: dict[str, Any] = dc_field(default_factory=dict)
+    active: bool = False
+    generator: Any = None
+    session_id: str = ""
+    state_file: Path = dc_field(default=Path("/app/data/live_state_default.json"))
+
+
+def _build_tiers() -> list[LiveTier]:
+    """Build expansion tier list from current LIVE_CAPITAL setting.
+
+    Tiers are listed in activation order.
+    Bear tiers run when RegimeState.is_bear is True.
+    Bull tiers run when RegimeState.is_bull is True.
+    All-regime tiers run regardless of regime.
+
+    Activation thresholds use multiples of LIVE_CAPITAL so they scale
+    automatically with any starting capital (e.g. LIVE_CAPITAL=50 means
+    tier 2 activates at $100, not $40).
+    """
+    cap = LIVE_CAPITAL
+    tiers = [
+        # ----------------------------------------------------------------
+        # Bear tiers (validated in bear paper trading, ordered by conviction)
+        # ----------------------------------------------------------------
+        LiveTier(
+            label="BTF/BTC",
+            template="bear_trend_follower",
+            symbol="BTCUSDT",
+            capital=cap,
+            activation_threshold=0.0,
+            regime_tag="bear",
+            params=BTF_PARAMS,
+            lookback_bars=860,
+        ),
+        LiveTier(
+            label="BTF/ETH",
+            template="bear_trend_follower",
+            symbol="ETHUSDT",
+            capital=cap,
+            activation_threshold=cap * 2,
+            regime_tag="bear",
+            params=BTF_PARAMS,
+            lookback_bars=860,
+        ),
+        LiveTier(
+            label="CMF/SOL",
+            template="cascading_momentum_filter",
+            symbol="SOLUSDT",
+            capital=cap,
+            activation_threshold=cap * 3,
+            regime_tag="bear",
+            params=CMF_PARAMS,
+            lookback_bars=400,
+        ),
+        LiveTier(
+            label="RSI_BB/ETH",
+            template="rsi_bb_mean_reversion",
+            symbol="ETHUSDT",
+            capital=cap,
+            activation_threshold=cap * 4,
+            regime_tag="bear",
+            params=RSI_BB_PARAMS,
+            lookback_bars=260,
+        ),
+        # ----------------------------------------------------------------
+        # Bull tiers (validated in bull paper trading)
+        # BTP is tier-1 equivalent in bull: activates immediately on
+        # regime flip. Subsequent bull tiers require profit growth.
+        # ----------------------------------------------------------------
+        LiveTier(
+            label="BTP/BTC",
+            template="bull_trend_pullback",
+            symbol="BTCUSDT",
+            capital=cap,
+            activation_threshold=0.0,
+            regime_tag="bull",
+            params=BTP_PARAMS,
+            lookback_bars=300,
+        ),
+        LiveTier(
+            label="SRC/BTC",
+            template="stoch_rsi_bull_cross",
+            symbol="BTCUSDT",
+            capital=cap,
+            activation_threshold=cap * 2,
+            regime_tag="bull",
+            params=SRC_PARAMS,
+            lookback_bars=260,
+        ),
+        LiveTier(
+            label="HATP/BTC",
+            template="heikin_ashi_trend_pulse",
+            symbol="BTCUSDT",
+            capital=cap,
+            activation_threshold=cap * 3,
+            regime_tag="bull",
+            params=HATP_PARAMS,
+            lookback_bars=260,
+        ),
+        # ----------------------------------------------------------------
+        # All-regime (ICVP is self-directing via cloud — works in both)
+        # Starts at tier-2 threshold to avoid over-allocation early.
+        # ----------------------------------------------------------------
+        LiveTier(
+            label="ICVP/BTC",
+            template="ichimoku_cloud_trend",
+            symbol="BTCUSDT",
+            capital=cap,
+            activation_threshold=cap * 2,
+            regime_tag="all",
+            params=ICVP_PARAMS,
+            lookback_bars=220,
+        ),
+    ]
+    for tier in tiers:
+        tier.session_id = f"live_{tier.template}_{tier.symbol}"
+        tier.state_file = Path(
+            f"/app/data/live_state_{tier.template}_{tier.symbol}.json"
+        )
+    return tiers
+
+
+# Module-level tier list — initialised once, mutated as tiers activate.
+EXPANSION_TIERS: list[LiveTier] = _build_tiers()
+
+
 def _make_session_id() -> str:
-    """Build unique session key for this live config."""
+    """Build unique session key for the primary (tier-1) live config."""
     return f"live_{LIVE_TEMPLATE}_{LIVE_SYMBOL}"
 
 
-def load_state(store: DataStore) -> dict[str, Any]:
+def load_state(
+    store: DataStore,
+    session_id: str | None = None,
+    symbol: str | None = None,
+    state_file: Path | None = None,
+) -> dict[str, Any]:
     """Load live trading state — tries SQLite first, then JSON backup.
+
+    Args:
+        store: DataStore for SQLite/Neon reads.
+        session_id: Session key to load. Defaults to primary tier key.
+        symbol: Symbol stored in the session. Defaults to LIVE_SYMBOL.
+        state_file: JSON backup path. Defaults to STATE_FILE.
 
     Returns:
         State dict with keys: in_position, side, entry_price, quantity,
         entry_time, realized_pnl, total_trades, trade_history,
         stop_loss, take_profit.
     """
+    if session_id is None:
+        session_id = _make_session_id()
+    if symbol is None:
+        symbol = LIVE_SYMBOL
+    if state_file is None:
+        state_file = STATE_FILE
+
     empty: dict[str, Any] = {
         "in_position": False,
-        "symbol": LIVE_SYMBOL,
+        "symbol": symbol,
         "realized_pnl": 0.0,
         "total_trades": 0,
         "trade_history": [],
@@ -154,7 +430,6 @@ def load_state(store: DataStore) -> dict[str, Any]:
     }
 
     # 1. Try SQLite (primary)
-    session_id = _make_session_id()
     try:
         row = store.get_paper_session(session_id)
         if row is not None:
@@ -198,10 +473,9 @@ def load_state(store: DataStore) -> dict[str, Any]:
         logger.warning("live_state_db_load_failed", error=str(exc))
 
     # 2. Fallback to JSON file
-    if STATE_FILE.exists():
+    if state_file.exists():
         try:
-            data = json.loads(STATE_FILE.read_text())
-            # Back-fill missing keys for forward-compatibility
+            data = json.loads(state_file.read_text())
             data.setdefault("stop_loss", None)
             data.setdefault("take_profit", None)
             data.setdefault("trade_history", [])
@@ -209,31 +483,42 @@ def load_state(store: DataStore) -> dict[str, Any]:
                 "live_state_loaded_from_json",
                 in_position=data.get("in_position", False),
                 symbol=data.get("symbol"),
+                session_id=session_id,
             )
             print(
-                f"State loaded from JSON backup: "
+                f"[{session_id}] State from JSON: "
                 f"trades={data.get('total_trades', 0)}, "
                 f"realized=${data.get('realized_pnl', 0):+.2f}"
             )
             return data
         except Exception as exc:
-            logger.warning("live_state_json_load_failed", error=str(exc))
+            logger.warning("live_state_json_load_failed", error=str(exc), session_id=session_id)
 
     # 3. Fresh start
-    print("No previous state found — starting fresh.")
+    print(f"[{session_id}] No previous state — starting fresh.")
     return empty
 
 
-def save_state(state: dict[str, Any], store: DataStore) -> None:
+def save_state(
+    state: dict[str, Any],
+    store: DataStore,
+    tier: LiveTier | None = None,
+) -> None:
     """Persist live trading state to SQLite (primary) and JSON (backup).
 
     Args:
         state: Current position state dict.
-        store: DataStore instance for SQLite persistence.
+        store: DataStore instance for SQLite/Neon persistence.
+        tier: LiveTier whose state is being saved. Falls back to primary
+            LIVE_TEMPLATE/LIVE_SYMBOL globals when None (backward-compatible).
     """
-    session_id = _make_session_id()
+    session_id = tier.session_id if tier else _make_session_id()
+    template_id = tier.template if tier else LIVE_TEMPLATE
+    symbol = tier.symbol if tier else LIVE_SYMBOL
+    capital = tier.capital if tier else LIVE_CAPITAL
+    sf = tier.state_file if tier else STATE_FILE
 
-    # 1. Save to SQLite
+    # 1. Save to SQLite/Neon
     try:
         position_data: dict[str, Any] | None = None
         if state.get("in_position"):
@@ -249,10 +534,10 @@ def save_state(state: dict[str, Any], store: DataStore) -> None:
 
         row = PaperTradingSession(
             session_id=session_id,
-            template_id=LIVE_TEMPLATE,
-            symbol=LIVE_SYMBOL,
-            initial_capital=LIVE_CAPITAL,
-            cash=LIVE_CAPITAL - (
+            template_id=template_id,
+            symbol=symbol,
+            initial_capital=capital,
+            cash=capital - (
                 state.get("entry_price", 0.0) * state.get("quantity", 0.0)
                 if state.get("in_position") else 0.0
             ),
@@ -263,14 +548,14 @@ def save_state(state: dict[str, Any], store: DataStore) -> None:
         )
         store.upsert_paper_session(row)
     except Exception as exc:
-        logger.warning("live_state_db_save_failed", error=str(exc))
+        logger.warning("live_state_db_save_failed", error=str(exc), session_id=session_id)
 
     # 2. Backup to JSON
     try:
-        STATE_FILE.parent.mkdir(parents=True, exist_ok=True)
-        STATE_FILE.write_text(json.dumps(state, default=str, indent=2))
+        sf.parent.mkdir(parents=True, exist_ok=True)
+        sf.write_text(json.dumps(state, default=str, indent=2))
     except Exception as exc:
-        logger.warning("live_state_json_save_failed", error=str(exc))
+        logger.warning("live_state_json_save_failed", error=str(exc), session_id=session_id)
 
 
 # ---------------------------------------------------------------------------
@@ -579,6 +864,7 @@ def _record_closed_trade(
     state: dict[str, Any],
     exit_price: float,
     exit_reason: str,
+    symbol: str | None = None,
 ) -> float:
     """Record a closed trade into state and return net PnL after commissions.
 
@@ -615,11 +901,13 @@ def _record_closed_trade(
     state["realized_pnl"] = state.get("realized_pnl", 0.0) + net_pnl
     state["total_trades"] = state.get("total_trades", 0) + 1
 
+    rec_symbol = symbol if symbol is not None else LIVE_SYMBOL
+
     if "trade_history" not in state:
         state["trade_history"] = []
     state["trade_history"].append({
         "direction": current_side,
-        "symbol": LIVE_SYMBOL,
+        "symbol": rec_symbol,
         "entry_price": entry_price,
         "exit_price": exit_price,
         "quantity": qty,
@@ -635,7 +923,7 @@ def _record_closed_trade(
 
     logger.info(
         "live_trade_closed",
-        symbol=LIVE_SYMBOL,
+        symbol=rec_symbol,
         direction=current_side,
         entry_price=entry_price,
         exit_price=exit_price,
@@ -660,6 +948,268 @@ def _record_closed_trade(
 
 
 # ---------------------------------------------------------------------------
+# Per-tier poll processor
+# ---------------------------------------------------------------------------
+
+
+async def _process_tier(
+    tier: LiveTier,
+    adapter: BinanceExecutionAdapter,
+    fetcher: MarketDataFetcher,
+    store: DataStore,
+    regime_allows_entry: bool,
+    send_alert: Callable[..., Coroutine[Any, Any, None]],
+    poll_count: int,
+) -> None:
+    """Run one poll cycle for a single LiveTier.
+
+    Handles stop/TP enforcement, signal generation, and order submission
+    for one strategy-symbol pair. Called once per tier per poll cycle
+    from the main loop.
+
+    Entry is gated by regime_allows_entry — stops and signal closes
+    always execute regardless of regime.
+
+    Args:
+        tier: The active LiveTier to process.
+        adapter: Binance execution adapter.
+        fetcher: OHLCV market data fetcher.
+        store: DataStore for risk guard (kill switch) reads.
+        regime_allows_entry: True when current regime matches this tier's
+            regime_tag. False blocks new positions but not exits.
+        send_alert: Async callable for Telegram notifications.
+        poll_count: Current poll counter (for periodic logging).
+    """
+    series = await fetcher.fetch_ohlcv(
+        symbol=tier.symbol,
+        timeframe="1h",
+        limit=min(tier.lookback_bars, 1000),
+    )
+
+    if series is None or len(series) < tier.generator.min_bars_required + 2:
+        logger.warning(
+            "live_insufficient_data",
+            tier=tier.label,
+            available=len(series) if series else 0,
+            required=tier.generator.min_bars_required + 2,
+        )
+        return
+
+    current_bar: OHLCV = series[-1]
+    current_price: float = current_bar.close
+
+    # -------------------------------------------------------------------
+    # Step 1: Stop-loss / take-profit (executes regardless of regime)
+    # -------------------------------------------------------------------
+    should_exit, exit_reason, level_price = _check_stops_and_tp(tier.state, current_bar)
+
+    if should_exit:
+        qty = tier.state.get("quantity", 0.0)
+        current_side = tier.state.get("side", "")
+        exit_order_side = "sell" if current_side == "LONG" else "buy"
+
+        approved, block_reason = _check_risk_guards(
+            tier.state, store, tier.capital, current_price
+        )
+        if not approved and "kill_switch" in block_reason:
+            await send_alert(
+                title=f"KILL SWITCH — Stop Exit Blocked [{tier.label}]",
+                message=(
+                    f"Kill switch is active. Cannot close position.\n"
+                    f"Position: IN {current_side} @ ${tier.state.get('entry_price', 0):,.2f}"
+                ),
+                level=AlertLevel.CRITICAL,
+            )
+        else:
+            success, filled_price = await submit_market_order(
+                adapter, tier.symbol, exit_order_side, qty, current_price,
+                tier.session_id,
+            )
+            if success and filled_price > 0:
+                entry_snap = tier.state.get("entry_price", level_price)
+                net_pnl = _record_closed_trade(
+                    tier.state, filled_price, exit_reason, tier.symbol
+                )
+                save_state(tier.state, store, tier)
+                await send_alert(
+                    title=f"CLOSED [{exit_reason.upper()}]: {tier.label}",
+                    message=(
+                        f"Direction: {current_side}\n"
+                        f"Entry: ${entry_snap:,.2f} -> Fill: ${filled_price:,.2f}\n"
+                        f"Level: ${level_price:,.2f}\n"
+                        f"Net PnL: ${net_pnl:+.4f}\n"
+                        f"---\n"
+                        f"Tier Realized: ${tier.state['realized_pnl']:+.2f}\n"
+                        f"Trades: {tier.state['total_trades']}"
+                    ),
+                )
+            else:
+                await send_alert(
+                    title=f"STOP EXIT FAILED: {tier.label}",
+                    message=(
+                        f"Could not close on {exit_reason}.\n"
+                        f"Manual intervention required.\n"
+                        f"Side: {current_side} | Qty: {qty:.6f}"
+                    ),
+                    level=AlertLevel.CRITICAL,
+                )
+
+    # -------------------------------------------------------------------
+    # Step 2: Signal generation (confirmed bars only, no lookahead)
+    # -------------------------------------------------------------------
+    signal_series = series.slice(0, len(series) - 1)
+    signal = tier.generator.generate(signal_series, tier.params, tier.symbol)
+
+    in_position = tier.state.get("in_position", False)
+    current_side = tier.state.get("side", "")
+
+    if signal is not None:
+        sig_dir = signal.direction.value
+
+        logger.info(
+            "live_signal_generated",
+            tier=tier.label,
+            symbol=tier.symbol,
+            direction=sig_dir,
+            strength=signal.strength,
+            in_position=in_position,
+            regime_allows_entry=regime_allows_entry,
+            poll=poll_count,
+        )
+
+        # -------------------------------------------------------------------
+        # Step 3: Signal-driven CLOSE (executes regardless of regime)
+        # -------------------------------------------------------------------
+        if in_position and sig_dir == "CLOSE":
+            exit_order_side = "sell" if current_side == "LONG" else "buy"
+            approved, block_reason = _check_risk_guards(
+                tier.state, store, tier.capital, current_price
+            )
+            if not approved and "kill_switch" in block_reason:
+                await send_alert(
+                    title=f"KILL SWITCH — Signal Close Blocked [{tier.label}]",
+                    message=f"Kill switch active.\nBlock: {block_reason}",
+                    level=AlertLevel.CRITICAL,
+                )
+            else:
+                success, filled_price = await submit_market_order(
+                    adapter, tier.symbol, exit_order_side,
+                    tier.state.get("quantity", 0.0), current_price, tier.session_id,
+                )
+                if success and filled_price > 0:
+                    entry_snap = tier.state.get("entry_price", 0.0)
+                    entry_time_snap = tier.state.get("entry_time", "")
+                    net_pnl = _record_closed_trade(
+                        tier.state, filled_price, "signal_close", tier.symbol
+                    )
+                    save_state(tier.state, store, tier)
+
+                    hold_str = ""
+                    if entry_time_snap:
+                        try:
+                            e_dt = datetime.fromisoformat(entry_time_snap)
+                            hold_h = (datetime.now(timezone.utc) - e_dt).total_seconds() / 3600.0
+                            hold_str = f"\nHold: {hold_h:.1f}h"
+                        except (ValueError, TypeError):
+                            pass
+
+                    await send_alert(
+                        title=f"TRADE CLOSED [SIGNAL]: {tier.label}",
+                        message=(
+                            f"Direction: {current_side}\n"
+                            f"Entry: ${entry_snap:,.2f} -> Fill: ${filled_price:,.2f}"
+                            f"{hold_str}\n"
+                            f"Net PnL: ${net_pnl:+.4f}\n"
+                            f"---\n"
+                            f"Tier Realized: ${tier.state['realized_pnl']:+.2f}\n"
+                            f"Trades: {tier.state['total_trades']}"
+                        ),
+                    )
+
+        # -------------------------------------------------------------------
+        # Step 4: Signal-driven ENTRY (only when flat AND regime allows)
+        # -------------------------------------------------------------------
+        elif not in_position and sig_dir in ("LONG", "SHORT"):
+            if not regime_allows_entry:
+                logger.info(
+                    "live_entry_blocked_regime",
+                    tier=tier.label,
+                    direction=sig_dir,
+                    symbol=tier.symbol,
+                )
+            else:
+                approved, block_reason = _check_risk_guards(
+                    tier.state, store, tier.capital, current_price
+                )
+                if not approved:
+                    logger.warning(
+                        "live_entry_blocked_risk_guard",
+                        tier=tier.label,
+                        direction=sig_dir,
+                        reason=block_reason,
+                    )
+                    await send_alert(
+                        title=f"ENTRY BLOCKED: {tier.label}",
+                        message=(
+                            f"Signal: {sig_dir}\n"
+                            f"Blocked by: {block_reason}\n"
+                            f"Tier Realized: ${tier.state.get('realized_pnl', 0):+.2f}"
+                        ),
+                        level=AlertLevel.WARNING,
+                    )
+                else:
+                    order_side = "buy" if sig_dir == "LONG" else "sell"
+                    current_equity = _get_current_equity(
+                        tier.state, tier.capital, current_price
+                    )
+                    qty = calculate_quantity(current_equity, current_price)
+
+                    if qty > 0:
+                        success, filled_price = await submit_market_order(
+                            adapter, tier.symbol, order_side, qty,
+                            current_price, tier.session_id,
+                        )
+                        if success and filled_price > 0:
+                            tier.state["in_position"] = True
+                            tier.state["side"] = sig_dir
+                            tier.state["quantity"] = qty
+                            tier.state["entry_price"] = filled_price
+                            tier.state["entry_time"] = datetime.now(timezone.utc).isoformat()
+                            tier.state["stop_loss"] = signal.stop_loss
+                            tier.state["take_profit"] = signal.take_profit
+                            save_state(tier.state, store, tier)
+
+                            stop_str = f"${signal.stop_loss:,.2f}" if signal.stop_loss else "None"
+                            tp_str = f"${signal.take_profit:,.2f}" if signal.take_profit else "None"
+
+                            await send_alert(
+                                title=f"TRADE OPENED: {tier.label}",
+                                message=(
+                                    f"Direction: {sig_dir}\n"
+                                    f"Fill: ${filled_price:,.2f} | Qty: {qty:.6f}\n"
+                                    f"Notional: ${qty * filled_price:.2f}\n"
+                                    f"Stop: {stop_str} | TP: {tp_str}\n"
+                                    f"Strength: {signal.strength:.2f}\n"
+                                    f"Equity: ${current_equity:.2f} x {POSITION_SIZE_FRACTION:.0%}"
+                                ),
+                            )
+
+    # Periodic console log (every 12 polls ~= 12 minutes)
+    if poll_count % 12 == 0:
+        pos_str = (
+            f"IN {tier.state['side']} @ ${tier.state.get('entry_price', 0):,.2f}"
+            if tier.state.get("in_position") else "FLAT"
+        )
+        eq = _get_current_equity(tier.state, tier.capital, current_price)
+        print(
+            f"  [{tier.label}] {pos_str} | "
+            f"Equity: ${eq:.2f} | "
+            f"Realized: ${tier.state.get('realized_pnl', 0):+.2f}",
+            flush=True,
+        )
+
+
+# ---------------------------------------------------------------------------
 # Main live trading loop
 # ---------------------------------------------------------------------------
 
@@ -669,23 +1219,23 @@ async def main() -> None:
 
     Polls Binance for new 1H candles every POLLING_INTERVAL seconds.
     Each poll cycle:
-      1. Check stop-loss / take-profit against current bar high/low
-      2. If stop/TP triggered: close position via market order
-      3. Generate signal from strategy (on confirmed bars, no lookahead)
-      4. If signal generated: run risk guards, then submit order
-      5. Save state and wait for next interval
+      1. Refresh regime (hourly) and activate any new expansion tiers
+      2. For each active tier: check stop/TP, generate signal, run entries
+      3. Save state for all tiers and wait for next interval
+
+    Regime gate: new entries blocked when current regime does not match
+    a tier's regime_tag. Stops and signal closes always execute.
+    Expansion tiers: activate when total portfolio equity exceeds threshold.
     """
     print("=" * 60)
-    print("PARAVANT Live Trading Runner")
-    print(f"Strategy:  {LIVE_TEMPLATE}")
-    print(f"Symbol:    {LIVE_SYMBOL}")
-    print(f"Capital:   ${LIVE_CAPITAL:.2f} USDT")
+    print("PARAVANT Live Trading Runner (Multi-Tier)")
+    print(f"Tier 1:    {LIVE_TEMPLATE} / {LIVE_SYMBOL}")
+    print(f"Capital:   ${LIVE_CAPITAL:.2f} USDT per tier")
     print(f"Testnet:   {os.getenv('BINANCE_TESTNET', 'true')}")
-    print(f"Max Daily Loss: {MAX_DAILY_LOSS_PCT:.0%} of capital")
-    print(f"Max Drawdown:   {MAX_DRAWDOWN_PCT:.0%} of capital")
+    print(f"Max Daily Loss: {MAX_DAILY_LOSS_PCT:.0%} | Max Drawdown: {MAX_DRAWDOWN_PCT:.0%}")
+    print(f"Expansion tiers: {len(EXPANSION_TIERS)} defined")
     print(f"Started:   {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S')} UTC")
 
-    # Print server IP (useful for Binance IP whitelisting)
     try:
         import urllib.request
         ext_ip = urllib.request.urlopen("https://api.ipify.org", timeout=5).read().decode()
@@ -694,7 +1244,6 @@ async def main() -> None:
         print("Server IP: could not determine")
     print("=" * 60)
 
-    # Validate capital is enough to clear minimum notional
     usdt_per_trade = LIVE_CAPITAL * POSITION_SIZE_FRACTION
     if usdt_per_trade < BINANCE_MIN_NOTIONAL:
         print(
@@ -706,7 +1255,6 @@ async def main() -> None:
         )
         sys.exit(1)
 
-    # Initialize Binance client and adapter
     api_key = os.getenv("BINANCE_API_KEY", "")
     secret_key = os.getenv("BINANCE_SECRET_KEY", "")
     testnet = os.getenv("BINANCE_TESTNET", "true").lower() == "true"
@@ -717,38 +1265,20 @@ async def main() -> None:
 
     rate_limiter = RateLimiter()
     client = BinanceClient(
-        api_key=api_key,
-        secret_key=secret_key,
-        testnet=testnet,
-        rate_limiter=rate_limiter,
+        api_key=api_key, secret_key=secret_key, testnet=testnet, rate_limiter=rate_limiter,
     )
     adapter = BinanceExecutionAdapter(client=client, rate_limiter=rate_limiter)
-
-    # Initialize strategy signal generator
-    factory = SignalGeneratorFactory()
-    generator = factory.get_generator(LIVE_TEMPLATE)
-    params = STRATEGY_PARAMS_LOOKUP.get(LIVE_TEMPLATE, {})
-    lookback_bars = MIN_BARS_LOOKUP.get(LIVE_TEMPLATE, 500)
-
-    # Initialize market data fetcher
     fetcher = MarketDataFetcher()
 
-    # Initialize database + DataStore (state persistence and risk checks)
     init_db()
     store = DataStore()
-    print("Database initialized (SQLite at data/trading.db)")
+    print("Database initialized.")
 
-    # Telegram setup
     telegram: TelegramChannel | None = None
     bot_token = os.getenv("TELEGRAM_BOT_TOKEN", "")
     chat_id = os.getenv("TELEGRAM_CHAT_ID", "")
     if bot_token and chat_id:
         telegram = TelegramChannel(bot_token=bot_token, chat_id=chat_id)
-
-    strategy_id = f"live_{LIVE_TEMPLATE}_{LIVE_SYMBOL}"
-
-    # Load persisted position state (SQLite first, JSON backup, then fresh)
-    state = load_state(store)
 
     async def send_alert(
         title: str,
@@ -764,35 +1294,48 @@ async def main() -> None:
         except Exception as exc:
             logger.warning("live_telegram_failed", error=str(exc))
 
-    # Startup alert
+    # Wire up signal generators for all tiers
+    factory = SignalGeneratorFactory()
+    for tier in EXPANSION_TIERS:
+        tier.generator = factory.get_generator(tier.template)
+
+    # Activate tier 1 (threshold=0, always starts immediately)
+    tier1 = EXPANSION_TIERS[0]
+    tier1.active = True
+    tier1.state = load_state(store, tier1.session_id, tier1.symbol, tier1.state_file)
+
     mode_label = "TESTNET" if testnet else "REAL MONEY"
-    pos_detail = "FLAT (no position)"
-    if state.get("in_position"):
+    pos_detail = "FLAT"
+    if tier1.state.get("in_position"):
         pos_detail = (
-            f"IN {state.get('side', '?')} @ ${state.get('entry_price', 0):,.2f} "
-            f"(qty: {state.get('quantity', 0):.6f})"
+            f"IN {tier1.state.get('side', '?')} @ "
+            f"${tier1.state.get('entry_price', 0):,.2f}"
         )
+
     await send_alert(
         title=f"Live Trading Started [{mode_label}]",
         message=(
-            f"Strategy: {LIVE_TEMPLATE}\n"
-            f"Symbol: {LIVE_SYMBOL}\n"
-            f"Capital: ${LIVE_CAPITAL:.2f}\n"
-            f"Per Trade: {POSITION_SIZE_FRACTION:.0%} of current equity\n"
-            f"Max Daily Loss: {MAX_DAILY_LOSS_PCT:.0%}\n"
-            f"Max Drawdown: {MAX_DRAWDOWN_PCT:.0%}\n"
+            f"Tier 1: {tier1.label}\n"
+            f"Capital/tier: ${LIVE_CAPITAL:.2f}\n"
+            f"Per Trade: {POSITION_SIZE_FRACTION:.0%} of equity\n"
+            f"Risk: daily -{MAX_DAILY_LOSS_PCT:.0%} | DD -{MAX_DRAWDOWN_PCT:.0%}\n"
             f"Mode: {mode_label}\n"
             f"Position: {pos_detail}\n"
-            f"Realized PnL: ${state.get('realized_pnl', 0):+.2f}\n"
-            f"Completed Trades: {state.get('total_trades', 0)}"
+            f"Realized: ${tier1.state.get('realized_pnl', 0):+.2f}\n"
+            f"Trades: {tier1.state.get('total_trades', 0)}\n"
+            f"Expansion tiers waiting: "
+            f"{sum(1 for t in EXPANSION_TIERS[1:] if not t.active)}"
         ),
     )
 
-    # Graceful shutdown
+    # Regime detector (BTC daily EMA50/EMA200, 2-bar confirmation)
+    regime_detector = RegimeDetector(fetcher=fetcher)
+    cached_regime: RegimeState = RegimeState.UNKNOWN
+    prev_regime: RegimeState = RegimeState.UNKNOWN
+
     stop_event = asyncio.Event()
 
     def handle_signal(sig: int, frame: Any) -> None:
-        """Handle SIGINT/SIGTERM."""
         print(f"\nReceived signal {sig}, shutting down...")
         stop_event.set()
 
@@ -807,323 +1350,148 @@ async def main() -> None:
         poll_count += 1
 
         try:
-            # Fetch latest candles
-            series = await fetcher.fetch_ohlcv(
-                symbol=LIVE_SYMBOL,
-                timeframe="1h",
-                limit=min(lookback_bars, 1000),
+            # -----------------------------------------------------------
+            # Regime check — on startup and every 60 polls (~1 hour)
+            # Uses 2-bar daily confirmation to prevent whipsaw switches.
+            # Decision: DEC-2026-05-04-002
+            # -----------------------------------------------------------
+            if poll_count == 1 or poll_count % 60 == 0:
+                new_regime = await regime_detector.get_confirmed_state()
+                if new_regime != cached_regime:
+                    prev_regime = cached_regime
+                    cached_regime = new_regime
+                    logger.info(
+                        "live_regime_changed",
+                        previous=prev_regime.value,
+                        current=cached_regime.value,
+                    )
+                    await send_alert(
+                        title="Regime Change Detected",
+                        message=(
+                            f"Previous: {prev_regime.value}\n"
+                            f"Current:  {cached_regime.value}\n"
+                            f"Entry rule: new entries now require "
+                            f"regime_tag='{cached_regime.value.split('_')[1] if cached_regime != RegimeState.UNKNOWN else 'blocked'}'\n"
+                            f"Open positions still managed (stops/TP active)."
+                        ),
+                        level=AlertLevel.WARNING,
+                    )
+
+            # -----------------------------------------------------------
+            # Tier activation check — evaluate inactive tiers each poll
+            # -----------------------------------------------------------
+            active_equity = sum(
+                t.capital + t.state.get("realized_pnl", 0.0)
+                for t in EXPANSION_TIERS if t.active
             )
 
-            if series is None or len(series) < generator.min_bars_required + 2:
-                logger.warning(
-                    "live_insufficient_data",
-                    available=len(series) if series else 0,
-                    required=generator.min_bars_required + 2,
+            for tier in EXPANSION_TIERS:
+                if tier.active:
+                    continue
+                regime_ok = (
+                    tier.regime_tag == "all"
+                    or (tier.regime_tag == "bear" and cached_regime.is_bear)
+                    or (tier.regime_tag == "bull" and cached_regime.is_bull)
                 )
-            else:
-                current_bar: OHLCV = series[-1]
-                current_price: float = current_bar.close
-
-                # -----------------------------------------------------------
-                # Step 1: Stop-loss / take-profit check (BEFORE signal logic)
-                # Checks bar high/low against stored levels — independent of
-                # signal generator. Mirrors SimulatedTrader behaviour exactly.
-                # -----------------------------------------------------------
-                should_exit, exit_reason, level_price = _check_stops_and_tp(
-                    state, current_bar
-                )
-
-                if should_exit:
-                    qty = state.get("quantity", 0.0)
-                    current_side = state.get("side", "")
-                    exit_order_side = "sell" if current_side == "LONG" else "buy"
-
-                    # Risk guard: kill switch still checked even on stop exits
-                    approved, block_reason = _check_risk_guards(
-                        state, store, LIVE_CAPITAL, current_price
+                if regime_ok and active_equity >= tier.activation_threshold:
+                    tier.active = True
+                    tier.state = load_state(
+                        store, tier.session_id, tier.symbol, tier.state_file
                     )
-                    if not approved and "kill_switch" in block_reason:
-                        # Kill switch overrides even stop-loss execution
-                        await send_alert(
-                            title="KILL SWITCH ACTIVE — Stop Exit Blocked",
-                            message=(
-                                f"Kill switch is active. Cannot close position.\n"
-                                f"Manual intervention required.\n"
-                                f"Position: IN {current_side} "
-                                f"@ ${state.get('entry_price', 0):,.2f}"
-                            ),
-                            level=AlertLevel.CRITICAL,
-                        )
-                    else:
-                        success, filled_price = await submit_market_order(
-                            adapter, LIVE_SYMBOL, exit_order_side, qty,
-                            current_price, strategy_id,
-                        )
-                        if success and filled_price > 0:
-                            # Capture entry price before _record_closed_trade clears state
-                            entry_price_snapshot = state.get("entry_price", level_price)
-                            net_pnl = _record_closed_trade(
-                                state, filled_price, exit_reason
-                            )
-                            save_state(state, store)
-
-                            await send_alert(
-                                title=f"POSITION CLOSED [{exit_reason.upper()}]: {LIVE_SYMBOL}",
-                                message=(
-                                    f"Direction: {current_side}\n"
-                                    f"Entry: ${entry_price_snapshot:,.2f} "
-                                    f"-> Exit Fill: ${filled_price:,.2f}\n"
-                                    f"Level Breached: ${level_price:,.2f}\n"
-                                    f"Net PnL: ${net_pnl:+.4f}\n"
-                                    f"---\n"
-                                    f"Total Realized: ${state['realized_pnl']:+.2f}\n"
-                                    f"Completed Trades: {state['total_trades']}"
-                                ),
-                            )
-                        else:
-                            logger.error(
-                                "live_stop_exit_failed",
-                                exit_reason=exit_reason,
-                                symbol=LIVE_SYMBOL,
-                                side=exit_order_side,
-                                quantity=qty,
-                            )
-                            await send_alert(
-                                title=f"STOP EXIT FAILED: {LIVE_SYMBOL}",
-                                message=(
-                                    f"Could not close position on {exit_reason}.\n"
-                                    f"Manual intervention required.\n"
-                                    f"Side: {current_side} | Qty: {qty:.6f}"
-                                ),
-                                level=AlertLevel.CRITICAL,
-                            )
-
-                # -----------------------------------------------------------
-                # Step 2: Signal generation (no-lookahead: exclude last bar)
-                # -----------------------------------------------------------
-                signal_series = series.slice(0, len(series) - 1)
-                signal = generator.generate(signal_series, params, LIVE_SYMBOL)
-
-                in_position = state.get("in_position", False)
-                current_side = state.get("side", "")
-
-                if signal is not None:
-                    sig_dir = signal.direction.value  # "LONG", "SHORT", or "CLOSE"
-
                     logger.info(
-                        "live_signal_generated",
-                        symbol=LIVE_SYMBOL,
-                        direction=sig_dir,
-                        strength=signal.strength,
-                        stop_loss=signal.stop_loss,
-                        take_profit=signal.take_profit,
-                        in_position=in_position,
-                        poll=poll_count,
+                        "live_tier_activated",
+                        tier=tier.label,
+                        threshold=tier.activation_threshold,
+                        active_equity=active_equity,
                     )
-
-                    # -------------------------------------------------------
-                    # Step 3: Signal-driven CLOSE
-                    # -------------------------------------------------------
-                    if in_position and sig_dir == "CLOSE":
-                        qty = state.get("quantity", 0.0)
-                        exit_order_side = "sell" if current_side == "LONG" else "buy"
-
-                        approved, block_reason = _check_risk_guards(
-                            state, store, LIVE_CAPITAL, current_price
-                        )
-                        if not approved and "kill_switch" in block_reason:
-                            await send_alert(
-                                title="KILL SWITCH ACTIVE — Signal Close Blocked",
-                                message=(
-                                    f"Kill switch active. Cannot close on signal.\n"
-                                    f"Block reason: {block_reason}"
-                                ),
-                                level=AlertLevel.CRITICAL,
-                            )
-                        else:
-                            # Close exits are allowed even if loss limits hit
-                            success, filled_price = await submit_market_order(
-                                adapter, LIVE_SYMBOL, exit_order_side, qty,
-                                current_price, strategy_id,
-                            )
-                            if success and filled_price > 0:
-                                # Capture values before _record_closed_trade clears state
-                                entry_price_snapshot = state.get("entry_price", 0.0)
-                                entry_time_snapshot = state.get("entry_time", "")
-                                net_pnl = _record_closed_trade(
-                                    state, filled_price, "signal_close"
-                                )
-                                save_state(state, store)
-
-                                hold_time_str = ""
-                                if entry_time_snapshot:
-                                    try:
-                                        entry_dt = datetime.fromisoformat(
-                                            entry_time_snapshot
-                                        )
-                                        hold_hrs = (
-                                            datetime.now(timezone.utc) - entry_dt
-                                        ).total_seconds() / 3600.0
-                                        hold_time_str = f"\nHold Time: {hold_hrs:.1f}h"
-                                    except (ValueError, TypeError):
-                                        pass
-
-                                await send_alert(
-                                    title=f"TRADE CLOSED [SIGNAL]: {LIVE_SYMBOL}",
-                                    message=(
-                                        f"Direction: {current_side}\n"
-                                        f"Entry: ${entry_price_snapshot:,.2f} "
-                                        f"-> Exit Fill: ${filled_price:,.2f}"
-                                        f"{hold_time_str}\n"
-                                        f"Net PnL: ${net_pnl:+.4f}\n"
-                                        f"---\n"
-                                        f"Total Realized: ${state['realized_pnl']:+.2f}\n"
-                                        f"Completed Trades: {state['total_trades']}"
-                                    ),
-                                )
-
-                    # -------------------------------------------------------
-                    # Step 4: Signal-driven ENTRY (only when flat)
-                    # -------------------------------------------------------
-                    elif not in_position and sig_dir in ("LONG", "SHORT"):
-                        # Risk guards enforced before every entry
-                        approved, block_reason = _check_risk_guards(
-                            state, store, LIVE_CAPITAL, current_price
-                        )
-                        if not approved:
-                            logger.warning(
-                                "live_entry_blocked_risk_guard",
-                                direction=sig_dir,
-                                reason=block_reason,
-                                symbol=LIVE_SYMBOL,
-                            )
-                            await send_alert(
-                                title=f"ENTRY BLOCKED: {LIVE_SYMBOL}",
-                                message=(
-                                    f"Signal: {sig_dir}\n"
-                                    f"Blocked by: {block_reason}\n"
-                                    f"Realized PnL: ${state.get('realized_pnl', 0):+.2f}"
-                                ),
-                                level=AlertLevel.WARNING,
-                            )
-                        else:
-                            order_side = "buy" if sig_dir == "LONG" else "sell"
-                            current_equity = _get_current_equity(
-                                state, LIVE_CAPITAL, current_price
-                            )
-                            qty = calculate_quantity(current_equity, current_price)
-
-                            if qty > 0:
-                                success, filled_price = await submit_market_order(
-                                    adapter, LIVE_SYMBOL, order_side, qty,
-                                    current_price, strategy_id,
-                                )
-                                if success and filled_price > 0:
-                                    state["in_position"] = True
-                                    state["side"] = sig_dir
-                                    state["quantity"] = qty
-                                    # Record actual Binance fill price — not bar close
-                                    state["entry_price"] = filled_price
-                                    state["entry_time"] = datetime.now(
-                                        timezone.utc
-                                    ).isoformat()
-                                    # Persist stop/TP levels for independent enforcement
-                                    state["stop_loss"] = signal.stop_loss
-                                    state["take_profit"] = signal.take_profit
-                                    save_state(state, store)
-
-                                    stop_str = (
-                                        f"${signal.stop_loss:,.2f}"
-                                        if signal.stop_loss else "None"
-                                    )
-                                    tp_str = (
-                                        f"${signal.take_profit:,.2f}"
-                                        if signal.take_profit else "None"
-                                    )
-                                    notional = qty * filled_price
-
-                                    await send_alert(
-                                        title=f"TRADE OPENED: {LIVE_SYMBOL}",
-                                        message=(
-                                            f"Direction: {sig_dir}\n"
-                                            f"Fill Price: ${filled_price:,.2f}\n"
-                                            f"Quantity: {qty:.6f}\n"
-                                            f"Notional: ${notional:.2f}\n"
-                                            f"Stop Loss: {stop_str}\n"
-                                            f"Take Profit: {tp_str}\n"
-                                            f"Signal Strength: {signal.strength:.2f}\n"
-                                            f"Equity Used: ${current_equity:.2f} "
-                                            f"x {POSITION_SIZE_FRACTION:.0%}"
-                                        ),
-                                    )
-
-                # Periodic console log (every 12 polls = ~12 minutes)
-                if poll_count % 12 == 0:
-                    pos_str = (
-                        f"IN {state['side']} @ ${state.get('entry_price', 0):,.2f}"
-                        if state.get("in_position")
-                        else "FLAT"
-                    )
-                    current_equity = _get_current_equity(
-                        state, LIVE_CAPITAL, current_price
-                    )
-                    print(
-                        f"[{datetime.now(timezone.utc).strftime('%H:%M:%S')} UTC] "
-                        f"Poll #{poll_count} | {LIVE_SYMBOL} ${current_price:,.2f} | "
-                        f"{pos_str} | "
-                        f"Equity: ${current_equity:.2f} | "
-                        f"Realized: ${state.get('realized_pnl', 0):+.2f} | "
-                        f"Trades: {state.get('total_trades', 0)}",
-                        flush=True,
-                    )
-
-                # Hourly Telegram summary (every 60 polls = ~60 minutes)
-                if poll_count % 60 == 0:
-                    now_utc = datetime.now(timezone.utc)
-                    current_equity = _get_current_equity(
-                        state, LIVE_CAPITAL, current_price
-                    )
-                    unrealized = current_equity - LIVE_CAPITAL - state.get(
-                        "realized_pnl", 0.0
-                    )
-
-                    pos_summary = "FLAT (no open position)"
-                    if state.get("in_position"):
-                        entry_p = state.get("entry_price", 0.0)
-                        side_held = state.get("side", "?")
-                        hold_h = ""
-                        if state.get("entry_time"):
-                            try:
-                                e_dt = datetime.fromisoformat(state["entry_time"])
-                                hold_h = (
-                                    f" ({(now_utc - e_dt).total_seconds() / 3600:.1f}h)"
-                                )
-                            except (ValueError, TypeError):
-                                pass
-                        pos_summary = (
-                            f"{side_held} @ ${entry_p:,.2f}{hold_h}\n"
-                            f"Current: ${current_price:,.2f}\n"
-                            f"Unrealized: ${unrealized:+.2f}"
-                        )
-                        # Report stop/TP if active
-                        if state.get("stop_loss"):
-                            pos_summary += f"\nStop Loss: ${state['stop_loss']:,.2f}"
-                        if state.get("take_profit"):
-                            pos_summary += f"\nTake Profit: ${state['take_profit']:,.2f}"
-
                     await send_alert(
-                        title=f"Hourly Update: {LIVE_SYMBOL}",
+                        title=f"New Tier Activated: {tier.label}",
                         message=(
-                            f"Price: ${current_price:,.2f}\n"
-                            f"Position: {pos_summary}\n"
-                            f"---\n"
-                            f"Realized PnL: ${state.get('realized_pnl', 0):+.2f}\n"
-                            f"Total Equity: ${current_equity:,.2f}\n"
-                            f"Completed Trades: {state.get('total_trades', 0)}\n"
-                            f"Capital: ${LIVE_CAPITAL:.2f}\n"
-                            f"Time: {now_utc.strftime('%Y-%m-%d %H:%M')} UTC"
+                            f"Strategy: {tier.template}\n"
+                            f"Symbol: {tier.symbol}\n"
+                            f"Capital: ${tier.capital:.2f}\n"
+                            f"Regime tag: {tier.regime_tag}\n"
+                            f"Triggered by equity: ${active_equity:.2f} "
+                            f">= threshold ${tier.activation_threshold:.2f}\n"
+                            f"Active tiers now: "
+                            f"{sum(1 for t in EXPANSION_TIERS if t.active)}"
                         ),
                     )
+
+            # -----------------------------------------------------------
+            # Process each active tier
+            # -----------------------------------------------------------
+            active_tiers = [t for t in EXPANSION_TIERS if t.active]
+
+            if poll_count % 12 == 0:
+                now_str = datetime.now(timezone.utc).strftime("%H:%M:%S")
+                print(
+                    f"[{now_str} UTC] Poll #{poll_count} | "
+                    f"Regime: {cached_regime.value} | "
+                    f"Active tiers: {len(active_tiers)}",
+                    flush=True,
+                )
+
+            for tier in active_tiers:
+                regime_allows_entry = (
+                    tier.regime_tag == "all"
+                    or (tier.regime_tag == "bear" and cached_regime.is_bear)
+                    or (tier.regime_tag == "bull" and cached_regime.is_bull)
+                )
+                await _process_tier(
+                    tier=tier,
+                    adapter=adapter,
+                    fetcher=fetcher,
+                    store=store,
+                    regime_allows_entry=regime_allows_entry,
+                    send_alert=send_alert,
+                    poll_count=poll_count,
+                )
+
+            # -----------------------------------------------------------
+            # Hourly Telegram summary (every 60 polls)
+            # -----------------------------------------------------------
+            if poll_count % 60 == 0:
+                now_utc = datetime.now(timezone.utc)
+                tier_lines = []
+                for tier in active_tiers:
+                    eq = _get_current_equity(tier.state, tier.capital)
+                    pos = (
+                        f"IN {tier.state.get('side', '?')} @ "
+                        f"${tier.state.get('entry_price', 0):,.2f}"
+                        if tier.state.get("in_position") else "FLAT"
+                    )
+                    tier_lines.append(
+                        f"{tier.label}: {pos} | "
+                        f"Equity ${eq:.2f} | "
+                        f"Realized ${tier.state.get('realized_pnl', 0):+.2f} | "
+                        f"Trades {tier.state.get('total_trades', 0)}"
+                    )
+
+                total_eq = sum(
+                    _get_current_equity(t.state, t.capital)
+                    for t in active_tiers
+                )
+                next_tier = next(
+                    (t for t in EXPANSION_TIERS if not t.active), None
+                )
+                next_str = (
+                    f"Next tier: {next_tier.label} at "
+                    f"${next_tier.activation_threshold:.0f} "
+                    f"(regime: {next_tier.regime_tag})"
+                    if next_tier else "All tiers active"
+                )
+
+                await send_alert(
+                    title=f"Hourly Update — {now_utc.strftime('%Y-%m-%d %H:%M')} UTC",
+                    message=(
+                        "\n".join(tier_lines) + "\n"
+                        f"---\n"
+                        f"Total portfolio equity: ${total_eq:.2f}\n"
+                        f"Regime: {cached_regime.value}\n"
+                        f"{next_str}"
+                    ),
+                )
 
         except Exception as exc:
             logger.error("live_poll_error", error=str(exc), poll=poll_count, exc_info=True)
@@ -1133,7 +1501,6 @@ async def main() -> None:
                 level=AlertLevel.ERROR,
             )
 
-        # Wait for next poll or stop signal
         try:
             await asyncio.wait_for(stop_event.wait(), timeout=POLLING_INTERVAL)
             break
@@ -1141,17 +1508,23 @@ async def main() -> None:
             continue
 
     # Shutdown summary
-    pos_at_shutdown = "FLAT"
-    if state.get("in_position"):
-        pos_at_shutdown = (
-            f"IN {state.get('side', '?')} @ ${state.get('entry_price', 0):,.2f} "
-            f"(qty: {state.get('quantity', 0):.6f})"
+    active_tiers = [t for t in EXPANSION_TIERS if t.active]
+    tier_summaries = []
+    for tier in active_tiers:
+        pos = (
+            f"IN {tier.state.get('side', '?')} @ "
+            f"${tier.state.get('entry_price', 0):,.2f}"
+            if tier.state.get("in_position") else "FLAT"
+        )
+        tier_summaries.append(
+            f"{tier.label}: {pos} | "
+            f"Realized ${tier.state.get('realized_pnl', 0):+.2f} | "
+            f"Trades {tier.state.get('total_trades', 0)}"
         )
     summary = (
-        f"Position: {pos_at_shutdown}\n"
-        f"Completed Trades: {state.get('total_trades', 0)}\n"
-        f"Realized PnL: ${state.get('realized_pnl', 0):+.2f}\n"
-        f"Capital: ${LIVE_CAPITAL:.2f}"
+        "\n".join(tier_summaries) + "\n"
+        f"---\n"
+        f"Regime at shutdown: {cached_regime.value}"
     )
     print(f"\n{summary}")
     await send_alert(title="Live Trading Stopped", message=summary)
@@ -1166,12 +1539,12 @@ if __name__ == "__main__":
     import time as _time
 
     MAX_CRASH_RESTARTS = 5
-    CRASH_COOLDOWN = 60  # seconds between restarts
+    CRASH_COOLDOWN = 60
 
     for attempt in range(1, MAX_CRASH_RESTARTS + 1):
         try:
             asyncio.run(main())
-            break  # Clean exit (SIGINT/SIGTERM)
+            break
         except KeyboardInterrupt:
             print("\nKeyboard interrupt — exiting.")
             break
