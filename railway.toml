@@ -3,7 +3,7 @@ builder = "dockerfile"
 dockerfilePath = "Dockerfile"
 
 [deploy]
-startCommand = "python -m scripts.run_paper_trading"
+startCommand = "python -m scripts.run_all"
 restartPolicyType = "on_failure"
 
 # IMPORTANT: Add a Railway persistent volume mounted at /app/data
