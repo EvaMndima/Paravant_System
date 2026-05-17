@@ -114,6 +114,10 @@ class CascadingMomentumFilterGenerator(SignalGenerator):
             macd_slow = int(params["macd_slow"])
             macd_signal_period = int(params["macd_signal"])
             atr_period = int(params["atr_period"])
+            # Default stop=3.0 and rr=1.0 preserves prior ATR-distance
+            # behaviour (stop=3x, TP=3x → R:R 1:1 vs old hardcoded 2.5/3.0).
+            atr_stop_mult = float(params.get("atr_stop_multiplier", 3.0))
+            rr_ratio = float(params.get("risk_reward_ratio", 1.0))
 
             # ==========================================
             # LAYER 1: Daily SuperTrend (Macro Regime)
@@ -218,10 +222,8 @@ class CascadingMomentumFilterGenerator(SignalGenerator):
 
                 if st_flipped_bull and macd_bullish:
                     strength = self._calc_strength(adx_4h, htf_adx_min, ema_slope)
-                    stop_loss = price - 3.0 * atr_val
-                    # TP at 2.5×ATR locks in gains before trailing whipsaw;
-                    # R:R = 0.83 — viable for high-conviction triple-TF entry.
-                    take_profit = price + 2.5 * atr_val
+                    stop_loss = price - atr_stop_mult * atr_val
+                    take_profit = price + rr_ratio * atr_stop_mult * atr_val
 
                     return TradingSignal(
                         direction=SignalDirection.LONG,
@@ -250,9 +252,8 @@ class CascadingMomentumFilterGenerator(SignalGenerator):
 
                 if st_flipped_bear and macd_bearish:
                     strength = self._calc_strength(adx_4h, htf_adx_min, ema_slope)
-                    stop_loss = price + 3.0 * atr_val
-                    # TP at 2.5×ATR mirrors LONG logic for symmetry.
-                    take_profit = price - 2.5 * atr_val
+                    stop_loss = price + atr_stop_mult * atr_val
+                    take_profit = price - rr_ratio * atr_stop_mult * atr_val
 
                     return TradingSignal(
                         direction=SignalDirection.SHORT,

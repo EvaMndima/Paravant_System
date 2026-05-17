@@ -93,9 +93,11 @@ class IchimokuCloudTrendGenerator(SignalGenerator):
             atr_period = int(params["atr_period"])
             volume_period = int(params["volume_period"])
             vol_threshold = float(params["volume_threshold"])
-            # Trailing stop distance in ATR units. Default 2.5 preserves
-            # original behaviour; sweep range 2.5-5.0 for optimisation.
+            # Trailing stop distance in ATR units.
             atr_stop_mult = float(params.get("atr_stop_multiplier", 2.5))
+            # TP multiplier on actual risk (price - stop_loss). Default 1.0
+            # preserves prior 1:1 R:R behaviour; WFO sweep will find optimal.
+            rr_ratio = float(params.get("risk_reward_ratio", 1.0))
 
             # Calculate indicators
             ichimoku = IchimokuCloud(
@@ -174,8 +176,10 @@ class IchimokuCloudTrendGenerator(SignalGenerator):
                 )
                 # Stop below cloud bottom or atr_stop_mult*ATR, whichever is tighter
                 stop_loss = max(cloud_bottom, price - atr_stop_mult * atr_current)
-                # TP at same ATR distance above entry → R:R ≈ 1:1.
-                take_profit = price + atr_stop_mult * atr_current
+                risk = price - stop_loss
+                if risk <= 0:
+                    risk = atr_stop_mult * atr_current
+                take_profit = price + rr_ratio * risk
 
                 return TradingSignal(
                     direction=SignalDirection.LONG,
@@ -202,8 +206,10 @@ class IchimokuCloudTrendGenerator(SignalGenerator):
                 )
                 # Stop above cloud top or atr_stop_mult*ATR, whichever is tighter
                 stop_loss = min(cloud_top, price + atr_stop_mult * atr_current)
-                # TP mirrors stop distance below entry → R:R ≈ 1:1.
-                take_profit = price - atr_stop_mult * atr_current
+                risk = stop_loss - price
+                if risk <= 0:
+                    risk = atr_stop_mult * atr_current
+                take_profit = price - rr_ratio * risk
 
                 return TradingSignal(
                     direction=SignalDirection.SHORT,
