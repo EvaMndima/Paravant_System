@@ -282,33 +282,27 @@ BULL_STRATEGY_CONFIG: dict[str, dict[str, Any]] = {
 # ---------------------------------------------------------------------------
 
 BEAR_STRATEGY_CONFIG: dict[str, dict[str, Any]] = {
-    "bear_trend_follower": {
-        # Validated bear: 100% WR, Sharpe 2.4-3.6 in Q1 2026 bear regime.
-        # 2026-05-27: DOTUSDT removed — May 2026 paper showed -$171/3 trades
-        # = -$57/trade, the worst per-symbol outcome in the basket. Wider
-        # spreads + thinner liquidity vs majors made the 2.5x ATR stop
-        # vulnerable to whipsaws. Decision: DEC-2026-05-27-002.
-        "label": "BTF",
-        "regime": "bear",
-        "symbols": [
-            "BTCUSDT", "ETHUSDT", "BNBUSDT", "SOLUSDT",
-            "XRPUSDT", "AVAXUSDT", "DOGEUSDT",
-        ],
-        "params": {
-            "htf_ema_period": 200,
-            "kc_ema_period": 20,
-            "kc_atr_period": 14,
-            "kc_multiplier": 1.5,
-            "adx_period": 14,
-            "adx_min_threshold": 20.0,
-            "rsi_period": 14,
-            "rsi_oversold": 25.0,
-            "supertrend_period": 10,
-            "supertrend_multiplier": 3.0,
-            "atr_period": 14,
-            "atr_stop_multiplier": 2.5,
-        },
-    },
+    # ----------------------------------------------------------------------
+    # RETIRED 2026-05-27: bear_trend_follower (BTF)
+    # ----------------------------------------------------------------------
+    # Original promotion was based on Q1 2026 backtest claiming
+    # 100% WR / Sharpe 2.4-3.6. May 2026 evidence proves overfit:
+    #
+    #   90-day May backtest (90 trades across 7 symbols):
+    #     Basket avg PF = 0.76 (negative edge)
+    #     Per-symbol PF: BTC 0.83 ETH 0.64 BNB 0.46 SOL 1.02 XRP 0.68
+    #                    AVAX 1.10 DOGE 0.60
+    #     Sharpe is negative on 6 of 7 symbols.
+    #
+    #   Live paper (25 trades, 10 days): PF 0.75 — matches backtest.
+    #
+    # AVAX/SOL are within noise (PF CI = [~0.7, ~1.6] at N=16). Not edges.
+    #
+    # Generator code at src/core/strategy/generators/bear_trend_follower.py
+    # is preserved for future re-validation in clean monotonic-descent
+    # regimes (different market structure than May 2026).
+    # Decision: DEC-2026-05-27-007.
+    # ----------------------------------------------------------------------
     "cascading_momentum_filter": {
         # Validated bear (SOL/XRP/AVAX/ETH). Highest conviction in bear downtrends.
         "label": "CMF",

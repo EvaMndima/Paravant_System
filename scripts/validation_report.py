@@ -251,12 +251,31 @@ def load_sessions(min_trades: int = 0) -> list[SessionStats]:
     Uses the synchronous SQLAlchemy session pattern that the rest of
     the codebase uses (`get_db()` from src.data.database).
     """
+    # Show which DB we're actually pointing at so silent fallback to an
+    # empty local SQLite is immediately visible. Mask credentials.
+    db_url = os.environ.get("DATABASE_URL") or "sqlite:///data/trading.db (local default)"
+    if "@" in db_url:
+        # postgres-style URL — show only the host part, not the credentials
+        masked = db_url.split("@", 1)[1].split("?", 1)[0]
+        print(f"[validation_report] Connecting to: <credentials hidden>@{masked}")
+    else:
+        print(f"[validation_report] Connecting to: {db_url}")
+
     init_db()
     with get_db() as db:
         rows = list(
             db.execute(
                 select(PaperTradingSession).order_by(PaperTradingSession.session_id)
             ).scalars()
+        )
+
+    if not rows:
+        print(
+            "[validation_report] WARNING: 0 paper_trading_sessions rows found.\n"
+            "[validation_report] If you expected production data, set DATABASE_URL "
+            "to the Neon URL before running:\n"
+            "[validation_report]   $env:DATABASE_URL = '<neon_url>'   (PowerShell)\n"
+            "[validation_report]   export DATABASE_URL='<neon_url>'   (bash/zsh)"
         )
 
     all_stats = [compute_session_stats(r) for r in rows]

@@ -2091,13 +2091,42 @@ parameters:
 - **Affected Files:**
   - `scripts/run_live_trading.py`
 
+### DEC-2026-05-27-007: Retire BTF (bear_trend_follower) — Overfit Strategy
+
+- **Decision:** `bear_trend_follower` (BTF) is retired from `BEAR_STRATEGY_CONFIG` and `EXPANSION_TIERS`. The strategy generator file (`src/core/strategy/generators/bear_trend_follower.py`) is preserved for future re-validation. No live or paper sessions of BTF will start; the regime router will no longer activate it.
+- **Context:**
+  - BTF was originally promoted on Q1 2026 backtests claiming **100% WR / Sharpe 2.4-3.6**.
+  - May 2026 90-day backtest (commit `c1cc098`, ran 2026-05-27) showed **basket avg PF = 0.76 across 90 trades** with negative Sharpe on 6 of 7 symbols.
+  - Live paper trading (2026-05-17 to 2026-05-27) showed **PF = 0.75 across 25 trades** — confirming the backtest within 1%.
+  - Per-symbol PFs (May backtest): BTC 0.83, ETH 0.64, BNB 0.46, SOL 1.02, XRP 0.68, AVAX 1.10, DOGE 0.60.
+  - AVAX (1.10) and SOL (1.02) cannot be saved — confidence interval at N=16 is ~[0.7, 1.6], statistically indistinguishable from noise. Sharpe +0.19 / -0.10 respectively — well below the 0.5 threshold where slippage costs erode the edge.
+- **Rationale:**
+  - The Q1 backtest was sample-overfit to a specific market structure (steep monotonic descents). May 2026 bear has been choppy with relief bounces — the regime BTF was designed to exploit isn't currently present.
+  - Refitting parameters on May data would just shift the overfit, not fix the underlying assumption mismatch.
+  - Keeping AVAX/SOL paper-running for "marginal data" has negative EV: operational complexity + paper compute + cognitive load on the operator for data that isn't statistically distinguishable from noise.
+  - Generator code is preserved so the strategy can be re-validated when market regime returns to clean monotonic-descent conditions.
+- **Process improvements that should have caught this:**
+  - DEC-2026-05-27-005 (rolling-window validation) is now in place — BTF would have failed it.
+  - DEC-2026-05-27-004 (promotion gate with N>=30, PF>=1.35, Sharpe>=1.0) is now in place — BTF would not have cleared it.
+- **Alternatives Considered:**
+  - Retain BTF on AVAX/SOL only: rejected — noise-level edge is not a deployment.
+  - Refit BTF parameters on May data: rejected — that's the same overfit failure mode.
+  - Delete generator code entirely: rejected — the strategy may have edge in a different regime; preserve for future re-test.
+- **Status:** ACTIVE
+- **Date Decided:** 2026-05-27
+- **Implemented By:** Removal of `bear_trend_follower` entry from `BEAR_STRATEGY_CONFIG`; removal of BTF/BTC and BTF/ETH `LiveTier` entries from `EXPANSION_TIERS`; retirement banner comment in both files referencing this decision.
+- **Affected Files:**
+  - `scripts/run_paper_trading.py`
+  - `scripts/run_live_trading.py`
+- **References:** Backtest output preserved in conversation; live paper data preserved in Neon `paper_trading_sessions`.
+
 ---
 
 **End of Decisions Log**
 
-**Total Decisions:** 65 active, 0 superseded, 5 locked
+**Total Decisions:** 66 active, 0 superseded, 5 locked
 **Last Updated:** 2026-05-27
-**Next Decision ID:** DEC-2026-05-27-007
+**Next Decision ID:** DEC-2026-05-27-008
 
 ## Phase 5 Decisions (Backtesting & Simulation)
 

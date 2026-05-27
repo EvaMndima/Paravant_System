@@ -286,32 +286,15 @@ def _build_tiers() -> list[LiveTier]:
         # ----------------------------------------------------------------
         # Bear tiers (validated in bear paper trading, ordered by conviction)
         # ----------------------------------------------------------------
-        LiveTier(
-            label="BTF/BTC",
-            template="bear_trend_follower",
-            symbol="BTCUSDT",
-            capital=cap,
-            activation_threshold=0.0,
-            regime_tag="bear",
-            params=BTF_PARAMS,
-            lookback_bars=860,
-        ),
-        LiveTier(
-            label="BTF/ETH",
-            template="bear_trend_follower",
-            symbol="ETHUSDT",
-            capital=cap,
-            activation_threshold=cap * 2,
-            regime_tag="bear",
-            params=BTF_PARAMS,
-            lookback_bars=860,
-        ),
+        # BTF tiers REMOVED 2026-05-27 — strategy retired after May 2026
+        # backtest + live paper showed PF=0.75-0.76 across 115 total trades.
+        # See DEC-2026-05-27-007.
         LiveTier(
             label="CMF/SOL",
             template="cascading_momentum_filter",
             symbol="SOLUSDT",
             capital=cap,
-            activation_threshold=cap * 3,
+            activation_threshold=0.0,
             regime_tag="bear",
             params=CMF_PARAMS,
             lookback_bars=400,
@@ -321,7 +304,7 @@ def _build_tiers() -> list[LiveTier]:
             template="rsi_bb_mean_reversion",
             symbol="ETHUSDT",
             capital=cap,
-            activation_threshold=cap * 4,
+            activation_threshold=cap * 2,
             regime_tag="bear",
             params=RSI_BB_PARAMS,
             lookback_bars=260,
