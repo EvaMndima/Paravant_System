@@ -46,7 +46,7 @@ from src.brokers.binance.client import BinanceClient
 from src.core.strategy.backtest import BacktestEngine
 from src.core.strategy.backtest.types import BacktestConfig
 from src.core.strategy.factory import SignalGeneratorFactory
-from src.data.market_data import MarketDataFetcher
+from src.data.market_data import MarketDataFetcher, OHLCVSeries
 from src.utils.logging import get_logger, setup_logging
 
 setup_logging(level="WARNING")
@@ -214,7 +214,9 @@ async def run(strategies: list[str], symbols_override: list[str] | None,
     windows = _build_windows(num_windows, window_days, end_date)
 
     # Fetch the longest contiguous range once per symbol, slice locally.
-    fetch_start = windows[0][0] - timedelta(days=5)  # padding for indicator warmup
+    # We need ~35d of warmup BEFORE windows[0][0] so indicators can fire
+    # within that earliest window (BTF needs 4H EMA-200 = ~800 1H bars).
+    fetch_start = windows[0][0] - timedelta(days=40)
     fetch_end = windows[-1][1]
 
     all_symbols: set[str] = set()
@@ -248,25 +250,32 @@ async def run(strategies: list[str], symbols_override: list[str] | None,
             if full_series is None:
                 continue
             for window in windows:
-                # Slice to the window (using the OHLCVSeries duck-typed list)
                 start_ts = window[0]
                 end_ts = window[1]
-                # Naive slice: OHLCVSeries is iterable of OHLCV bars with .timestamp
-                sliced = [
-                    bar for bar in full_series
-                    if start_ts <= bar.timestamp <= end_ts
+                # Each window needs ~34 days of warmup data BEFORE its
+                # nominal start so indicators can fire. We slice from
+                # (start_ts - 35d) to end_ts and then run the backtest on
+                # that span. Trades during the warmup prefix will count
+                # toward the window's metrics (acceptable: it gives us
+                # signal density similar to live trading).
+                warmup_start = start_ts - timedelta(days=35)
+                sliced_candles = [
+                    bar for bar in full_series.candles
+                    if warmup_start <= bar.timestamp <= end_ts
                 ]
-                if len(sliced) < 50:
+                if len(sliced_candles) < 850:  # need ~812 for BTF warmup
+                    logger.warning(
+                        "window_too_short",
+                        template=tmpl, symbol=sym,
+                        bars=len(sliced_candles),
+                        window_start=str(start_ts),
+                    )
                     continue
-                # Reconstruct a series-like via SimpleNamespace; BacktestEngine
-                # uses the .bars protocol. Defensive: try to use the original
-                # type if it's a list.
-                try:
-                    series_window = type(full_series)(sliced) if not isinstance(
-                        full_series, list
-                    ) else sliced
-                except TypeError:
-                    series_window = sliced
+                series_window = OHLCVSeries(
+                    candles=sliced_candles,
+                    symbol=full_series.symbol,
+                    timeframe=full_series.timeframe,
+                )
                 try:
                     r = _run_one(engine, tmpl, sym, params,
                                  series_window, config, window)
