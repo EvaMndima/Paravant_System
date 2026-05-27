@@ -387,6 +387,97 @@ def _build_tiers() -> list[LiveTier]:
 # Module-level tier list — initialised once, mutated as tiers activate.
 EXPANSION_TIERS: list[LiveTier] = _build_tiers()
 
+# -----------------------------------------------------------------------------
+# Demotion guardrail thresholds — single source of truth.
+# Decision: DEC-2026-05-27-004 (promotion gate).
+# A strategy template is DEGRADED if its paper trading sessions in
+# aggregate show N >= MIN_TRADES and PF < MAX_PF. Live tiers using a
+# degraded template will NOT activate, regardless of equity threshold.
+# -----------------------------------------------------------------------------
+DEGRADATION_MIN_TRADES: int = 10
+DEGRADATION_MAX_PF: float = 0.8
+
+# -----------------------------------------------------------------------------
+# Decorrelation cap — max concurrent same-direction positions across tiers.
+# Decision: DEC-2026-05-27-006.
+# When a basket of tiers shares the same signal (e.g. all BTF symbols
+# triggering SHORT at the same hour during a bear regime), correlation
+# goes to 1.0 on adverse moves. The 2026-05-23 20:00 stop-out hit 5
+# BTF-short sessions simultaneously for ~$395 of realised loss. Capping
+# concurrent same-direction positions bounds the worst-case correlated
+# bleed at the cost of missing some win clusters.
+# -----------------------------------------------------------------------------
+MAX_CONCURRENT_SAME_DIRECTION: int = int(
+    os.environ.get("MAX_CONCURRENT_SAME_DIRECTION", "4")
+)
+
+
+def _count_open_same_direction(direction: str) -> int:
+    """Count tiers currently holding an open position on `direction`."""
+    return sum(
+        1 for t in EXPANSION_TIERS
+        if t.active
+        and t.state.get("in_position")
+        and t.state.get("side") == direction
+    )
+
+
+def _paper_strategy_is_degraded(template_id: str) -> tuple[bool, str]:
+    """Check if a strategy template has degraded in live paper trading.
+
+    Reads paper_trading_sessions from the configured database, aggregates
+    PnL across all sessions sharing the template_id, and applies the
+    degradation rule (N >= MIN_TRADES AND PF < MAX_PF).
+
+    Returns:
+        (is_degraded, reason_string). reason_string is empty when not
+        degraded, or a one-line explanation when degraded.
+
+    Failures (DB unreachable, no rows) return (False, "") — we fail open
+    rather than block live activation on a transient DB issue, because
+    the live engine already has its own state for the primary tier and
+    the alternative (failing closed) would prevent restarts.
+    """
+    try:
+        from src.data.database import get_db
+
+        with get_db() as db:
+            rows = list(
+                db.query(PaperTradingSession)
+                .filter(PaperTradingSession.template_id == template_id)
+                .all()
+            )
+    except Exception as exc:
+        logger.warning(
+            "degradation_check_failed",
+            template_id=template_id,
+            error=str(exc),
+        )
+        return False, ""
+
+    all_pnls: list[float] = []
+    for row in rows:
+        for trade in (row.trade_log or []):
+            all_pnls.append(float(trade.get("realized_pnl", 0.0)))
+
+    n = len(all_pnls)
+    if n < DEGRADATION_MIN_TRADES:
+        return False, ""
+
+    wins_sum = sum(p for p in all_pnls if p > 0)
+    losses_sum = sum(p for p in all_pnls if p <= 0)
+    abs_losses = abs(losses_sum)
+    if abs_losses == 0:
+        # All winners (or no losses) — definitely not degraded.
+        return False, ""
+    pf = wins_sum / abs_losses
+
+    if pf < DEGRADATION_MAX_PF:
+        return True, (
+            f"Paper PF={pf:.2f} over {n} trades (< {DEGRADATION_MAX_PF} threshold)"
+        )
+    return False, ""
+
 
 def _make_session_id() -> str:
     """Build unique session key for the primary (tier-1) live config."""
@@ -1138,6 +1229,28 @@ async def _process_tier(
                     symbol=tier.symbol,
                 )
             else:
+                # Decorrelation cap: count tiers already in this direction.
+                # Decision: DEC-2026-05-27-006.
+                open_same_dir = _count_open_same_direction(sig_dir)
+                if open_same_dir >= MAX_CONCURRENT_SAME_DIRECTION:
+                    logger.warning(
+                        "live_entry_blocked_decorrelation",
+                        tier=tier.label,
+                        direction=sig_dir,
+                        open_same_direction=open_same_dir,
+                        cap=MAX_CONCURRENT_SAME_DIRECTION,
+                    )
+                    await send_alert(
+                        title=f"ENTRY BLOCKED [decorrelation]: {tier.label}",
+                        message=(
+                            f"Signal: {sig_dir}\n"
+                            f"Already open same-direction: "
+                            f"{open_same_dir} / cap {MAX_CONCURRENT_SAME_DIRECTION}\n"
+                            f"Action: skipping entry to limit correlated risk."
+                        ),
+                        level=AlertLevel.WARNING,
+                    )
+                    return
                 approved, block_reason = _check_risk_guards(
                     tier.state, store, tier.capital, current_price
                 )
@@ -1400,6 +1513,34 @@ async def main() -> None:
                     or (tier.regime_tag == "bull" and cached_regime.is_bull)
                 )
                 if regime_ok and active_equity >= tier.activation_threshold:
+                    # Demotion guardrail: block activation if paper data shows
+                    # the strategy is currently degraded. Decision: DEC-2026-05-27-004.
+                    is_degraded, reason = _paper_strategy_is_degraded(tier.template)
+                    if is_degraded:
+                        logger.warning(
+                            "live_tier_activation_blocked",
+                            tier=tier.label,
+                            reason=reason,
+                        )
+                        # Send a one-time alert per tier per poll cycle.
+                        # tier.active stays False so we keep checking but
+                        # set a flag to avoid alert spam on every poll.
+                        if not tier.state.get("_degradation_alerted"):
+                            await send_alert(
+                                title=f"Tier Activation Blocked: {tier.label}",
+                                message=(
+                                    f"{tier.label} ({tier.template}) was "
+                                    f"eligible by equity but live paper "
+                                    f"performance shows degradation.\n"
+                                    f"Reason: {reason}\n"
+                                    f"Action: tier will remain inactive "
+                                    f"until paper performance improves or "
+                                    f"DEGRADATION thresholds are revised."
+                                ),
+                                level=AlertLevel.WARNING,
+                            )
+                            tier.state["_degradation_alerted"] = True
+                        continue
                     tier.active = True
                     tier.state = load_state(
                         store, tier.session_id, tier.symbol, tier.state_file

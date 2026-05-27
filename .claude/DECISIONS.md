@@ -2030,13 +2030,74 @@ parameters:
 - **Affected Files:**
   - `scripts/run_live_trading.py`
 
+### DEC-2026-05-27-004: Promotion Gate — Paper-to-Live Classification Thresholds
+
+- **Decision:** Establish the canonical promotion gate. A live paper trading session is classified as:
+  - **READY_FOR_LIVE** — N >= 30 trades AND PF >= 1.35 AND Sharpe (per-trade) >= 1.0 AND MaxDD <= 5% of session capital
+  - **OBSERVING** — N >= 10 AND PF >= 1.0 (not enough confidence, but not bleeding)
+  - **DEGRADED** — N >= 10 AND PF < 0.8 (live capital must not touch this template)
+  - **RESEARCH** — otherwise (insufficient sample)
+- **Context:** BTF was promoted to live trading on the basis of Q1 2026 backtests (claimed 100% WR / Sharpe 2.4-3.6). May 2026 live paper showed PF=0.75 across 25 trades — a 50%+ degradation that nothing in the existing code would have caught. The promotion process needs an explicit numeric gate that any strategy must clear before live capital can flow to it.
+- **Rationale:**
+  - N >= 30 is the minimum sample where per-trade Sharpe stabilises enough to mean something for crypto 1H strategies.
+  - PF >= 1.35 is the SUPERVISED threshold already used in backtesting — keeps backtest and live-paper gates aligned.
+  - Sharpe >= 1.0 (per-trade) filters out high-PF/low-frequency or high-PF/high-variance strategies that aren't safe to scale.
+  - MaxDD <= 5% of session capital is the equity-protection rail; anything worse means a single bad week could wipe out >$1 per $20 of live capital.
+  - DEGRADED at PF < 0.8 (not 1.0) leaves a small "OBSERVING" buffer between healthy and demoted so noise doesn't flap classifications.
+- **Alternatives Considered:**
+  - Calendar-based (e.g. "30 days minimum"): rejected — trade count is the statistical signal, not time.
+  - Single-metric gate (e.g. just PF): rejected — PF can be inflated by one big winner; combo gate is more honest.
+  - Manual override via memory file: rejected — that's what failed for BTF.
+- **Status:** ACTIVE
+- **Date Decided:** 2026-05-27
+- **Implemented By:** `scripts/validation_report.py` (`PROMOTION_GATE` dict + `_classify()`), enforced at tier activation time by `_paper_strategy_is_degraded()` in `run_live_trading.py`.
+- **Affected Files:**
+  - `scripts/validation_report.py`
+  - `scripts/run_live_trading.py`
+
+### DEC-2026-05-27-005: Rolling-Window Validation Requirement
+
+- **Decision:** New strategy promotions to paper trading MUST pass a rolling-window backtest (default: 4 non-overlapping 30-day windows). The strategy is classified by PF stability: STABLE_EDGE (median PF >= 1.35, CV < 0.30, min PF >= 1.0), PROMISING, MARGINAL, OVERFIT_OR_BROKEN, INSUFFICIENT.
+- **Context:** BTF's Q1 backtest hit 100% WR / Sharpe 2.4-3.6 on one specific window and was promoted on that basis alone. Live paper shows PF=0.75 in May. This is the textbook overfitting failure mode. A single-window backtest cannot distinguish "real edge" from "lucky window."
+- **Rationale:**
+  - 4 windows × 30 days = ~120 days total exposure across multiple regime states.
+  - Coefficient of variation (CV) penalises strategies whose PF swings wildly between windows even if the mean is acceptable.
+  - Minimum-PF floor protects against "one great window" averaging out several losers.
+  - Cheap to run (`scripts/backtest_rolling.py` reuses the existing engine).
+- **Alternatives Considered:**
+  - Walk-forward optimization (Anchor + roll): better but heavier. This is a lighter gate that catches the most common overfit failure.
+  - Single OOS holdout: insufficient — one OOS window is still one window.
+- **Status:** ACTIVE
+- **Date Decided:** 2026-05-27
+- **Implemented By:** `scripts/backtest_rolling.py`.
+- **Affected Files:**
+  - `scripts/backtest_rolling.py`
+
+### DEC-2026-05-27-006: Decorrelation Cap on Same-Direction Live Positions
+
+- **Decision:** The live engine refuses to open a new position if `MAX_CONCURRENT_SAME_DIRECTION` (default 4) tiers already hold an open position in that direction. Configurable via env var.
+- **Context:** On 2026-05-23 20:00 UTC, 5 BTF-short sessions stopped out simultaneously for ~$395 of realised loss in a single hour. The basket appeared diversified (7 symbols) but they were really one signal with symbol substitutions — when the bear-trend assumption broke, all 7 took the same hit. A cap on concurrent same-direction positions bounds the worst-case correlated bleed.
+- **Rationale:**
+  - 4-position cap reduces correlated-stop blast from ~$395 to ~$315 in retrospect; tighter caps would be too restrictive.
+  - Direction-aware (LONG vs SHORT) so the cap doesn't trigger when one strategy is LONG and another SHORT.
+  - Configurable via env var so it can be tuned without redeploy when more data arrives.
+  - Block-only on entry — exits and stop closes still execute unconditionally (the cap protects against new exposure, not from managing existing risk).
+- **Alternatives Considered:**
+  - Cap based on aggregate USDT exposure: harder to reason about with multi-symbol baskets at different prices.
+  - Per-strategy-template cap (e.g. max 3 BTF positions): more nuanced but requires knowing which templates are correlated; this simpler rule is regime-agnostic.
+- **Status:** ACTIVE
+- **Date Decided:** 2026-05-27
+- **Implemented By:** `_count_open_same_direction()` + entry-path check in `_process_tier()`.
+- **Affected Files:**
+  - `scripts/run_live_trading.py`
+
 ---
 
 **End of Decisions Log**
 
-**Total Decisions:** 62 active, 0 superseded, 5 locked
+**Total Decisions:** 65 active, 0 superseded, 5 locked
 **Last Updated:** 2026-05-27
-**Next Decision ID:** DEC-2026-05-27-004
+**Next Decision ID:** DEC-2026-05-27-007
 
 ## Phase 5 Decisions (Backtesting & Simulation)
 

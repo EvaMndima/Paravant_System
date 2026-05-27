@@ -77,8 +77,8 @@ async def run(start: datetime, end: datetime, symbols: list[str]) -> None:
 
     config = BacktestConfig(
         initial_capital=10_000.0,
-        commission_pct=0.001,
-        slippage_pct=0.0005,
+        commission_rate=0.001,
+        slippage_rate=0.0005,
     )
     engine = BacktestEngine(factory)
 
