@@ -373,8 +373,13 @@ def main() -> None:
         help="Number of windows (default 4)",
     )
     parser.add_argument(
-        "--window-days", type=int, default=30,
-        help="Days per window (default 30)",
+        "--window-days", type=int, default=60,
+        help=(
+            "Days per window (default 60). Must be large enough to "
+            "include indicator warmup — BTF needs ~34 days (4H EMA(200) = "
+            "~800 1H bars). 60 days gives 1440 bars per window: ~812 "
+            "warmup + ~628 active trading bars."
+        ),
     )
     parser.add_argument(
         "--end", type=str, default=None,

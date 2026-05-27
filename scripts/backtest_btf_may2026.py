@@ -31,7 +31,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
-from datetime import datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from types import SimpleNamespace
 
 from src.brokers.binance.client import BinanceClient
@@ -169,11 +169,24 @@ async def run(start: datetime, end: datetime, symbols: list[str]) -> None:
 
 
 def main() -> None:
+    # BTF uses 4H EMA(200) which needs ~800 1H bars of indicator warmup
+    # BEFORE the backtest engine will accept the data. A 90-day window
+    # gives 2160 bars total: ~812 used for warmup, ~1348 used for actual
+    # trading (= ~56 days of effective signals). This covers the recent
+    # bear regime continuously without crossing into Q1 (the window BTF
+    # was originally validated on).
+    today = date.today().isoformat()
+    default_end = today
+    default_start = (
+        datetime.fromisoformat(today).replace(tzinfo=timezone.utc)
+        - timedelta(days=90)
+    ).date().isoformat()
+
     p = argparse.ArgumentParser(description="BTF re-backtest diagnostic")
-    p.add_argument("--start", type=str, default="2026-04-25",
-                   help="Start date YYYY-MM-DD (default 2026-04-25)")
-    p.add_argument("--end", type=str, default="2026-05-27",
-                   help="End date YYYY-MM-DD (default 2026-05-27)")
+    p.add_argument("--start", type=str, default=default_start,
+                   help=f"Start date YYYY-MM-DD (default {default_start} = end - 90d)")
+    p.add_argument("--end", type=str, default=default_end,
+                   help=f"End date YYYY-MM-DD (default today = {default_end})")
     p.add_argument("--symbols", type=str, default=None,
                    help="Comma-separated symbols (default: all 7 BTF symbols)")
     args = p.parse_args()
