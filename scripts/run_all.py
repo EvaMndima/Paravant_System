@@ -23,10 +23,18 @@ import time
 MAX_RESTARTS = 5
 CRASH_COOLDOWN = 60
 
-SCRIPTS = [
-    "scripts.run_paper_trading",
-    "scripts.run_live_trading",
-]
+# Paper trading always runs. Live trading is fail-closed: it ONLY starts
+# when LIVE_TRADING_ENABLED is set to a truthy value ("true"/"1"/"yes").
+# Decision: DEC-2026-05-27-001 — live trading kill switch defaults OFF.
+def _live_enabled() -> bool:
+    """Return True if live trading is explicitly enabled via env var."""
+    raw = os.environ.get("LIVE_TRADING_ENABLED", "").strip().lower()
+    return raw in {"true", "1", "yes", "on"}
+
+
+SCRIPTS_PAPER = ["scripts.run_paper_trading"]
+SCRIPTS_LIVE = ["scripts.run_live_trading"]
+SCRIPTS = SCRIPTS_PAPER + (SCRIPTS_LIVE if _live_enabled() else [])
 
 # LIVE_CAPITAL_USDT must be set or live trading defaults to $20.
 # BINANCE_API_KEY / BINANCE_SECRET_KEY must be present for live trading.
@@ -45,8 +53,10 @@ def main() -> None:
     """Start both scripts and supervise them until shutdown."""
     print("=" * 60)
     print("PARAVANT Combined Runner")
-    print(f"  Paper trading: {SCRIPTS[0]}")
-    print(f"  Live trading:  {SCRIPTS[1]}")
+    for s in SCRIPTS:
+        print(f"  Active: {s}")
+    if not _live_enabled():
+        print("  Live trading DISABLED (set LIVE_TRADING_ENABLED=true to enable)")
     print("=" * 60, flush=True)
 
     # Track each script with its restart counter.

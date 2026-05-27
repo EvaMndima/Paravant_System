@@ -1345,6 +1345,12 @@ async def main() -> None:
     print(f"\nPolling every {POLLING_INTERVAL}s. Press Ctrl+C to stop.\n")
 
     poll_count = 0
+    # Suppress Telegram alerts on isolated transient failures — only escalate
+    # after CONSECUTIVE_FAILURES_TO_ALERT in a row, which represents a real
+    # ongoing problem (e.g. API key revoked, Binance outage) rather than a
+    # single read-timeout that self-heals. Decision: DEC-2026-05-27-003.
+    CONSECUTIVE_FAILURES_TO_ALERT = 3
+    consecutive_failures = 0
 
     while not stop_event.is_set():
         poll_count += 1
@@ -1493,13 +1499,41 @@ async def main() -> None:
                     ),
                 )
 
+            # Poll succeeded — reset the consecutive-failure counter and
+            # send a recovery alert if we had previously escalated.
+            if consecutive_failures >= CONSECUTIVE_FAILURES_TO_ALERT:
+                await send_alert(
+                    title="Live Trading Recovered",
+                    message=(
+                        f"Live trading recovered after "
+                        f"{consecutive_failures} consecutive failed polls. "
+                        f"Resuming normal operation at poll #{poll_count}."
+                    ),
+                    level=AlertLevel.INFO,
+                )
+            consecutive_failures = 0
+
         except Exception as exc:
-            logger.error("live_poll_error", error=str(exc), poll=poll_count, exc_info=True)
-            await send_alert(
-                title="Live Trading Error",
-                message=f"Poll #{poll_count} failed: {exc}",
-                level=AlertLevel.ERROR,
+            consecutive_failures += 1
+            logger.error(
+                "live_poll_error",
+                error=str(exc),
+                poll=poll_count,
+                consecutive_failures=consecutive_failures,
+                exc_info=True,
             )
+            # Only escalate to Telegram once we've crossed the threshold,
+            # and then only on the boundary crossing to avoid alert storms.
+            if consecutive_failures == CONSECUTIVE_FAILURES_TO_ALERT:
+                await send_alert(
+                    title="Live Trading Error",
+                    message=(
+                        f"{consecutive_failures} consecutive polls have "
+                        f"failed (latest poll #{poll_count}). Last error: "
+                        f"{exc}"
+                    ),
+                    level=AlertLevel.ERROR,
+                )
 
         try:
             await asyncio.wait_for(stop_event.wait(), timeout=POLLING_INTERVAL)

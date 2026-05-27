@@ -1978,13 +1978,65 @@ parameters:
   - `tests/unit/backtest/test_portfolio.py` — added `test_cash_accounting_roundtrip_short_win` and `test_cash_accounting_roundtrip_short_loss`
 - **References:** Confirmed against 10 days of live paper trading data (Neon DB) — LONG sessions had zero discrepancy; all SHORT sessions had systematic cash errors proportional to realized_pnl magnitude.
 
+### DEC-2026-05-27-001: Live Trading Kill Switch — Fail-Closed Default
+
+- **Decision:** `scripts/run_all.py` only spawns `run_live_trading` when the `LIVE_TRADING_ENABLED` env var is explicitly truthy (`true`/`1`/`yes`/`on`). Paper trading always runs; live is opt-in.
+- **Context:** Diagnostic on Neon DB on 2026-05-27 revealed BTF (the live-deployed strategy) is showing live paper PF=0.75 across 25 trades — a clear negative edge in the current bear regime, despite Q1 backtests claiming 100% WR / Sharpe 2.4-3.6. Continuing live operation under these conditions would compound losses on real capital, and the expansion-tier mechanism would scale up the same negative-edge signal.
+- **Rationale:**
+  - **Fail-closed default**: if all Railway env vars are wiped or misconfigured, live trading does NOT silently resume. The opposite (default-on with a disable flag) makes the dangerous mode the easy mode.
+  - **Paper continues unmodified**: keeps generating the dataset needed to re-validate strategies without risking real capital.
+  - **Reversible**: re-enable by setting one env var on the Railway dashboard — no code change required.
+- **Alternatives Considered:**
+  - Comment out the live entry point: rejected — easy to forget to revert, no audit trail in env vars.
+  - Delete `run_live_trading.py`: rejected — preserves the work; we want it re-runnable when paper proves an edge.
+- **Status:** ACTIVE
+- **Date Decided:** 2026-05-27
+- **Implemented By:** `scripts/run_all.py` (`_live_enabled()` + dynamic SCRIPTS list).
+- **Affected Files:**
+  - `scripts/run_all.py`
+
+### DEC-2026-05-27-002: Drop DOTUSDT from BTF Basket
+
+- **Decision:** Remove `DOTUSDT` from `BEAR_STRATEGY_CONFIG["bear_trend_follower"]["symbols"]`. BTF now trades 7 symbols (BTC, ETH, BNB, SOL, XRP, AVAX, DOGE).
+- **Context:** Live paper data shows BTF/DOTUSDT lost -$171 across 3 trades = **-$57 per trade average**, the worst per-symbol outcome in the entire portfolio. By comparison, BTF/AVAXUSDT under identical parameters produced +$73 over 7 trades. DOT's wider effective spreads + thinner liquidity make the 2.5× ATR stop especially vulnerable to intrabar whipsaws.
+- **Rationale:**
+  - Per-symbol outlier — removing DOT would have changed BTF basket from -$189 to ~-$18 over the same window.
+  - DOT trades on the same signal as other symbols, so the basket loses diversification but the diversification was negatively correlated (it added losses, not buffered them).
+  - Decision is reversible once we have evidence that the stop is appropriate for DOT's microstructure.
+- **Alternatives Considered:**
+  - Widen the stop only for DOT: rejected — would require per-symbol stop tuning that isn't in the strategy interface and would mask the underlying microstructure issue.
+  - Move DOT to a different strategy (mean-reversion): possible future work; out of scope here.
+- **Status:** ACTIVE
+- **Date Decided:** 2026-05-27
+- **Implemented By:** `scripts/run_paper_trading.py` — comment + symbol list edit in `BEAR_STRATEGY_CONFIG`.
+- **Affected Files:**
+  - `scripts/run_paper_trading.py`
+  - `scripts/backtest_btf_may2026.py` (diagnostic script using the 7-symbol list)
+
+### DEC-2026-05-27-003: Consecutive-Failure Threshold for Live Error Alerts
+
+- **Decision:** The live trading loop only sends a Telegram "Live Trading Error" alert after 3 consecutive failed polls (the first 2 are logged only). On recovery, an explicit "Live Trading Recovered" alert is sent.
+- **Context:** A single Binance API read-timeout was firing an ERROR-level Telegram alert at 3:30 AM despite the loop self-healing on the next poll. This is alert noise that erodes trust in the alerts that actually matter.
+- **Rationale:**
+  - 3 consecutive failures ≈ 3 minutes of real problems (at 60 s poll interval) — a meaningful threshold for "something is genuinely wrong" (e.g. API key revoked, Binance outage, key permission change).
+  - Boundary-crossing alert: only fires when crossing N==3, not on every subsequent failure — prevents alert storms during longer outages.
+  - Recovery alert closes the loop so the operator knows the system is healthy again.
+- **Alternatives Considered:**
+  - Time-based debounce (e.g. "no more than 1 alert per 30 min"): rejected — counts failures more directly than time.
+  - Severity downgrade for first failure: rejected — INFO-level alerts would still ping Telegram.
+- **Status:** ACTIVE
+- **Date Decided:** 2026-05-27
+- **Implemented By:** `consecutive_failures` counter + threshold logic in `main()` poll loop.
+- **Affected Files:**
+  - `scripts/run_live_trading.py`
+
 ---
 
 **End of Decisions Log**
 
-**Total Decisions:** 59 active, 0 superseded, 5 locked
-**Last Updated:** 2026-05-17
-**Next Decision ID:** DEC-2026-05-17-002
+**Total Decisions:** 62 active, 0 superseded, 5 locked
+**Last Updated:** 2026-05-27
+**Next Decision ID:** DEC-2026-05-27-004
 
 ## Phase 5 Decisions (Backtesting & Simulation)
 

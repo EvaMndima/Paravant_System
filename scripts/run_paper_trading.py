@@ -284,11 +284,15 @@ BULL_STRATEGY_CONFIG: dict[str, dict[str, Any]] = {
 BEAR_STRATEGY_CONFIG: dict[str, dict[str, Any]] = {
     "bear_trend_follower": {
         # Validated bear: 100% WR, Sharpe 2.4-3.6 in Q1 2026 bear regime.
+        # 2026-05-27: DOTUSDT removed — May 2026 paper showed -$171/3 trades
+        # = -$57/trade, the worst per-symbol outcome in the basket. Wider
+        # spreads + thinner liquidity vs majors made the 2.5x ATR stop
+        # vulnerable to whipsaws. Decision: DEC-2026-05-27-002.
         "label": "BTF",
         "regime": "bear",
         "symbols": [
             "BTCUSDT", "ETHUSDT", "BNBUSDT", "SOLUSDT",
-            "XRPUSDT", "AVAXUSDT", "DOGEUSDT", "DOTUSDT",
+            "XRPUSDT", "AVAXUSDT", "DOGEUSDT",
         ],
         "params": {
             "htf_ema_period": 200,
@@ -694,10 +698,19 @@ async def hourly_summary(
                 total_open += 1
                 total_unrealized += status.unrealized_pnl
                 direction = status.open_position_direction or "?"
+                # Show open-position state AND any historical closed
+                # trades from this session, so the summary doesn't hide
+                # closed-trade PnL just because a new position is open.
+                history_str = (
+                    f" | {status.num_trades}T closed "
+                    f"${status.realized_pnl:+.0f}"
+                    if status.num_trades > 0 else ""
+                )
                 active_lines.append(
                     f"  {status.strategy_id}: "
                     f"IN {direction.upper()} "
                     f"unrealized ${status.unrealized_pnl:+.0f}"
+                    f"{history_str}"
                 )
             elif status.num_trades > 0:
                 active_lines.append(
