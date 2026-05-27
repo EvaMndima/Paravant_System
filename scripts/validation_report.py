@@ -262,23 +262,27 @@ def load_sessions(min_trades: int = 0) -> list[SessionStats]:
         print(f"[validation_report] Connecting to: {db_url}")
 
     init_db()
+    # CRITICAL: compute stats INSIDE the session context. PaperTradingSession
+    # has JSON columns (trade_log) that SQLAlchemy lazy-loads — accessing
+    # them after the session closes raises DetachedInstanceError. By
+    # computing stats inside the `with` block, the resulting SessionStats
+    # dataclasses are plain Python objects and survive session close fine.
     with get_db() as db:
         rows = list(
             db.execute(
                 select(PaperTradingSession).order_by(PaperTradingSession.session_id)
             ).scalars()
         )
+        if not rows:
+            print(
+                "[validation_report] WARNING: 0 paper_trading_sessions rows found.\n"
+                "[validation_report] If you expected production data, set DATABASE_URL "
+                "to the Neon URL before running:\n"
+                "[validation_report]   $env:DATABASE_URL = '<neon_url>'   (PowerShell)\n"
+                "[validation_report]   export DATABASE_URL='<neon_url>'   (bash/zsh)"
+            )
+        all_stats = [compute_session_stats(r) for r in rows]
 
-    if not rows:
-        print(
-            "[validation_report] WARNING: 0 paper_trading_sessions rows found.\n"
-            "[validation_report] If you expected production data, set DATABASE_URL "
-            "to the Neon URL before running:\n"
-            "[validation_report]   $env:DATABASE_URL = '<neon_url>'   (PowerShell)\n"
-            "[validation_report]   export DATABASE_URL='<neon_url>'   (bash/zsh)"
-        )
-
-    all_stats = [compute_session_stats(r) for r in rows]
     if min_trades > 0:
         all_stats = [s for s in all_stats if s.total_trades >= min_trades]
     return all_stats

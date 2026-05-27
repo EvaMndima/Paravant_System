@@ -46,6 +46,10 @@ from src.brokers.binance.client import BinanceClient
 from src.core.strategy.backtest import BacktestEngine
 from src.core.strategy.backtest.types import BacktestConfig
 from src.core.strategy.factory import SignalGeneratorFactory
+from src.core.strategy.regime.historical_classifier import (
+    HistoricalRegimeClassifier,
+    SubRegime,
+)
 from src.data.market_data import MarketDataFetcher, OHLCVSeries
 from src.utils.logging import get_logger, setup_logging
 
@@ -138,6 +142,7 @@ class WindowResult:
     sharpe: float
     max_dd_pct: float
     total_return_pct: float
+    regime: SubRegime = SubRegime.UNKNOWN
 
 
 def _build_windows(num_windows: int, window_days: int,
@@ -171,7 +176,8 @@ async def _fetch(fetcher: MarketDataFetcher, symbol: str,
 
 def _run_one(engine: BacktestEngine, template: str, symbol: str,
              params: dict, series: Any, config: BacktestConfig,
-             window: tuple[datetime, datetime]) -> WindowResult:
+             window: tuple[datetime, datetime],
+             regime: SubRegime) -> WindowResult:
     """Run a single backtest and return the result row."""
     strategy = SimpleNamespace(
         id=f"roll_{template}_{symbol}_{window[0].date()}",
@@ -194,6 +200,7 @@ def _run_one(engine: BacktestEngine, template: str, symbol: str,
         sharpe=m.sharpe_ratio,
         max_dd_pct=m.max_drawdown_pct,
         total_return_pct=m.total_return_pct,
+        regime=regime,
     )
 
 
@@ -233,6 +240,45 @@ async def run(strategies: list[str], symbols_override: list[str] | None,
             print(f"  {sym}: {len(s)} bars")
         except Exception as e:
             print(f"  {sym}: FETCH FAILED — {e}")
+
+    # Also fetch BTC daily so we can classify each window's macro regime.
+    # Decision: DEC-2026-05-27-008 — BTC daily is the universal regime anchor.
+    print(f"\nFetching BTC daily for regime classification ...")
+    try:
+        btc_daily = await fetcher.fetch_historical_ohlcv(
+            symbol="BTCUSDT",
+            timeframe="1d",
+            start_date=fetch_start - timedelta(days=250),  # ema_slow warmup
+            end_date=fetch_end,
+        )
+        print(f"  BTCUSDT 1d: {len(btc_daily)} bars")
+        classifier = HistoricalRegimeClassifier()
+        regime_labels = classifier.classify_series(btc_daily)
+        # Build a timestamp -> regime lookup for window dominant-regime lookups.
+        regime_by_ts = {
+            bar.timestamp: regime
+            for bar, regime in zip(btc_daily.candles, regime_labels)
+        }
+    except Exception as e:
+        print(f"  BTC daily FETCH FAILED — {e}. Continuing without regime tags.")
+        btc_daily = None
+        regime_by_ts = {}
+
+    def _window_regime(start: datetime, end: datetime) -> SubRegime:
+        """Mode regime over the daily bars falling within [start, end]."""
+        if not regime_by_ts:
+            return SubRegime.UNKNOWN
+        in_window = [
+            regime for ts, regime in regime_by_ts.items()
+            if start <= ts <= end
+            and regime not in (SubRegime.UNKNOWN, SubRegime.TRANSITIONAL)
+        ]
+        if not in_window:
+            return SubRegime.UNKNOWN
+        counts: dict[SubRegime, int] = {}
+        for r in in_window:
+            counts[r] = counts.get(r, 0) + 1
+        return max(counts.items(), key=lambda kv: kv[1])[0]
 
     # Iterate strategies x symbols x windows.
     results: list[WindowResult] = []
@@ -277,8 +323,9 @@ async def run(strategies: list[str], symbols_override: list[str] | None,
                     timeframe=full_series.timeframe,
                 )
                 try:
+                    window_regime = _window_regime(start_ts, end_ts)
                     r = _run_one(engine, tmpl, sym, params,
-                                 series_window, config, window)
+                                 series_window, config, window, window_regime)
                     results.append(r)
                 except Exception as e:
                     logger.warning("backtest_failed",
@@ -303,26 +350,27 @@ def _stability_score(pfs: list[float]) -> tuple[float, float, float]:
 
 
 def print_report(results: list[WindowResult]) -> None:
-    """Print per-window detail + per-strategy stability verdict."""
+    """Print per-window detail + per-strategy stability + per-regime breakdown."""
     if not results:
         print("\nNo backtest results.")
         return
 
-    # Per-window detail
-    print("\n" + "=" * 110)
+    # Per-window detail (now with regime column)
+    print("\n" + "=" * 125)
     print("ROLLING-WINDOW DETAIL")
-    print("=" * 110)
+    print("=" * 125)
     print(
         f"{'Template':<28} {'Symbol':<10} {'Window':<24} "
-        f"{'N':>4} {'WR%':>6} {'PF':>7} {'Sharpe':>7} {'DD%':>6}"
+        f"{'Regime':<16} {'N':>4} {'WR%':>6} {'PF':>7} {'Sharpe':>7} {'DD%':>6}"
     )
-    print("-" * 110)
+    print("-" * 125)
     for r in sorted(results, key=lambda r: (r.template, r.symbol, r.window_start)):
         win_str = f"{r.window_start.date()}->{r.window_end.date()}"
         print(
             f"{r.template:<28} "
             f"{r.symbol:<10} "
             f"{win_str:<24} "
+            f"{r.regime.value:<16} "
             f"{r.trades:>4d} "
             f"{r.win_rate:>5.1f}% "
             f"{r.profit_factor:>7.2f} "
@@ -330,13 +378,13 @@ def print_report(results: list[WindowResult]) -> None:
             f"{r.max_dd_pct:>5.1f}%"
         )
 
-    # Per-strategy stability verdict
-    print("\n" + "=" * 110)
-    print("STABILITY VERDICT")
-    print("=" * 110)
+    # Per-strategy stability verdict (unchanged)
+    print("\n" + "=" * 125)
+    print("OVERALL STABILITY VERDICT (across all regimes)")
+    print("=" * 125)
     print(
         "Reading: median/min PF across windows + coefficient of variation. "
-        "Low CV = stable edge. High CV = noise or overfit."
+        "Low CV = stable edge across regimes. High CV = noise OR regime-specific edge."
     )
     print()
     by_template: dict[str, list[WindowResult]] = {}
@@ -344,7 +392,6 @@ def print_report(results: list[WindowResult]) -> None:
         by_template.setdefault(r.template, []).append(r)
 
     for tmpl, items in by_template.items():
-        # Aggregate across symbols (each symbol contributes its windows)
         pfs = [r.profit_factor for r in items if r.trades > 0]
         med, mn, cv = _stability_score(pfs)
         total_trades = sum(r.trades for r in items)
@@ -364,6 +411,55 @@ def print_report(results: list[WindowResult]) -> None:
             f"PF med={med:.2f} min={mn:.2f} CV={cv:.2f} | "
             f"-> {verdict}"
         )
+
+    # Per-regime breakdown — THE KEY NEW DIAGNOSTIC.
+    # A strategy with OVERFIT verdict overall but STABLE in one regime is
+    # actually a REGIME-SPECIFIC edge, not overfit. This is what would
+    # have caught BTF as "edge in TRENDING_BEAR, broken in CHOPPY_BEAR"
+    # rather than "broken everywhere."
+    print("\n" + "=" * 125)
+    print("PER-REGIME BREAKDOWN (the key diagnostic)")
+    print("=" * 125)
+    print(
+        "If a strategy has STABLE_EDGE in one regime but POOR in another, it's "
+        "a REGIME-SPECIFIC edge — valid IF deployed only in that regime.\n"
+        "If a strategy is POOR in its declared/expected regime, it has no real edge."
+    )
+    print()
+    print(
+        f"{'Template':<32} {'Regime':<16} "
+        f"{'Windows':>8} {'Trades':>7} {'PF med':>7} {'PF min':>7} {'CV':>5} {'Verdict':>20}"
+    )
+    print("-" * 125)
+    for tmpl, items in by_template.items():
+        by_regime: dict[SubRegime, list[WindowResult]] = {}
+        for r in items:
+            by_regime.setdefault(r.regime, []).append(r)
+        for regime, reg_items in sorted(
+            by_regime.items(), key=lambda kv: kv[0].value,
+        ):
+            pfs = [r.profit_factor for r in reg_items if r.trades > 0]
+            med, mn, cv = _stability_score(pfs)
+            total_trades = sum(r.trades for r in reg_items)
+            n_windows = len(reg_items)
+            if n_windows < 2:
+                verdict = "INSUFFICIENT_WINDOWS"
+            elif med >= 1.35 and mn >= 1.0:
+                verdict = "STABLE_EDGE_IN_REGIME"
+            elif med >= 1.20:
+                verdict = "PROMISING_IN_REGIME"
+            elif med >= 1.0:
+                verdict = "MARGINAL_IN_REGIME"
+            elif total_trades >= 10:
+                verdict = "POOR_IN_REGIME"
+            else:
+                verdict = "INSUFFICIENT"
+            print(
+                f"  {tmpl:<30} {regime.value:<16} "
+                f"{n_windows:>8d} {total_trades:>7d} "
+                f"{med:>7.2f} {mn:>7.2f} {cv:>5.2f} "
+                f"{verdict:>20s}"
+            )
     print()
 
 

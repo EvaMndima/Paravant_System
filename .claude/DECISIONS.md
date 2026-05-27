@@ -2091,6 +2091,55 @@ parameters:
 - **Affected Files:**
   - `scripts/run_live_trading.py`
 
+### DEC-2026-05-27-008: Regime-Aware Backtest Validation + Strategy Tagging
+
+- **Decision:** Introduce a fine-grained regime taxonomy (`SubRegime` enum with 8 values: TRENDING_BULL, CHOPPY_BULL, TRENDING_BEAR, CHOPPY_BEAR, RANGING, HIGH_VOL, TRANSITIONAL, UNKNOWN) and a corresponding `HistoricalRegimeClassifier` that walks any OHLCV series and labels every bar. Each strategy now declares `regime_tags: list[str]` in its config, naming the SubRegimes it claims to work in. The rolling backtest classifies each window's dominant regime (from BTC daily) and reports per-regime metrics, enabling the diagnostic "STABLE_EDGE_IN_REGIME" vs "POOR_IN_REGIME" distinction.
+- **Context:**
+  - The existing `RegimeState` enum (4 macro states + UNKNOWN) is too coarse for strategy classification. It tells you "we're in a bear" but not "this is a trending bear vs. a choppy bear."
+  - BTF's promotion-then-failure illustrates the problem: Q1 was TRENDING_BEAR (BTF worked) and May has been CHOPPY_BEAR (BTF fails). The old taxonomy treats both as just "bear" and can't surface the distinction.
+  - Without regime-aware validation, the rolling backtest could only say "this strategy's PF varies a lot across windows" — leaving it ambiguous whether the strategy has a real regime-specific edge or is just curve-fit noise.
+- **Taxonomy (precedence order; a bar matches exactly one):**
+  1. UNKNOWN — indicators not warmed up (EMA-200, ADX-14)
+  2. TRANSITIONAL — macro side (EMA50 vs EMA200) flipped within last 2 bars
+  3. HIGH_VOL — ATR/close >= 90th percentile over last 60 bars
+  4. RANGING — ADX < 20 AND ATR/close <= 25th percentile
+  5. TRENDING_BULL — EMA50 > EMA200 + ADX >= 25
+  6. TRENDING_BEAR — EMA50 < EMA200 + ADX >= 25
+  7. CHOPPY_BULL — EMA50 > EMA200 + ADX < 25
+  8. CHOPPY_BEAR — EMA50 < EMA200 + ADX < 25
+- **Rationale:**
+  - ADX threshold of 25 is industry standard for "trending" classification; ADX < 20 widely used for "ranging."
+  - ATR/close as realized-vol proxy avoids the complexity of computing rolling-window standard deviation while capturing the same essence.
+  - BTC daily is the universal regime anchor for crypto — every strategy's window gets its regime label from BTC, not from the strategy's own asset (avoids the tautology "this strategy works when its asset trends").
+  - Backwards-compatible: the old `regime: "bull"/"bear"/"all"` field is preserved alongside the new `regime_tags: list[str]`. Migration to use only `regime_tags` will follow once empirical regime performance is established.
+- **Per-strategy preliminary tags (verify with `backtest_rolling.py` before trusting):**
+  - MACD_PB → [choppy_bull]
+  - BTP → [trending_bull, choppy_bull]
+  - VRB → [choppy_bull, trending_bull]
+  - VBB → [trending_bull, choppy_bull]
+  - SRC → [choppy_bull]
+  - HATP → [trending_bull]
+  - VPT → [trending_bull]
+  - RVCB → [ranging, choppy_bull]
+  - CMF → [trending_bear, choppy_bear]
+  - RSI_BB → [choppy_bear, ranging]
+  - ICVP → [trending_bull, trending_bear]
+- **Promotion gate update:** A strategy now passes the rolling-backtest gate if and only if it shows STABLE_EDGE_IN_REGIME (median PF >= 1.35, min PF >= 1.0) within at least one of its DECLARED regime_tags. POOR_IN_REGIME findings in declared regimes block promotion, even if the strategy looks fine in non-declared regimes (which would just be reading coincidence).
+- **Alternatives Considered:**
+  - Extend the existing RegimeState enum: rejected — RegimeState is consumed by live regime router; mixing macro-classification and fine-classification breaks single-responsibility.
+  - Use the strategy's own OHLCV for regime: rejected — tautological (a strategy that "trends with its asset" is just describing market beta).
+  - More sub-regimes (e.g. separate HIGH_VOL_BULL vs HIGH_VOL_BEAR): rejected — 8 categories already require ~16 trades each minimum to populate; finer cuts would never have enough samples.
+- **Status:** ACTIVE
+- **Date Decided:** 2026-05-27
+- **Implemented By:**
+  - `src/core/strategy/regime/historical_classifier.py` (new): `SubRegime`, `HistoricalRegimeClassifier`, `ClassifierThresholds`
+  - `scripts/backtest_rolling.py`: fetches BTC daily, classifies each window's dominant regime, adds per-regime breakdown to report
+  - `scripts/run_paper_trading.py`: each strategy in BULL/BEAR/ALL configs now has `regime_tags`
+- **Affected Files:**
+  - `src/core/strategy/regime/historical_classifier.py`
+  - `scripts/backtest_rolling.py`
+  - `scripts/run_paper_trading.py`
+
 ### DEC-2026-05-27-007: Retire BTF (bear_trend_follower) — Overfit Strategy
 
 - **Decision:** `bear_trend_follower` (BTF) is retired from `BEAR_STRATEGY_CONFIG` and `EXPANSION_TIERS`. The strategy generator file (`src/core/strategy/generators/bear_trend_follower.py`) is preserved for future re-validation. No live or paper sessions of BTF will start; the regime router will no longer activate it.
@@ -2124,9 +2173,9 @@ parameters:
 
 **End of Decisions Log**
 
-**Total Decisions:** 66 active, 0 superseded, 5 locked
+**Total Decisions:** 67 active, 0 superseded, 5 locked
 **Last Updated:** 2026-05-27
-**Next Decision ID:** DEC-2026-05-27-008
+**Next Decision ID:** DEC-2026-05-27-009
 
 ## Phase 5 Decisions (Backtesting & Simulation)
 

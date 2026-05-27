@@ -68,6 +68,26 @@ logger = get_logger(__name__)
 # Decision: DEC-2026-05-04-001 / DEC-2026-05-04-002
 # ---------------------------------------------------------------------------
 
+# ---------------------------------------------------------------------------
+# Regime tagging convention (DEC-2026-05-27-008):
+#
+# Each strategy declares `regime_tags` — the fine-grained SubRegimes it
+# claims to work in. Valid values come from
+# src.core.strategy.regime.historical_classifier.SubRegime:
+#   trending_bull, choppy_bull, trending_bear, choppy_bear,
+#   ranging, high_vol, transitional, unknown
+#
+# These tags are LOAD-BEARING: they're consumed by the rolling-window
+# backtest validation and (eventually) by the regime router to decide
+# which strategies activate.
+#
+# The tags below are PRELIMINARY professional estimates. They MUST be
+# verified by running `scripts/backtest_rolling.py --strategy <name>`
+# and confirming the strategy actually shows STABLE_EDGE_IN_REGIME in
+# the regimes it claims. Tags inconsistent with empirical performance
+# should be corrected.
+# ---------------------------------------------------------------------------
+
 BULL_STRATEGY_CONFIG: dict[str, dict[str, Any]] = {
     "macd_pullback": {
         # SUPERVISED-validated: 2 passes (DOGE Sharpe=3.8/PF=1.60, AVAX Sharpe=2.1/PF=1.45)
@@ -77,6 +97,7 @@ BULL_STRATEGY_CONFIG: dict[str, dict[str, Any]] = {
         # position in the wrong direction and run against the prevailing trend.
         "label": "MACD_PB",
         "regime": "bull",
+        "regime_tags": ["choppy_bull"],  # PRELIMINARY — pullback strategy; verify with backtest_rolling
         "symbols": ["DOGEUSDT", "AVAXUSDT"],
         "params": {
             "macd_fast": 12,
@@ -97,6 +118,7 @@ BULL_STRATEGY_CONFIG: dict[str, dict[str, Any]] = {
         # DOGE added 2026-05-07: 45d bull PF=5.10, Sharpe=7.15, WR=66.7% — Gate1=10.
         "label": "BTP",
         "regime": "bull",
+        "regime_tags": ["trending_bull", "choppy_bull"],  # PRELIMINARY
         "symbols": ["BTCUSDT", "ETHUSDT", "BNBUSDT", "DOGEUSDT"],
         "params": {
             "htf_ema_period": 150,
@@ -118,6 +140,7 @@ BULL_STRATEGY_CONFIG: dict[str, dict[str, Any]] = {
         # Squeeze-window high/low breakout after BB width compression release.
         "label": "VRB",
         "regime": "bull",
+        "regime_tags": ["choppy_bull", "trending_bull"],  # PRELIMINARY — squeeze breakout
         "symbols": ["BTCUSDT"],
         "params": {
             "bb_period": 20,
@@ -142,6 +165,7 @@ BULL_STRATEGY_CONFIG: dict[str, dict[str, Any]] = {
         # volume confirmation. Fails on altcoins (XRP/AVAX/DOT) — large-caps only.
         "label": "VBB",
         "regime": "bull",
+        "regime_tags": ["trending_bull", "choppy_bull"],  # PRELIMINARY — institutional accumulation
         "symbols": ["BTCUSDT", "ETHUSDT", "SOLUSDT"],
         "params": {
             "balance_period": 15,
@@ -168,6 +192,7 @@ BULL_STRATEGY_CONFIG: dict[str, dict[str, Any]] = {
         # Fails on altcoins (XRP/AVAX/DOT) — large-caps only, same as VBB pattern.
         "label": "SRC",
         "regime": "bull",
+        "regime_tags": ["choppy_bull"],  # PRELIMINARY — micro-pullback cross
         "symbols": ["BTCUSDT", "ETHUSDT", "SOLUSDT"],
         "params": {
             "rsi_period": 14,
@@ -198,6 +223,7 @@ BULL_STRATEGY_CONFIG: dict[str, dict[str, Any]] = {
         # Gate1=10 trades per symbol.
         "label": "HATP",
         "regime": "bull",
+        "regime_tags": ["trending_bull"],  # PRELIMINARY — clean trend pulse required
         "symbols": ["BTCUSDT", "BNBUSDT", "AVAXUSDT"],
         "params": {
             "ha_wick_lookback": 7,
@@ -224,6 +250,7 @@ BULL_STRATEGY_CONFIG: dict[str, dict[str, Any]] = {
         # Gate1=10 trades.
         "label": "VPT",
         "regime": "bull",
+        "regime_tags": ["trending_bull"],  # PRELIMINARY — VPT confirms trend momentum
         "symbols": ["BTCUSDT"],
         "params": {
             "vpt_ema_period": 20,
@@ -251,6 +278,7 @@ BULL_STRATEGY_CONFIG: dict[str, dict[str, Any]] = {
         # hv_short < 0.65 × hv_medium for 3+ consecutive bars = real regime compression.
         "label": "RVCB",
         "regime": "bull",
+        "regime_tags": ["ranging", "choppy_bull"],  # PRELIMINARY — compression then breakout
         "symbols": ["AVAXUSDT"],
         "params": {
             "hv_short_period": 20,
@@ -307,6 +335,7 @@ BEAR_STRATEGY_CONFIG: dict[str, dict[str, Any]] = {
         # Validated bear (SOL/XRP/AVAX/ETH). Highest conviction in bear downtrends.
         "label": "CMF",
         "regime": "bear",
+        "regime_tags": ["trending_bear", "choppy_bear"],  # PRELIMINARY — has internal regime filter
         "symbols": ["SOLUSDT", "XRPUSDT", "AVAXUSDT", "ETHUSDT"],
         "params": {
             "daily_st_period": 10,
@@ -328,6 +357,7 @@ BEAR_STRATEGY_CONFIG: dict[str, dict[str, Any]] = {
         # Reactivate in bear or extended ranging/consolidation conditions.
         "label": "RSI_BB",
         "regime": "bear",
+        "regime_tags": ["choppy_bear", "ranging"],  # PRELIMINARY — mean-reversion in bear or range
         "symbols": ["ETHUSDT", "BNBUSDT", "DOGEUSDT"],
         "params": {
             "rsi_period": 14,
@@ -354,6 +384,7 @@ ALL_REGIME_CONFIG: dict[str, dict[str, Any]] = {
         # LONG above cloud, SHORT below — self-adjusts to bull and bear regimes.
         "label": "ICVP",
         "regime": "all",
+        "regime_tags": ["trending_bull", "trending_bear"],  # PRELIMINARY — cloud direction-agnostic but needs trend
         "symbols": [
             "BTCUSDT", "ETHUSDT", "BNBUSDT", "SOLUSDT",
             "XRPUSDT", "AVAXUSDT", "DOGEUSDT", "DOTUSDT",
