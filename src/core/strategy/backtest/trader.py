@@ -12,7 +12,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from src.core.strategy.backtest.portfolio import PortfolioState
+from src.core.strategy.backtest.portfolio import OpenPosition, PortfolioState
 from src.core.strategy.backtest.types import BacktestConfig, TradeRecord
 from src.core.strategy.signals import TradingSignal
 from src.data.market_data import OHLCV
@@ -122,6 +122,17 @@ class SimulatedTrader:
                 )
                 return closed_trade
 
+        # Long-only (spot) enforcement: a SHORT signal can close an existing
+        # long (handled above) but must never OPEN a short, because spot
+        # cannot sell an asset it does not hold. Decision: DEC-2026-05-28-001.
+        if not config.allow_shorts and signal.direction == SignalDirection.SHORT:
+            logger.debug(
+                "short_open_skipped",
+                reason="allow_shorts=False (spot long-only)",
+                symbol=signal.symbol,
+            )
+            return closed_trade
+
         # Open new position
         self._open_position(signal, portfolio, next_bar, config)
         return closed_trade
@@ -221,6 +232,37 @@ class SimulatedTrader:
             take_profit=signal.take_profit,
         )
 
+    def _funding_cost(
+        self,
+        pos: OpenPosition,
+        exit_timestamp: datetime,
+        config: BacktestConfig,
+    ) -> float:
+        """Perpetual-futures funding drag accrued over the hold period.
+
+        Funding is charged every 8h on the position notional. We model it as
+        a conservative always-cost (charged to the held side) because the
+        funding sign cannot be known in advance, and the goal is to avoid
+        OVERstating realizable edge. Returns 0.0 for spot
+        (funding_rate_per_8h == 0). Decision: DEC-2026-05-28-001.
+
+        Args:
+            pos: The open position being closed.
+            exit_timestamp: Timezone-aware UTC exit time.
+            config: Backtest config (reads funding_rate_per_8h).
+
+        Returns:
+            Funding cost in USDT (>= 0).
+        """
+        if config.funding_rate_per_8h <= 0:
+            return 0.0
+        hold_seconds = (exit_timestamp - pos.entry_time).total_seconds()
+        if hold_seconds <= 0:
+            return 0.0
+        intervals = hold_seconds / (8.0 * 3600.0)
+        notional = pos.quantity * pos.entry_price
+        return config.funding_rate_per_8h * intervals * notional
+
     def _close_position(
         self,
         portfolio: PortfolioState,
@@ -256,7 +298,11 @@ class SimulatedTrader:
             bar.open, close_direction, config.slippage_rate
         )
 
-        commission = pos.quantity * fill_price * config.commission_rate
+        # Funding is folded into commission because realized_pnl subtracts
+        # commission (slippage is already baked into the fill price). This
+        # keeps the P&L honest for futures without changing the TradeRecord schema.
+        funding = self._funding_cost(pos, bar.timestamp, config)
+        commission = pos.quantity * fill_price * config.commission_rate + funding
         slippage_cost = slippage_per_unit * pos.quantity
 
         trade = portfolio.close_position(
@@ -314,7 +360,8 @@ class SimulatedTrader:
             price, close_direction, config.slippage_rate
         )
 
-        commission = pos.quantity * fill_price * config.commission_rate
+        funding = self._funding_cost(pos, timestamp, config)
+        commission = pos.quantity * fill_price * config.commission_rate + funding
         slippage_cost = slippage_per_unit * pos.quantity
 
         trade = portfolio.close_position(

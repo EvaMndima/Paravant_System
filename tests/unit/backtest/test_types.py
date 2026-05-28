@@ -48,6 +48,34 @@ class TestBacktestConfig:
         with pytest.raises(AttributeError):
             config.initial_capital = 999.0  # type: ignore[misc]
 
+    def test_execution_model_defaults(self) -> None:
+        """Default config preserves long-short futures behavior (allow_shorts)."""
+        config = BacktestConfig()
+        assert config.allow_shorts is True
+        assert config.funding_rate_per_8h == 0.0
+
+    def test_spot_long_only_config(self) -> None:
+        """Spot mode disables shorts and has no funding."""
+        config = BacktestConfig(allow_shorts=False, funding_rate_per_8h=0.0)
+        assert config.allow_shorts is False
+        assert config.funding_rate_per_8h == 0.0
+
+    def test_futures_config(self) -> None:
+        """Futures mode allows shorts with a funding drag."""
+        config = BacktestConfig(allow_shorts=True, funding_rate_per_8h=0.0001)
+        assert config.allow_shorts is True
+        assert config.funding_rate_per_8h == pytest.approx(0.0001)
+
+    def test_negative_funding_rejected(self) -> None:
+        """Negative funding rate should raise ValueError."""
+        with pytest.raises(ValueError, match="funding_rate_per_8h"):
+            BacktestConfig(funding_rate_per_8h=-0.0001)
+
+    def test_absurd_funding_rejected(self) -> None:
+        """Funding rate >= 1% per 8h is implausible and rejected."""
+        with pytest.raises(ValueError, match="funding_rate_per_8h"):
+            BacktestConfig(funding_rate_per_8h=0.02)
+
     def test_negative_capital_rejected(self) -> None:
         """Negative initial capital should raise ValueError."""
         with pytest.raises(ValueError, match="initial_capital"):

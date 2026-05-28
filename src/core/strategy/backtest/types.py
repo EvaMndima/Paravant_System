@@ -77,6 +77,16 @@ class BacktestConfig:
         use_next_bar_open: If True, fill at next bar open (prevents lookahead).
         risk_free_rate: Annual risk-free rate for Sharpe/Sortino (0.02 = 2%).
         position_size_pct: Fraction of equity to risk per trade (0.95 = 95%).
+        allow_shorts: If False, SHORT signals never open a position (spot
+            long-only mode). A SHORT signal while holding a long still closes
+            the long (handled by allow_flip semantics in the trader). Default
+            True preserves futures/long-short backtests.
+            Decision: DEC-2026-05-28-001.
+        funding_rate_per_8h: Perpetual-futures funding drag charged per 8h on
+            position notional, modeled as a conservative always-cost (we can't
+            know the funding sign in advance, so we charge the held side).
+            0.0 = spot (no funding). ~0.0001 (0.01%/8h) = conservative futures.
+            Decision: DEC-2026-05-28-001.
     """
 
     initial_capital: float = 10_000.0
@@ -85,6 +95,8 @@ class BacktestConfig:
     use_next_bar_open: bool = True
     risk_free_rate: float = 0.02
     position_size_pct: float = 0.35
+    allow_shorts: bool = True
+    funding_rate_per_8h: float = 0.0
 
     def __post_init__(self) -> None:
         """Validate config fields after initialization.
@@ -114,6 +126,13 @@ class BacktestConfig:
         if self.position_size_pct <= 0 or self.position_size_pct > 1.0:
             raise ValueError(
                 f"position_size_pct must be in (0, 1.0], got {self.position_size_pct}"
+            )
+
+        _validate_finite_positive(self.funding_rate_per_8h, "funding_rate_per_8h")
+        if self.funding_rate_per_8h >= 0.01:
+            # 1% per 8h would be ~3%/day — far beyond any real perp funding.
+            raise ValueError(
+                f"funding_rate_per_8h must be < 0.01, got {self.funding_rate_per_8h}"
             )
 
 

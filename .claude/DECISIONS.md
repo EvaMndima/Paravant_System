@@ -489,7 +489,7 @@ These decisions are **LOCKED** per MVP scope control rules until specified revie
 
 ### DEC-2026-01-15-002: Broker - Binance ONLY
 - **Decision:** MVP supports ONLY Binance exchange (testnet for development)
-- **Status:** LOCKED until Q2 2026 review
+- **Status:** LOCKED (broker) — **market-type sub-constraint AMENDED by DEC-2026-05-28-001 on 2026-05-28** to permit Binance margin/futures (still Binance-only).
 - **Rationale:** Best API, highest liquidity, comprehensive testnet, excellent documentation
 - **Do NOT:** Add Coinbase, Kraken, FTX, other exchanges
 - **References:** PRD Part 2.2.2, `.claude/rules/mvp-scope-control.md` Rule 2.4.2
@@ -2171,11 +2171,50 @@ parameters:
 
 ---
 
+### DEC-2026-05-28-001: Expand Execution Scope to Margin/Futures (Long + Short), Staged
+
+- **Decision:** Expand the system beyond spot-long-only to support Binance margin/futures so strategies can go both LONG and SHORT. **Deployment is staged** — capability is built and validated in the research layer FIRST; real leveraged capital is deferred until short edge is proven. This amends the spot-only sub-constraint of DEC-2026-01-15-002 (still Binance-only; market orders per DEC-2026-01-15-004 retained).
+- **Context:**
+  - PARA-01 (research audit, 2026-05-28) found 17 of 29 generators emit SHORT, and the backtest credits short P&L, but Binance **spot cannot short** — short-side edge was unrealizable. The system was in the worst state: simulating trades it could not execute.
+  - The user explicitly approved expanding scope to margin/futures (the locked-decision change) to keep the short strategy space available.
+  - There is currently **no validated short edge** — every short-emitting strategy (BTF, CMF, RSI_BB shorts) is POOR or noise even with the optimistic fictional-short credit. The proven edges (BTP, VBB, SRC) are all LONG-only.
+- **Staged plan (the deployment discipline):**
+  1. Build honest short backtesting in the research layer (funding-cost model + long/short toggle). NO live money. **(Implemented in this decision.)**
+  2. Re-run the full funnel in both `spot` (long-only) and `futures` (long+short) modes to discover which short strategies, if any, have real edge once funding is charged.
+  3. Go live on **spot long-only first** (BTP/VBB/SRC) to prove the live system end-to-end with zero liquidation risk.
+  4. Only if step 2 finds genuine short edge: build the live Binance Futures execution adapter + liquidation/margin risk models + leverage controls, then deploy cautiously.
+- **Rationale:**
+  - Building futures *capability* fixes the PARA-01 honesty problem and keeps the strategy space open.
+  - Deferring live leveraged deployment avoids existential liquidation risk on a system still finding its first reliable strategy, and avoids funding bleed on unproven strategies.
+  - Conservative funding model (charged as an always-cost) ensures the futures backtest does not OVERstate edge.
+- **Implementation (research layer, this session):**
+  - `BacktestConfig.allow_shorts` (bool, default True) — when False, SHORT signals never open a position (spot long-only). A SHORT still closes a held long.
+  - `BacktestConfig.funding_rate_per_8h` (float, default 0.0) — perpetual funding drag on notional per 8h, modeled as a conservative cost. 0.0 = spot; ~0.0001 = futures.
+  - `SimulatedTrader`: long-only filter in `execute_signal`; `_funding_cost()` applied in `_close_position` and `force_close_at_price` (folded into commission so realized P&L reflects it).
+  - `scripts/backtest_rolling.py`: `--market spot|futures` flag (spot = long-only/no funding; futures = long+short/funding).
+- **Still pending (NOT done this session):**
+  - Live Binance Futures execution adapter, funding/liquidation risk models, leverage controls — deferred to step 4.
+  - PRD update to reflect the scope expansion (PRD Part 1.7 / 2.2 spot-only language is now stale).
+  - `mvp-scope-control.md` update (futures was previously out-of-MVP).
+- **Alternatives Considered:**
+  - Long-only on spot permanently (PARA-01 Option A): rejected by user — discards the short strategy space and bear-market profitability.
+  - Build live futures execution immediately: rejected — premature without validated short edge; adds liquidation risk before it's warranted.
+- **Status:** ACTIVE (research-layer capability built; live futures deployment deferred)
+- **Date Decided:** 2026-05-28
+- **Implemented By:** `BacktestConfig` (allow_shorts, funding_rate_per_8h), `SimulatedTrader` (long-only filter + funding), `scripts/backtest_rolling.py` (--market flag).
+- **Affected Files:**
+  - `src/core/strategy/backtest/types.py`
+  - `src/core/strategy/backtest/trader.py`
+  - `scripts/backtest_rolling.py`
+  - `tests/unit/backtest/test_types.py`, `tests/unit/backtest/test_trader_execution_model.py`
+
+---
+
 **End of Decisions Log**
 
-**Total Decisions:** 67 active, 0 superseded, 5 locked
-**Last Updated:** 2026-05-27
-**Next Decision ID:** DEC-2026-05-27-009
+**Total Decisions:** 68 active, 0 superseded, 5 locked (1 amended)
+**Last Updated:** 2026-05-28
+**Next Decision ID:** DEC-2026-05-28-002
 
 ## Phase 5 Decisions (Backtesting & Simulation)
 

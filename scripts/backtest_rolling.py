@@ -339,16 +339,36 @@ def _run_one(engine: BacktestEngine, template: str, symbol: str,
 
 async def run(strategies: list[str], symbols_override: list[str] | None,
               num_windows: int, window_days: int,
-              end_date: datetime) -> list[WindowResult]:
-    """Run rolling-window backtests across all strategy/symbol/window combos."""
+              end_date: datetime, market: str = "spot") -> list[WindowResult]:
+    """Run rolling-window backtests across all strategy/symbol/window combos.
+
+    Args:
+        market: "spot" = long-only, no funding (what Binance spot can execute).
+            "futures" = long+short with a conservative perpetual funding drag.
+            Decision: DEC-2026-05-28-001.
+    """
     client = BinanceClient(testnet=False)
     fetcher = MarketDataFetcher(client)
     factory = SignalGeneratorFactory()
-    config = BacktestConfig(
-        initial_capital=10_000.0,
-        commission_rate=0.001,
-        slippage_rate=0.0005,
-    )
+    if market == "futures":
+        config = BacktestConfig(
+            initial_capital=10_000.0,
+            commission_rate=0.001,
+            slippage_rate=0.0005,
+            allow_shorts=True,
+            funding_rate_per_8h=0.0001,  # conservative ~0.03%/day perp funding
+        )
+    else:  # spot
+        config = BacktestConfig(
+            initial_capital=10_000.0,
+            commission_rate=0.001,
+            slippage_rate=0.0005,
+            allow_shorts=False,
+            funding_rate_per_8h=0.0,
+        )
+    print(f"Market mode: {market} "
+          f"(allow_shorts={config.allow_shorts}, "
+          f"funding/8h={config.funding_rate_per_8h})")
     engine = BacktestEngine(factory)
 
     windows = _build_windows(num_windows, window_days, end_date)
@@ -623,6 +643,14 @@ def main() -> None:
         "--end", type=str, default=None,
         help="End date YYYY-MM-DD (default: today UTC)",
     )
+    parser.add_argument(
+        "--market", type=str, default="spot", choices=["spot", "futures"],
+        help=(
+            "spot = long-only, no funding (what Binance spot can execute). "
+            "futures = long+short with conservative perp funding drag. "
+            "Default spot. (DEC-2026-05-28-001)"
+        ),
+    )
     args = parser.parse_args()
 
     if args.strategy == "all":
@@ -645,7 +673,7 @@ def main() -> None:
 
     results = asyncio.run(run(
         strategies, symbols_override,
-        args.windows, args.window_days, end_date,
+        args.windows, args.window_days, end_date, args.market,
     ))
     print_report(results)
 
