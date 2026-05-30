@@ -113,10 +113,26 @@ The following decisions are **locked** and cannot be revisited until explicitly 
 | Operating model | Personal single-operator | Feb 2028 |
 | Asset class (MVP) | Crypto only | After 12 months profitable |
 | Broker (MVP) | Binance only | After 12 months profitable |
+| Market type (MVP) | **Binance Spot** for LIVE execution; **margin/futures permitted in research/backtest layer only** (staged — see below) | Step 4 of staged plan |
 | Trading style | Day trading & Swing (15m-4H primary, 1D secondary) | After 6 months profitable |
 | Client accounts | None | Feb 2028 |
 | Autonomy model | Human approval for live deployment | After V2 stable |
 | Strategy generation | Template-based with manual approval | After V2 stable |
+
+### 1.7.1 Market-Type Scope Expansion (2026-05-28, DEC-2026-05-28-001)
+
+**Amends the previously implicit "spot only" sub-constraint of the broker lock.**
+
+The research/backtest layer now supports both long-only spot and long-short futures execution modes so we can honestly evaluate whether short-side strategies have edge once realistic perpetual funding costs are charged. The previous state — where the backtest credited short P&L that spot live trading could not execute (research-audit finding PARA-01) — is resolved.
+
+**Staged deployment plan** (live leverage is deferred until short edge is proven):
+
+1. **Research-layer capability** — `BacktestConfig.allow_shorts` and `funding_rate_per_8h` enable honest long-only-spot vs long-short-futures backtests in the same engine. **DONE 2026-05-28.**
+2. **Honest re-validation** — re-run the full strategy funnel in both modes; identify which short-side strategies (if any) retain edge after funding.
+3. **Spot long-only go-live first** — deploy validated long-only strategies (e.g., BTP, VBB, SRC) on Binance spot to prove the live execution path end-to-end with zero liquidation risk.
+4. **Live futures execution (gated)** — only if step 2 finds genuine short edge: build the Binance Futures execution adapter + liquidation/margin risk models + leverage controls, then deploy cautiously at small capital.
+
+**Until step 4 completes, all live execution remains spot.** Withdrawals and futures execution are explicitly disabled at the Binance API key level (see § 16.5).
 
 ## 1.8 What We Learned From the Legacy System
 
@@ -6067,8 +6083,8 @@ maturity_options_derivatives:
     
     perpetual_futures:
       description: "Already crypto-native derivative"
-      current_support: "Partial in MVP (spot focus)"
-      enhancement: "Full perpetuals support"
+      current_support: "Research/backtest layer supports long+short futures with conservative funding-cost model (DEC-2026-05-28-001, 2026-05-28). LIVE execution remains spot-only until step 4 of the staged plan (proven short edge + futures execution adapter)."
+      enhancement: "Full perpetuals support (live execution adapter + liquidation/margin risk + leverage controls)"
       features:
         - funding_rate_arbitrage
         - basis_trading
@@ -7087,7 +7103,10 @@ api_key_security:
       ip_whitelist: "Enable and add Railway IP"
       permissions:
         - enable_spot_trading: true
-        - enable_futures: false  # MVP is spot only
+        - enable_futures: false  # MVP live execution is spot-only. Per
+          # DEC-2026-05-28-001 the research/backtest layer evaluates
+          # futures, but the API key must remain spot-only until step 4
+          # of the staged plan (proven short edge + live futures adapter).
         - enable_withdrawals: false  # NEVER enable
         - enable_internal_transfer: false
     

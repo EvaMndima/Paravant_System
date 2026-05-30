@@ -27,9 +27,11 @@ The following features are **LOCKED IN** for MVP and must be implemented to **pr
 
 #### A. Asset Class & Broker
 - **Asset:** Crypto ONLY (BTCUSDT, ETHUSDT, BNBUSDT)
-- **Broker:** Binance Spot ONLY (testnet for development)
+- **Broker:** Binance ONLY (testnet for development)
+- **Market type (LIVE execution):** **Binance Spot** — long-only, no leverage, no liquidation risk. This is the only market type permitted for real-capital execution under MVP.
+- **Market type (RESEARCH/BACKTEST layer):** Long-short futures evaluation is **PERMITTED** via `BacktestConfig.allow_shorts` + `funding_rate_per_8h` (DEC-2026-05-28-001, 2026-05-28). This is research-only; it MUST NOT touch live capital until the staged plan's step 4 (validated short edge + live futures execution adapter + leverage/liquidation risk model) is complete.
 - **Data:** OHLCV + Volume ONLY
-- **Locked Until:** Q2 2026 review
+- **Locked Until:** Q2 2026 review (broker); market-type lock amended 2026-05-28 — see DEC-2026-05-28-001 and PRD § 1.7.1
 
 #### B. Manual Regime Tagging
 - Regime options: trending_up, trending_down, ranging, volatile, unknown
@@ -107,6 +109,7 @@ The following features are **EXPLICITLY OUT OF SCOPE** for MVP:
 - Custom indicator builder
 - Strategy cloning
 - Multi-account support
+- **Live Binance Futures execution + leverage controls + liquidation/margin risk model** (gated by DEC-2026-05-28-001 step 4 — only built after validated short edge in research). Research-layer futures backtesting is already in MVP scope per § 1.A above.
 
 #### V2 Features (Maturity Phase)
 - Real-time WebSocket data
@@ -211,6 +214,17 @@ The following decisions are **LOCKED** until their review dates:
    - Locked until: Q2 2026 review
    - Rationale: Best API, liquidity, testnet
    - Do NOT suggest other exchanges
+
+2a. **Market type — LIVE execution: Binance Spot ONLY** (long-only, no leverage)
+   - Locked until: step 4 of staged plan in DEC-2026-05-28-001 (validated short edge + live futures execution adapter)
+   - Rationale: zero liquidation risk while the system is finding its first reliable strategy
+   - Do NOT route live orders through Binance Futures or Margin until the staged unlock completes
+
+2b. **Market type — RESEARCH/BACKTEST layer: long-short futures evaluation PERMITTED**
+   - Amendment date: 2026-05-28 (DEC-2026-05-28-001)
+   - Rationale: PARA-01 — backtest was crediting short P&L spot live could not execute. Honest evaluation requires the option to model futures + funding cost.
+   - Implementation: `BacktestConfig.allow_shorts` + `funding_rate_per_8h`
+   - This MUST NOT cross into live execution without explicit completion of the staged plan
 
 3. **Database: SQLite**
    - Locked until: V1
