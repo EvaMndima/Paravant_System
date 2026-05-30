@@ -187,8 +187,11 @@ class RegimeRouter:
                     to_sub=new_sub_regime.value,
                 )
                 await self._apply_regime(new_regime, new_sub_regime)
-                if regime_changed:
-                    await self._send_flip_alert(old_regime, new_regime)
+                # Single alert per regime-check that consolidates BOTH
+                # coarse and sub changes. Fires on either kind of change.
+                await self._send_flip_alert(
+                    old_regime, new_regime, old_sub, new_sub_regime,
+                )
             else:
                 logger.info(
                     "regime_unchanged",
@@ -374,38 +377,82 @@ class RegimeRouter:
         self,
         old_regime: RegimeState,
         new_regime: RegimeState,
+        old_sub: SubRegime = SubRegime.UNKNOWN,
+        new_sub: SubRegime = SubRegime.UNKNOWN,
     ) -> None:
-        """Send a Telegram notification when the regime flips.
+        """Send a Telegram notification when regime or sub-regime flips.
+
+        Consolidates both kinds of change into ONE alert per regime-check
+        cycle. Distinguishes the alert title based on what actually changed:
+          - coarse macro flipped: "REGIME FLIP: {state}"
+          - sub-only change: "SUB-REGIME CHANGE: {state}"
+        Includes the list of currently-active strategy template_ids so the
+        operator can see the routing impact in one place.
 
         Decision: DEC-2026-02-08-003 - Timezone-aware timestamps
+        Decision: DEC-2026-05-28-003 - SubRegime-aware routing.
 
         Args:
-            old_regime: The previous regime state.
-            new_regime: The newly confirmed regime state.
+            old_regime: The previous coarse regime state.
+            new_regime: The newly confirmed coarse regime state.
+            old_sub: The previous SubRegime (UNKNOWN if no sub_detector).
+            new_sub: The newly confirmed SubRegime (UNKNOWN if no sub_detector).
         """
         if self._telegram is None:
             return
 
         from src.core.alerting.manager import Alert, AlertLevel
 
-        action = (
-            "Bear strategies activated"
-            if new_regime.is_bear
-            else "Bull strategies activated"
+        coarse_changed = new_regime != old_regime
+        sub_changed = new_sub != old_sub
+
+        # Title reflects what changed (coarse takes precedence in title)
+        if coarse_changed:
+            action = (
+                "Bear strategies activated"
+                if new_regime.is_bear
+                else "Bull strategies activated"
+            )
+            title = f"REGIME FLIP: {new_regime.value.upper()}"
+        else:
+            # Sub-only change — same macro side, finer regime shifted
+            action = f"Sub-regime now {new_sub.value}; routing updated"
+            title = f"SUB-REGIME CHANGE: {new_sub.value.upper()}"
+
+        active_ids = [eng.strategy_id for eng in self._active_engines]
+        active_str = (
+            ", ".join(active_ids) if active_ids else "(none — fail-closed)"
         )
-        msg = (
-            f"Regime: {old_regime.value} -> {new_regime.value}\n"
-            f"Action: {action}\n"
-            f"Time: {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S')} UTC"
-        )
+
+        lines = [
+            f"Coarse: {old_regime.value} -> {new_regime.value}"
+            if coarse_changed
+            else f"Coarse: {new_regime.value} (unchanged)",
+        ]
+        # Only include sub_regime line when sub_detector is active (else
+        # both old_sub and new_sub default to UNKNOWN and would be noise).
+        if self._sub_detector is not None:
+            lines.append(
+                f"Sub:    {old_sub.value} -> {new_sub.value}"
+                if sub_changed
+                else f"Sub:    {new_sub.value} (unchanged)"
+            )
+        lines.extend([
+            f"Action: {action}",
+            f"Active strategies ({len(active_ids)}): {active_str}",
+            f"Time:   {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S')} UTC",
+        ])
 
         alert = Alert(
             level=AlertLevel.INFO,
-            title=f"REGIME FLIP: {new_regime.value.upper()}",
-            message=msg,
+            title=title,
+            message="\n".join(lines),
             metadata={
                 "from_regime": old_regime.value,
                 "to_regime": new_regime.value,
+                "from_sub": old_sub.value,
+                "to_sub": new_sub.value,
+                "active_count": len(active_ids),
             },
         )
         try:
@@ -415,5 +462,7 @@ class RegimeRouter:
                 "regime_flip_alert_failed",
                 from_regime=old_regime.value,
                 to_regime=new_regime.value,
+                from_sub=old_sub.value,
+                to_sub=new_sub.value,
                 error=str(exc),
             )

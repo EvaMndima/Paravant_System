@@ -197,3 +197,100 @@ class TestRouterTagPrecedence:
         assert "icvp" in ids
         assert "rvcb" not in ids  # observe_only
         assert "legacy_all" in ids  # coarse "all"
+
+
+# ---------------------------------------------------------------------------
+# Router alert tests — DEC-2026-05-28-003 SubRegime alerting
+# ---------------------------------------------------------------------------
+
+
+class TestRouterFlipAlert:
+    """Verifies the unified alert covers both coarse and sub-regime changes."""
+
+    def _make_router_with_telegram(self) -> tuple[RegimeRouter, MagicMock]:
+        """Build a router with a mock Telegram channel that captures sent alerts."""
+        telegram = MagicMock()
+        telegram.send = AsyncMock()
+        router = RegimeRouter(
+            detector=MagicMock(),
+            engine_factory=lambda ids: [],
+            full_config={},
+            stop_event=asyncio.Event(),
+            telegram=telegram,
+            sub_detector=MagicMock(),
+        )
+        return router, telegram
+
+    def test_coarse_flip_alert_includes_sub(self) -> None:
+        """Coarse macro flip alert should include the sub_regime info."""
+        router, telegram = self._make_router_with_telegram()
+        asyncio.run(router._send_flip_alert(
+            RegimeState.STRONG_BULL, RegimeState.STRONG_BEAR,
+            SubRegime.CHOPPY_BULL, SubRegime.CHOPPY_BEAR,
+        ))
+        assert telegram.send.call_count == 1
+        alert = telegram.send.call_args.args[0]
+        assert "REGIME FLIP" in alert.title
+        assert "strong_bear" in alert.title.lower()
+        assert "strong_bull" in alert.message  # old coarse
+        assert "strong_bear" in alert.message  # new coarse
+        assert "choppy_bull" in alert.message  # old sub
+        assert "choppy_bear" in alert.message  # new sub
+
+    def test_sub_only_change_uses_sub_alert_title(self) -> None:
+        """Sub-regime change without coarse flip uses the SUB-REGIME CHANGE title."""
+        router, telegram = self._make_router_with_telegram()
+        asyncio.run(router._send_flip_alert(
+            RegimeState.STRONG_BEAR, RegimeState.STRONG_BEAR,  # coarse unchanged
+            SubRegime.TRENDING_BEAR, SubRegime.CHOPPY_BEAR,   # sub changed
+        ))
+        assert telegram.send.call_count == 1
+        alert = telegram.send.call_args.args[0]
+        assert "SUB-REGIME CHANGE" in alert.title
+        assert "choppy_bear" in alert.title.lower()
+        assert "trending_bear" in alert.message  # old sub
+        assert "unchanged" in alert.message.lower()  # coarse marked unchanged
+
+    def test_alert_omits_sub_line_when_no_sub_detector(self) -> None:
+        """Router without sub_detector should not include the Sub: line."""
+        telegram = MagicMock()
+        telegram.send = AsyncMock()
+        router = RegimeRouter(
+            detector=MagicMock(),
+            engine_factory=lambda ids: [],
+            full_config={},
+            stop_event=asyncio.Event(),
+            telegram=telegram,
+            sub_detector=None,  # explicitly no sub detector
+        )
+        asyncio.run(router._send_flip_alert(
+            RegimeState.STRONG_BULL, RegimeState.STRONG_BEAR,
+        ))
+        alert = telegram.send.call_args.args[0]
+        # Coarse info should be present
+        assert "strong_bear" in alert.message
+        # Sub line should NOT be present since no sub detector
+        assert "Sub:" not in alert.message
+
+    def test_no_telegram_means_no_alert(self) -> None:
+        """When telegram is None, the alert call is a no-op (no crash)."""
+        router = RegimeRouter(
+            detector=MagicMock(),
+            engine_factory=lambda ids: [],
+            full_config={},
+            stop_event=asyncio.Event(),
+            telegram=None,
+        )
+        # Should not raise
+        asyncio.run(router._send_flip_alert(
+            RegimeState.STRONG_BULL, RegimeState.STRONG_BEAR,
+        ))
+
+    def test_telegram_failure_is_caught(self) -> None:
+        """Telegram send failure should be logged, not raised."""
+        router, telegram = self._make_router_with_telegram()
+        telegram.send = AsyncMock(side_effect=RuntimeError("network broke"))
+        # Should not raise — error swallowed and logged
+        asyncio.run(router._send_flip_alert(
+            RegimeState.STRONG_BULL, RegimeState.STRONG_BEAR,
+        ))
