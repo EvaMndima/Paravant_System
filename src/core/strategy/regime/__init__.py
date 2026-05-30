@@ -18,7 +18,12 @@ Decision: DEC-2026-05-04-002 - 2-consecutive-close confirmation rule
 """
 # Automated detection (new)
 from src.core.strategy.regime.detector import RegimeDetector, RegimeState
+from src.core.strategy.regime.historical_classifier import (
+    HistoricalRegimeClassifier,
+    SubRegime,
+)
 from src.core.strategy.regime.router import RegimeRouter
+from src.core.strategy.regime.sub_regime_detector import SubRegimeDetector
 
 # Manual tagging (migrated from regime.py for backward compatibility)
 from src.core.strategy.regime.manual import (
@@ -32,10 +37,14 @@ from src.core.strategy.regime.manual import (
 )
 
 __all__ = [
-    # Automated detection
+    # Automated detection (coarse macro)
     "RegimeState",
     "RegimeDetector",
     "RegimeRouter",
+    # Automated detection (fine sub-regime)
+    "SubRegime",
+    "SubRegimeDetector",
+    "HistoricalRegimeClassifier",
     # Manual tagging
     "MarketRegime",
     "get_regime",

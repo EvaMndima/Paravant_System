@@ -61,6 +61,8 @@ from src.core.strategy.backtest.types import BacktestConfig
 from src.core.strategy.factory import SignalGeneratorFactory
 from src.core.risk.types import OrderRequest
 from src.core.strategy.regime.detector import RegimeDetector, RegimeState
+from src.core.strategy.regime.historical_classifier import SubRegime
+from src.core.strategy.regime.sub_regime_detector import SubRegimeDetector
 from src.data.database import init_db
 from src.data.market_data import OHLCV, MarketDataFetcher
 from src.data.models.paper_session import PaperTradingSession
@@ -260,7 +262,12 @@ class LiveTier:
         symbol: Binance trading pair (e.g. "BTCUSDT").
         capital: Fixed USDT allocation for this tier (independent of others).
         activation_threshold: Total portfolio equity required to activate.
-        regime_tag: "bear", "bull", or "all".
+        regime_tag: Legacy coarse regime tag — "bear", "bull", or "all".
+            Used for backward-compatibility fallback when regime_tags is empty.
+        regime_tags: Fine-grained SubRegime tags (preferred). When non-empty,
+            tier activates only when the current confirmed SubRegime is in
+            this list. When empty, falls back to legacy regime_tag.
+            Decision: DEC-2026-05-28-003.
         params: Strategy-specific parameter dict.
         lookback_bars: OHLCV bars to fetch per poll cycle.
         state: Mutable live position state (loaded from DB on activation).
@@ -278,6 +285,7 @@ class LiveTier:
     regime_tag: str
     params: dict[str, Any]
     lookback_bars: int
+    regime_tags: list[str] = dc_field(default_factory=list)
     state: dict[str, Any] = dc_field(default_factory=dict)
     active: bool = False
     generator: Any = None
@@ -315,12 +323,14 @@ def _build_tiers() -> list[LiveTier]:
         # whenever cached_regime.is_bull, which approximates correctly).
         # ----------------------------------------------------------------
         LiveTier(
-            label="MACD_PB/AVAX",  # multi-regime winner: choppy_bull/bear + trending_bull
+            label="MACD_PB/AVAX",
             template="macd_pullback",
             symbol="AVAXUSDT",
             capital=cap,
             activation_threshold=0.0,
-            regime_tag="all",  # multi-regime; precise routing via SubRegime upgrade
+            regime_tag="all",  # legacy fallback
+            # DEC-2026-05-28-002: STABLE_EDGE in 3 regimes.
+            regime_tags=["choppy_bull", "choppy_bear", "trending_bull"],
             params=MACD_PB_PARAMS,
             lookback_bars=260,
         ),
@@ -330,7 +340,9 @@ def _build_tiers() -> list[LiveTier]:
             symbol="BTCUSDT",
             capital=cap,
             activation_threshold=cap * 2,
-            regime_tag="bull",
+            regime_tag="bull",  # legacy fallback (was wrong — see regime_tags)
+            # DEC-2026-05-28-002: STABLE_EDGE in choppy_bear only.
+            regime_tags=["choppy_bear"],
             params=BTP_PARAMS,
             lookback_bars=300,
         ),
@@ -341,12 +353,14 @@ def _build_tiers() -> list[LiveTier]:
             capital=cap,
             activation_threshold=cap * 3,
             regime_tag="bull",
+            # DEC-2026-05-28-002: STABLE choppy_bull, PROMISING choppy_bear.
+            regime_tags=["choppy_bull", "choppy_bear"],
             params=SRC_PARAMS,
             lookback_bars=260,
         ),
         # HATP/BTC REMOVED 2026-05-28 — strategy retired (DEC-2026-05-28-002).
         # ----------------------------------------------------------------
-        # All-regime (ICVP is self-directing via cloud — works in both)
+        # All-regime (ICVP is self-directing via cloud — works in 3 regimes)
         # ----------------------------------------------------------------
         LiveTier(
             label="ICVP/BTC",
@@ -355,6 +369,8 @@ def _build_tiers() -> list[LiveTier]:
             capital=cap,
             activation_threshold=cap * 4,
             regime_tag="all",
+            # DEC-2026-05-28-002: PROMISING in 3 regimes; POOR in trending_bull.
+            regime_tags=["choppy_bull", "choppy_bear", "trending_bear"],
             params=ICVP_PARAMS,
             lookback_bars=220,
         ),
@@ -402,6 +418,32 @@ def _count_open_same_direction(direction: str) -> int:
         if t.active
         and t.state.get("in_position")
         and t.state.get("side") == direction
+    )
+
+
+def _tier_regime_match(
+    tier: LiveTier,
+    regime: RegimeState,
+    sub_regime: SubRegime,
+) -> bool:
+    """Whether a tier may run given the current regime + sub_regime.
+
+    Routing precedence (DEC-2026-05-28-003):
+      1. If `tier.regime_tags` is non-empty: require sub_regime to be in
+         the list. Fail-closed when sub_regime is UNKNOWN — better to
+         skip activation than to route to a wrong regime.
+      2. Else fall back to legacy coarse `regime_tag` matching.
+    """
+    if tier.regime_tags:
+        if sub_regime == SubRegime.UNKNOWN:
+            return False
+        return sub_regime.value in tier.regime_tags
+
+    # Legacy coarse fallback.
+    return (
+        tier.regime_tag == "all"
+        or (tier.regime_tag == "bear" and regime.is_bear)
+        or (tier.regime_tag == "bull" and regime.is_bull)
     )
 
 
@@ -1424,10 +1466,15 @@ async def main() -> None:
         ),
     )
 
-    # Regime detector (BTC daily EMA50/EMA200, 2-bar confirmation)
+    # Regime detection: coarse (BTC daily EMA50/EMA200) + fine SubRegime
+    # (adds ADX trend strength + realized-vol classification on top of macro).
+    # Decision: DEC-2026-05-28-003 — SubRegime-aware tier routing.
     regime_detector = RegimeDetector(fetcher=fetcher)
+    sub_regime_detector = SubRegimeDetector(fetcher=fetcher)
     cached_regime: RegimeState = RegimeState.UNKNOWN
     prev_regime: RegimeState = RegimeState.UNKNOWN
+    cached_sub_regime: SubRegime = SubRegime.UNKNOWN
+    prev_sub_regime: SubRegime = SubRegime.UNKNOWN
 
     stop_event = asyncio.Event()
 
@@ -1459,21 +1506,40 @@ async def main() -> None:
             # -----------------------------------------------------------
             if poll_count == 1 or poll_count % 60 == 0:
                 new_regime = await regime_detector.get_confirmed_state()
-                if new_regime != cached_regime:
+                # SubRegime detection is fail-closed: errors return UNKNOWN
+                # which causes regime_tags-tagged tiers to remain inactive.
+                try:
+                    new_sub_regime = await sub_regime_detector.get_confirmed_state()
+                except Exception as exc:
+                    logger.error(
+                        "live_sub_regime_detection_failed",
+                        error=str(exc),
+                        exc_info=True,
+                    )
+                    new_sub_regime = SubRegime.UNKNOWN
+
+                regime_flipped = new_regime != cached_regime
+                sub_flipped = new_sub_regime != cached_sub_regime
+
+                if regime_flipped or sub_flipped:
                     prev_regime = cached_regime
+                    prev_sub_regime = cached_sub_regime
                     cached_regime = new_regime
+                    cached_sub_regime = new_sub_regime
                     logger.info(
                         "live_regime_changed",
                         previous=prev_regime.value,
                         current=cached_regime.value,
+                        previous_sub=prev_sub_regime.value,
+                        current_sub=cached_sub_regime.value,
                     )
                     await send_alert(
                         title="Regime Change Detected",
                         message=(
-                            f"Previous: {prev_regime.value}\n"
-                            f"Current:  {cached_regime.value}\n"
-                            f"Entry rule: new entries now require "
-                            f"regime_tag='{cached_regime.value.split('_')[1] if cached_regime != RegimeState.UNKNOWN else 'blocked'}'\n"
+                            f"Coarse: {prev_regime.value} -> {cached_regime.value}\n"
+                            f"Sub:    {prev_sub_regime.value} -> {cached_sub_regime.value}\n"
+                            f"Tier activation now routes on sub_regime when "
+                            f"`regime_tags` is set.\n"
                             f"Open positions still managed (stops/TP active)."
                         ),
                         level=AlertLevel.WARNING,
@@ -1490,10 +1556,8 @@ async def main() -> None:
             for tier in EXPANSION_TIERS:
                 if tier.active:
                     continue
-                regime_ok = (
-                    tier.regime_tag == "all"
-                    or (tier.regime_tag == "bear" and cached_regime.is_bear)
-                    or (tier.regime_tag == "bull" and cached_regime.is_bull)
+                regime_ok = _tier_regime_match(
+                    tier, cached_regime, cached_sub_regime,
                 )
                 if regime_ok and active_equity >= tier.activation_threshold:
                     # Demotion guardrail: block activation if paper data shows
@@ -1563,10 +1627,8 @@ async def main() -> None:
                 )
 
             for tier in active_tiers:
-                regime_allows_entry = (
-                    tier.regime_tag == "all"
-                    or (tier.regime_tag == "bear" and cached_regime.is_bear)
-                    or (tier.regime_tag == "bull" and cached_regime.is_bull)
+                regime_allows_entry = _tier_regime_match(
+                    tier, cached_regime, cached_sub_regime,
                 )
                 await _process_tier(
                     tier=tier,

@@ -2258,11 +2258,62 @@ parameters:
 
 ---
 
+### DEC-2026-05-28-003: SubRegime-Aware Live Routing — Unlock Choppy-Bear Strategies
+
+- **Decision:** Add a live `SubRegimeDetector` (parallel to `RegimeDetector`) that classifies the current BTC daily bar into one of 8 `SubRegime` values with 2-bar confirmation. Extend both `RegimeRouter` (paper) and the live trading tier-activation logic to consult per-strategy `regime_tags` (list of SubRegime strings) before the legacy coarse `regime` field. **Fail-closed**: when SubRegime is UNKNOWN, no `regime_tags`-tagged strategy activates.
+- **Context:**
+  - DEC-2026-05-28-002 left a critical architectural mismatch: the strategies with empirically-validated edge in the current regime (BTP, VBB, MACD_PB, SRC for choppy_bear) are stored under `BULL_STRATEGY_CONFIG` and tagged `regime: "bull"` in the legacy coarse field. Under the existing router, those strategies were SUSPENDED while the system was in any bear sub-regime, even though their actual edge is in choppy_bear.
+  - The result: paper trading runs nothing in the current regime even though we have 5 validated strategies for it. Live trading would have the same problem.
+  - This is the build that unlocks deployment of the validated strategies in their actual operating regime.
+- **Architecture:**
+  - `SubRegimeDetector` wraps the existing `HistoricalRegimeClassifier`, fetches BTC 1d OHLCV at runtime, and applies the same per-bar classification. Confirmation rule: last N bars (default 2) must all share the same SubRegime label AND label must not be UNKNOWN or TRANSITIONAL — else return UNKNOWN.
+  - `RegimeRouter._get_template_ids_for_regime` now takes a `sub_regime` parameter. Per-entry precedence:
+    1. `regime_tags` present + non-empty + `sub_regime != UNKNOWN` + `sub_regime.value in regime_tags` → activate
+    2. `regime_tags` present BUT sub_regime UNKNOWN or not in list → **do not activate**
+    3. No `regime_tags` → fall back to legacy coarse `regime` matching
+  - `observe_only: True` overrides everything — that entry is for data-collection only and never activates via the router.
+  - Live trading: identical precedence implemented in `_tier_regime_match()` helper; applied to BOTH tier-activation check AND per-tier entry gate (`regime_allows_entry` in `_process_tier`).
+- **Fail-closed contract (the critical safety property):**
+  - Any failure in fetching, classifying, or confirming SubRegime → return UNKNOWN.
+  - UNKNOWN sub_regime → `regime_tags`-tagged strategies do NOT activate. Better quiet than wrong-regime.
+  - This is enforced by tests in `tests/unit/regime/test_sub_regime_routing.py` (14 new tests, all passing).
+- **Strategy → SubRegime tag mapping (per DEC-2026-05-28-002 empirical data):**
+  - MACD_PB: `[choppy_bull, choppy_bear, trending_bull]`
+  - BTP: `[choppy_bear]`
+  - VBB: `[choppy_bear]`
+  - SRC: `[choppy_bull, choppy_bear]`
+  - ICVP: `[choppy_bull, choppy_bear, trending_bear]`
+  - RVCB: `[trending_bear]` (but `observe_only: True`)
+- **Backward compatibility:**
+  - All existing strategy configs that have no `regime_tags` continue to work via the legacy coarse `regime` field — unchanged behavior.
+  - `RegimeRouter.__init__` gains an optional `sub_detector` parameter; existing code that passes only the coarse detector is unaffected (regime_tags routing is opt-in by virtue of needing the sub_detector).
+  - `LiveTier` dataclass adds `regime_tags: list[str]` with default `[]` — existing tier definitions work without modification.
+- **Live re-enable readiness:**
+  - The kill switch (`LIVE_TRADING_ENABLED` env var, default OFF) remains the gate for any real-capital activity. Nothing in this decision enables live by itself.
+  - When the user does flip the switch, the new SubRegime routing means MACD_PB/BTP/VBB/SRC/ICVP tiers can correctly activate in their validated regime.
+  - All other safety layers from prior decisions remain active: demotion guardrail (DEC-2026-05-27-004), decorrelation cap (DEC-2026-05-27-006), consecutive-failure alert (DEC-2026-05-27-003), kill switch (DEC-2026-05-27-001).
+- **Alternatives Considered:**
+  - Hack temporary `regime: "bear"` on BTP/VBB: rejected — would also activate in trending_bear where they're POOR.
+  - Replace coarse `RegimeState` entirely with `SubRegime`: rejected — existing code (manual regime tagging, system state persistence, API) consumes RegimeState; coexistence is the safer migration path.
+  - Use a "current SubRegime" in `regime_tags` AND require the coarse field to also match: rejected — adds belt-and-suspenders complexity without safety improvement (since regime_tags is the empirical source of truth).
+- **Status:** ACTIVE
+- **Date Decided:** 2026-05-31
+- **Implemented By:**
+  - `src/core/strategy/regime/sub_regime_detector.py` — new SubRegimeDetector
+  - `src/core/strategy/regime/router.py` — extended with sub_detector + regime_tags precedence
+  - `src/core/strategy/regime/__init__.py` — re-export SubRegime, SubRegimeDetector
+  - `scripts/run_paper_trading.py` — wires SubRegimeDetector into RegimeRouter
+  - `scripts/run_live_trading.py` — `_tier_regime_match()` helper, LiveTier.regime_tags field, SubRegime detection in main(), used in tier activation + entry gate
+  - `tests/unit/regime/test_sub_regime_routing.py` — 14 new tests covering the fail-closed contract
+- **Affected Files:** (above)
+
+---
+
 **End of Decisions Log**
 
-**Total Decisions:** 69 active, 0 superseded, 5 locked (1 amended)
-**Last Updated:** 2026-05-28
-**Next Decision ID:** DEC-2026-05-28-003
+**Total Decisions:** 70 active, 0 superseded, 5 locked (1 amended)
+**Last Updated:** 2026-05-31
+**Next Decision ID:** DEC-2026-05-31-001
 
 ## Phase 5 Decisions (Backtesting & Simulation)
 

@@ -53,7 +53,12 @@ from src.core.strategy.backtest.types import BacktestConfig
 from src.core.strategy.factory import SignalGeneratorFactory
 from src.core.strategy.paper.engine import PaperTradingEngine
 from src.core.strategy.paper.types import PaperTradingMode
-from src.core.strategy.regime import RegimeDetector, RegimeRouter, RegimeState
+from src.core.strategy.regime import (
+    RegimeDetector,
+    RegimeRouter,
+    RegimeState,
+    SubRegimeDetector,
+)
 from src.data.database import init_db
 from src.data.market_data import MarketDataFetcher
 from src.data.store import DataStore
@@ -778,8 +783,12 @@ async def main(lite: bool = False) -> None:
     signal.signal(signal.SIGINT, handle_signal)
     signal.signal(signal.SIGTERM, handle_signal)
 
-    # Create regime router — auto-detects regime and manages engine lifecycle
+    # Create regime router — auto-detects coarse regime + fine SubRegime
+    # and manages engine lifecycle. Strategies with `regime_tags` route via
+    # SubRegime; strategies with only legacy `regime` route via coarse state.
+    # Decision: DEC-2026-05-28-003.
     detector = RegimeDetector(fetcher=fetcher)
+    sub_detector = SubRegimeDetector(fetcher=fetcher)
     router = RegimeRouter(
         detector=detector,
         engine_factory=engine_factory,
@@ -788,6 +797,7 @@ async def main(lite: bool = False) -> None:
         check_interval=86400,  # re-check daily
         telegram=telegram,
         store=store,
+        sub_detector=sub_detector,
     )
 
     print("\nDetecting initial regime and starting engines...")
