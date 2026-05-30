@@ -97,7 +97,10 @@ BULL_STRATEGY_CONFIG: dict[str, dict[str, Any]] = {
         # position in the wrong direction and run against the prevailing trend.
         "label": "MACD_PB",
         "regime": "bull",
-        "regime_tags": ["choppy_bull"],  # PRELIMINARY — pullback strategy; verify with backtest_rolling
+        # Empirically validated (DEC-2026-05-28-002): STABLE_EDGE in three
+        # regimes on spot — choppy_bull (PF 1.58), choppy_bear (PF 2.33),
+        # trending_bull (PF 1.65). 118 trades total. Multi-regime real edge.
+        "regime_tags": ["choppy_bull", "choppy_bear", "trending_bull"],
         "symbols": ["DOGEUSDT", "AVAXUSDT"],
         "params": {
             "macd_fast": 12,
@@ -118,7 +121,12 @@ BULL_STRATEGY_CONFIG: dict[str, dict[str, Any]] = {
         # DOGE added 2026-05-07: 45d bull PF=5.10, Sharpe=7.15, WR=66.7% — Gate1=10.
         "label": "BTP",
         "regime": "bull",
-        "regime_tags": ["trending_bull", "choppy_bull"],  # PRELIMINARY
+        # Empirically validated (DEC-2026-05-28-002): STABLE_EDGE in
+        # choppy_bear only (PF 1.63, PF min 1.30, CV 0.16 across 69 trades).
+        # POOR in trending_bear/trending_bull/choppy_bull. The "bull
+        # trend pullback" name is misleading — the actual edge is in
+        # choppy_bear, not trending_bull. Re-tagged accordingly.
+        "regime_tags": ["choppy_bear"],
         "symbols": ["BTCUSDT", "ETHUSDT", "BNBUSDT", "DOGEUSDT"],
         "params": {
             "htf_ema_period": 150,
@@ -134,28 +142,16 @@ BULL_STRATEGY_CONFIG: dict[str, dict[str, Any]] = {
             "risk_reward_ratio": 2.5,
         },
     },
-    "volatility_regime_breakout": {
-        # Promoted 2026-05-07. BTC: 90d PF=1.55/WR=43.5% with EMA-200 gate.
-        # Low-frequency strategy (~1 trade per 4-5 bull days). Gate1=10 trades.
-        # Squeeze-window high/low breakout after BB width compression release.
-        "label": "VRB",
-        "regime": "bull",
-        "regime_tags": ["choppy_bull", "trending_bull"],  # PRELIMINARY — squeeze breakout
-        "symbols": ["BTCUSDT"],
-        "params": {
-            "bb_period": 20,
-            "bb_std_dev": 2.0,
-            "squeeze_lookback": 20,
-            "squeeze_percentile": 20.0,
-            "reference_lookback": 100,
-            "volume_period": 20,
-            "volume_threshold": 1.5,
-            "atr_period": 14,
-            "atr_stop_multiplier": 2.0,
-            "risk_reward_ratio": 2.5,
-            "regime_ema_period": 200,
-        },
-    },
+    # ----------------------------------------------------------------------
+    # RETIRED 2026-05-28: volatility_regime_breakout (VRB)
+    # ----------------------------------------------------------------------
+    # BTC-only, single-window per regime in rolling backtest. Per-regime
+    # PFs: choppy_bull 0.36, choppy_bear 1.43 (1 window only), trending_bear
+    # 0.83 (POOR), trending_bull 2.40 (1 window only). No regime has both
+    # sufficient windows AND stable edge. Generator code preserved at
+    # src/core/strategy/generators/volatility_regime_breakout.py.
+    # Decision: DEC-2026-05-28-002.
+    # ----------------------------------------------------------------------
     "volume_balance_breakout": {
         # Promoted 2026-05-08. 90d backtest confirmed edge on BTC/ETH/SOL:
         # BTC PF=1.39/Sharpe=0.59/10 trades, ETH PF=1.94/Sharpe=1.83/9 trades,
@@ -165,7 +161,12 @@ BULL_STRATEGY_CONFIG: dict[str, dict[str, Any]] = {
         # volume confirmation. Fails on altcoins (XRP/AVAX/DOT) — large-caps only.
         "label": "VBB",
         "regime": "bull",
-        "regime_tags": ["trending_bull", "choppy_bull"],  # PRELIMINARY — institutional accumulation
+        # Empirically validated (DEC-2026-05-28-002): STABLE_EDGE in
+        # choppy_bear only (PF 1.61, PF min 1.44, CV 0.14 across 32 trades).
+        # POOR in choppy_bull (PF 0.64), trending_bull (PF 0.91), trending_bear
+        # (PF 0.39). The "bull-tagged" framing in the legacy config was wrong;
+        # VBB is a choppy_bear strategy.
+        "regime_tags": ["choppy_bear"],
         "symbols": ["BTCUSDT", "ETHUSDT", "SOLUSDT"],
         "params": {
             "balance_period": 15,
@@ -192,7 +193,11 @@ BULL_STRATEGY_CONFIG: dict[str, dict[str, Any]] = {
         # Fails on altcoins (XRP/AVAX/DOT) — large-caps only, same as VBB pattern.
         "label": "SRC",
         "regime": "bull",
-        "regime_tags": ["choppy_bull"],  # PRELIMINARY — micro-pullback cross
+        # Empirically validated (DEC-2026-05-28-002): STABLE_EDGE in
+        # choppy_bull (PF 1.56, CV 0.27) and PROMISING in choppy_bear
+        # (PF 1.70). POOR in trending_bull/bear. Pullback signal works
+        # in chop, fails in trends.
+        "regime_tags": ["choppy_bull", "choppy_bear"],
         "symbols": ["BTCUSDT", "ETHUSDT", "SOLUSDT"],
         "params": {
             "rsi_period": 14,
@@ -213,62 +218,17 @@ BULL_STRATEGY_CONFIG: dict[str, dict[str, Any]] = {
             "risk_reward_ratio": 3.0,
         },
     },
-    "heikin_ashi_trend_pulse": {
-        # Promoted 2026-05-08 (batch 3). 3-round 90d backtest — HA no-wick trend pulse.
-        # BTC PF=1.70/Sharpe=1.767/16T, BNB PF=1.55/Sharpe=1.343/13T,
-        # AVAX PF=1.40/Sharpe=1.251/17T — all R3 confirmed. XRP PF=1.32 (just under).
-        # ha_prior_wick_min=6 (tight): requires 6 of 7 prior bars with lower wicks =
-        # deep, sustained pullback before the clean no-wick thrust bar.
-        # Fails on SOL/DOGE/DOT/ETH — large-caps + AVAX only.
-        # Gate1=10 trades per symbol.
-        "label": "HATP",
-        "regime": "bull",
-        "regime_tags": ["trending_bull"],  # PRELIMINARY — clean trend pulse required
-        "symbols": ["BTCUSDT", "BNBUSDT", "AVAXUSDT"],
-        "params": {
-            "ha_wick_lookback": 7,
-            "ha_prior_wick_min": 6,
-            "wick_tolerance": 0.05,
-            "ema_period": 50,
-            "regime_ema_period": 200,
-            "rsi_period": 14,
-            "rsi_min": 50.0,
-            "rsi_max": 75.0,
-            "volume_period": 20,
-            "volume_threshold": 1.4,
-            "atr_period": 14,
-            "atr_stop_multiplier": 2.0,
-            "risk_reward_ratio": 2.0,
-        },
-    },
-    "vpt_momentum": {
-        # Promoted 2026-05-08 (batch 3). 3-round 90d backtest — VPT contribution surge.
-        # BTC: IDENTICAL across all 3 rounds — PF=1.42/Sharpe=1.418/25T.
-        # This cross-round stability is the strongest signal reproducibility of any
-        # strategy in the portfolio. DOGE stable at PF=1.23 (below threshold — not promoted).
-        # All altcoins negative — BTC-only signal (wash-trade resistant via VPT vs OBV).
-        # Gate1=10 trades.
-        "label": "VPT",
-        "regime": "bull",
-        "regime_tags": ["trending_bull"],  # PRELIMINARY — VPT confirms trend momentum
-        "symbols": ["BTCUSDT"],
-        "params": {
-            "vpt_ema_period": 20,
-            "vpt_lookback": 15,
-            "vpt_contrib_period": 20,
-            "vpt_contrib_threshold": 1.5,
-            "ema_period": 50,
-            "regime_ema_period": 200,
-            "rsi_period": 14,
-            "rsi_min": 50.0,
-            "rsi_max": 75.0,
-            "volume_period": 20,
-            "volume_threshold": 1.3,
-            "atr_period": 14,
-            "atr_stop_multiplier": 2.0,
-            "risk_reward_ratio": 2.5,
-        },
-    },
+    # ----------------------------------------------------------------------
+    # RETIRED 2026-05-28: heikin_ashi_trend_pulse (HATP), vpt_momentum (VPT)
+    # ----------------------------------------------------------------------
+    # HATP: POOR in all 4 regimes (best PF 0.96 in choppy_bear, 231 trades).
+    #       Promoted on Q1 3-round backtests showing PF 1.40-1.70; live-spec
+    #       rolling backtest could not reproduce. Same overfit pattern as BTF.
+    # VPT:  PF 1.00 overall (break-even). Loses after live slippage. Trending_bear
+    #       (only 2-window regime) PF 0.80 POOR. BTC-only limits diagnosis.
+    # Generator code preserved for both at src/core/strategy/generators/.
+    # Decision: DEC-2026-05-28-002.
+    # ----------------------------------------------------------------------
     "realized_vol_compression_breakout": {
         # Promoted 2026-05-08 (batch 3). 2-round 90d backtest — HV compression breakout.
         # AVAX: R2 PF=4.32, R3 PF=4.62 — signal STRENGTHENED across rounds (not decay).
@@ -278,7 +238,13 @@ BULL_STRATEGY_CONFIG: dict[str, dict[str, Any]] = {
         # hv_short < 0.65 × hv_medium for 3+ consecutive bars = real regime compression.
         "label": "RVCB",
         "regime": "bull",
-        "regime_tags": ["ranging", "choppy_bull"],  # PRELIMINARY — compression then breakout
+        # OBSERVE-ONLY 2026-05-28 (DEC-2026-05-28-002): 19 trades total in
+        # rolling backtest is insufficient sample for promotion. Trending_bear
+        # PROMISING (PF 1.56, 2 windows). Other regimes single-window with
+        # large PF values (5.58, 1.84) on 2-4 trades — pure noise. Keep
+        # paper-running to accumulate trades; do not activate live tier.
+        "observe_only": True,
+        "regime_tags": ["trending_bear"],
         "symbols": ["AVAXUSDT"],
         "params": {
             "hv_short_period": 20,
@@ -309,70 +275,24 @@ BULL_STRATEGY_CONFIG: dict[str, dict[str, Any]] = {
 # when left active during a bull market.
 # ---------------------------------------------------------------------------
 
-BEAR_STRATEGY_CONFIG: dict[str, dict[str, Any]] = {
-    # ----------------------------------------------------------------------
-    # RETIRED 2026-05-27: bear_trend_follower (BTF)
-    # ----------------------------------------------------------------------
-    # Original promotion was based on Q1 2026 backtest claiming
-    # 100% WR / Sharpe 2.4-3.6. May 2026 evidence proves overfit:
-    #
-    #   90-day May backtest (90 trades across 7 symbols):
-    #     Basket avg PF = 0.76 (negative edge)
-    #     Per-symbol PF: BTC 0.83 ETH 0.64 BNB 0.46 SOL 1.02 XRP 0.68
-    #                    AVAX 1.10 DOGE 0.60
-    #     Sharpe is negative on 6 of 7 symbols.
-    #
-    #   Live paper (25 trades, 10 days): PF 0.75 — matches backtest.
-    #
-    # AVAX/SOL are within noise (PF CI = [~0.7, ~1.6] at N=16). Not edges.
-    #
-    # Generator code at src/core/strategy/generators/bear_trend_follower.py
-    # is preserved for future re-validation in clean monotonic-descent
-    # regimes (different market structure than May 2026).
-    # Decision: DEC-2026-05-27-007.
-    # ----------------------------------------------------------------------
-    "cascading_momentum_filter": {
-        # Validated bear (SOL/XRP/AVAX/ETH). Highest conviction in bear downtrends.
-        "label": "CMF",
-        "regime": "bear",
-        "regime_tags": ["trending_bear", "choppy_bear"],  # PRELIMINARY — has internal regime filter
-        "symbols": ["SOLUSDT", "XRPUSDT", "AVAXUSDT", "ETHUSDT"],
-        "params": {
-            "daily_st_period": 10,
-            "daily_st_multiplier": 3.0,
-            "htf_ema_period": 21,
-            "htf_adx_period": 14,
-            "htf_adx_min": 15.0,
-            "htf_slope_lookback": 5,
-            "st_period_1h": 10,
-            "st_multiplier_1h": 3.0,
-            "macd_fast": 12,
-            "macd_slow": 26,
-            "macd_signal": 9,
-            "atr_period": 14,
-        },
-    },
-    "rsi_bb_mean_reversion": {
-        # Mean-reversion: underperforms strong bull trends despite internal EMA(200) gate.
-        # Reactivate in bear or extended ranging/consolidation conditions.
-        "label": "RSI_BB",
-        "regime": "bear",
-        "regime_tags": ["choppy_bear", "ranging"],  # PRELIMINARY — mean-reversion in bear or range
-        "symbols": ["ETHUSDT", "BNBUSDT", "DOGEUSDT"],
-        "params": {
-            "rsi_period": 14,
-            "rsi_oversold": 25.0,
-            "rsi_overbought": 75.0,
-            "rsi_exit_long": 50.0,
-            "rsi_exit_short": 50.0,
-            "bb_period": 20,
-            "bb_std_dev": 2.0,
-            "adx_threshold": 25.0,
-            "stop_loss_pct": 2.5,
-            "ema_regime_period": 200,
-        },
-    },
-}
+# ---------------------------------------------------------------------------
+# BEAR_STRATEGY_CONFIG is INTENTIONALLY EMPTY as of 2026-05-28.
+#
+# All previously-bear-tagged strategies have been retired after the spot-vs-
+# futures rolling backtest comparison (DEC-2026-05-28-002) showed:
+#   - BTF retired 2026-05-27 (DEC-2026-05-27-007): no edge in any regime.
+#   - CMF: POOR in all 3 bear/chop regimes. "Trending_bull edge" is wrong
+#          direction and unreliable.
+#   - RSI_BB: PF 0.06–0.41 across all regimes. Worst PF in portfolio.
+#
+# The strategies that actually have STABLE_EDGE in choppy_bear (the current
+# regime) are tagged "bull" in the legacy coarse regime field but tagged
+# choppy_bear in the new regime_tags field — BTP, VBB, MACD_PB, SRC. They
+# will route correctly once the SubRegime-aware live router (DEC-2026-05-28-001
+# step 4 precursor) is built. Until then, paper trading runs nothing in
+# bear regime by design — better to be quiet than to lose money.
+# ---------------------------------------------------------------------------
+BEAR_STRATEGY_CONFIG: dict[str, dict[str, Any]] = {}
 
 # ---------------------------------------------------------------------------
 # All-regime strategies (run regardless of bull/bear)
@@ -384,7 +304,12 @@ ALL_REGIME_CONFIG: dict[str, dict[str, Any]] = {
         # LONG above cloud, SHORT below — self-adjusts to bull and bear regimes.
         "label": "ICVP",
         "regime": "all",
-        "regime_tags": ["trending_bull", "trending_bear"],  # PRELIMINARY — cloud direction-agnostic but needs trend
+        # Empirically validated (DEC-2026-05-28-002): PROMISING_IN_REGIME
+        # in choppy_bull (PF 2.08), choppy_bear (PF 1.28), trending_bear
+        # (PF 1.40, 14 windows — strongest evidence). POOR in trending_bull.
+        # Multi-regime real edge; the most regime-resilient strategy in
+        # the portfolio after MACD_PB.
+        "regime_tags": ["choppy_bull", "choppy_bear", "trending_bear"],
         "symbols": [
             "BTCUSDT", "ETHUSDT", "BNBUSDT", "SOLUSDT",
             "XRPUSDT", "AVAXUSDT", "DOGEUSDT", "DOTUSDT",

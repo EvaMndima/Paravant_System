@@ -2210,11 +2210,59 @@ parameters:
 
 ---
 
+### DEC-2026-05-28-002: Spot-Wins Portfolio Triage — Retire 5 Strategies, Re-tag 5 Keepers
+
+- **Decision:** Based on the spot-vs-futures rolling-window backtest comparison (run 2026-05-28 against ~10 months of 1H data, 5 windows × 60 days), retire 5 additional strategies (CMF, RSI_BB, HATP, VRB, VPT) — joining BTF (DEC-2026-05-27-007) — and refine `regime_tags` on the 5 keepers (MACD_PB, BTP, VBB, SRC, ICVP) to match empirical per-regime performance. Mark RVCB observe-only (insufficient sample, N=19). The live execution path stays spot long-only; futures is NOT worth building live execution for.
+- **Context:**
+  - The spot run (`allow_shorts=False, funding=0`) produced honest results matching architectural intent (the system was originally designed for spot).
+  - The futures run (`allow_shorts=True, funding=0.0001/8h`) showed that strategies with bidirectional signals perform WORSE with shorts enabled — MACD_PB in choppy_bear went from PF 2.33 (spot, 29 trades) to PF 1.02 (futures, 60 trades). ICVP choppy_bear: spot PF 1.28 → futures PF 0.78. The short signals are actively destroying edge, not adding it.
+  - Strategies that depend on shorts (BTF, CMF, RSI_BB) have no validated edge even with shorts enabled and modeled funding cost.
+  - This resolves PARA-01 cleanly: spot is the right deployment, and futures execution is NOT needed.
+- **Triage outcomes:**
+  - **KEEP** (5 strategies with STABLE_EDGE or strong PROMISING in declared regime):
+    - **MACD_PB** → `[choppy_bull, choppy_bear, trending_bull]` — STABLE_EDGE in 3 of 4 regimes (PF 1.58 / 2.33 / 1.65). Multi-regime real edge — closest to "robust" in portfolio.
+    - **BTP** → `[choppy_bear]` (re-tagged from `[trending_bull, choppy_bull]` — was wrong). STABLE in choppy_bear PF 1.63 CV 0.16 across 69 trades.
+    - **VBB** → `[choppy_bear]` (re-tagged from `[trending_bull, choppy_bull]` — was wrong). STABLE in choppy_bear PF 1.61 CV 0.14.
+    - **SRC** → `[choppy_bull, choppy_bear]` — STABLE choppy_bull, PROMISING choppy_bear.
+    - **ICVP** → `[choppy_bull, choppy_bear, trending_bear]` (re-tagged from `[trending_bull, trending_bear]` — wrong on trending_bull). PROMISING in 3 regimes, the most regime-resilient after MACD_PB.
+  - **RETIRE** (5 strategies):
+    - **CMF** — POOR in all 3 bear/chop regimes (design intent failed). Trending_bull "edge" wrong direction, unreliable.
+    - **RSI_BB** — PF 0.06–0.41 across all 4 regimes both modes. Worst in portfolio.
+    - **HATP** — POOR in all 4 regimes, 231 trades. Promoted on Q1 3-round backtest claiming PF 1.40–1.70; rolling backtest could not reproduce. Same overfit pattern as BTF.
+    - **VRB** — BTC-only, single-window per regime, no robust verdict possible.
+    - **VPT** — PF 1.00 overall (break-even). Loses after live slippage. BTC-only.
+  - **OBSERVE** (1 strategy):
+    - **RVCB** — N=19, single-window per regime. Trending_bear PROMISING (PF 1.56) but sample too thin. Keep paper-running with `observe_only: True`; do NOT activate live tier.
+- **Rationale:**
+  - Spot mode results are statistically AND architecturally coherent — the system was built for spot. The short signals were retrofitted, not first-class.
+  - The 5 retired strategies all fail in their DESIGN regime, not just in adjacent regimes. They are not "regime-specific edges deployed wrong" — they have no edge.
+  - The 5 keepers' regime_tags were verified against multi-window empirical data. Previously-PRELIMINARY tags are now backed by 5-window/multi-symbol rolling backtests.
+  - Live futures execution is NOT built — saves weeks of work, avoids liquidation risk, no edge lost.
+- **Consequences (acknowledged):**
+  - `BEAR_STRATEGY_CONFIG` is now empty. Paper trading runs nothing when the legacy bear router activates. The choppy_bear strategies (BTP, VBB, MACD_PB, SRC) are tagged "bull" in the coarse `regime` field and won't activate via the legacy router in choppy_bear. **This is intentional** — better quiet than losing money — and is the motivating bug for the next build.
+  - The next build (DEC-2026-05-28-003 when written) is the SubRegime-aware live router that reads `regime_tags` from the paper config and activates strategies whose tags match the current SubRegime. That unlocks BTP/VBB/MACD_PB trading in choppy_bear.
+- **Implementation:**
+  - `scripts/run_paper_trading.py`: BEAR_STRATEGY_CONFIG emptied (banner explains); VRB, HATP, VPT entries removed from BULL_STRATEGY_CONFIG with retirement banner; RVCB gets `observe_only: True`; the 5 keepers' regime_tags refined with empirical citations.
+  - `scripts/run_live_trading.py`: CMF/SOL, RSI_BB/ETH, HATP/BTC tiers removed from `EXPANSION_TIERS`. MACD_PB/AVAX added as tier-1. MIN_BARS_LOOKUP + STRATEGY_PARAMS_LOOKUP gain macd_pullback entry.
+- **Alternatives Considered:**
+  - Keep retired strategies in paper "just in case": rejected — they pollute aggregate metrics and waste compute on signals confirmed to lose money.
+  - Build futures live execution anyway: rejected — empirical data shows no edge to capture even WITH shorts modeled honestly. Would add liquidation risk for nothing.
+  - Refit the retired strategies on May data to "rescue" them: rejected — that's the same overfit failure mode that produced BTF.
+- **Status:** ACTIVE
+- **Date Decided:** 2026-05-28
+- **Implemented By:** Edits to run_paper_trading.py (BEAR/BULL configs + RVCB) and run_live_trading.py (EXPANSION_TIERS + MACD_PB_PARAMS).
+- **Affected Files:**
+  - `scripts/run_paper_trading.py`
+  - `scripts/run_live_trading.py`
+- **References:** Spot run output preserved in conversation history. Per-regime breakdown clean-data version is the canonical triage record.
+
+---
+
 **End of Decisions Log**
 
-**Total Decisions:** 68 active, 0 superseded, 5 locked (1 amended)
+**Total Decisions:** 69 active, 0 superseded, 5 locked (1 amended)
 **Last Updated:** 2026-05-28
-**Next Decision ID:** DEC-2026-05-28-002
+**Next Decision ID:** DEC-2026-05-28-003
 
 ## Phase 5 Decisions (Backtesting & Simulation)
 

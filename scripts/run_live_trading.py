@@ -158,6 +158,20 @@ BTP_PARAMS: dict[str, Any] = {
     "risk_reward_ratio": 2.5,
 }
 
+MACD_PB_PARAMS: dict[str, Any] = {
+    # Multi-regime winner per DEC-2026-05-28-002 — STABLE_EDGE in
+    # choppy_bull, choppy_bear, trending_bull.
+    "macd_fast": 12,
+    "macd_slow": 26,
+    "macd_signal": 9,
+    "pullback_ema_period": 21,
+    "atr_period": 14,
+    "atr_stop_multiplier": 2.5,
+    "risk_reward_ratio": 2.0,
+    "pullback_tolerance_pct": 0.5,
+    "regime_ema_period": 200,
+}
+
 SRC_PARAMS: dict[str, Any] = {
     "rsi_period": 14,
     "stoch_period": 14,
@@ -211,6 +225,7 @@ MIN_BARS_LOOKUP: dict[str, int] = {
     "bull_trend_pullback": 300,
     "stoch_rsi_bull_cross": 260,
     "heikin_ashi_trend_pulse": 260,
+    "macd_pullback": 260,
     "ichimoku_cloud_trend": 220,
 }
 
@@ -221,6 +236,7 @@ STRATEGY_PARAMS_LOOKUP: dict[str, dict[str, Any]] = {
     "bull_trend_pullback": BTP_PARAMS,
     "stoch_rsi_bull_cross": SRC_PARAMS,
     "heikin_ashi_trend_pulse": HATP_PARAMS,
+    "macd_pullback": MACD_PB_PARAMS,
     "ichimoku_cloud_trend": ICVP_PARAMS,
 }
 
@@ -289,37 +305,31 @@ def _build_tiers() -> list[LiveTier]:
         # BTF tiers REMOVED 2026-05-27 — strategy retired after May 2026
         # backtest + live paper showed PF=0.75-0.76 across 115 total trades.
         # See DEC-2026-05-27-007.
+        # CMF/SOL and RSI_BB/ETH tiers REMOVED 2026-05-28 — strategies
+        # retired (DEC-2026-05-28-002) after spot rolling backtest showed
+        # POOR_IN_REGIME for all relevant regimes.
+        # ----------------------------------------------------------------
+        # Bull-tagged tiers (note: regime_tag uses the coarse legacy field;
+        # the SubRegime-aware live router upgrade will use regime_tags from
+        # the paper config to route precisely. Until then, these activate
+        # whenever cached_regime.is_bull, which approximates correctly).
+        # ----------------------------------------------------------------
         LiveTier(
-            label="CMF/SOL",
-            template="cascading_momentum_filter",
-            symbol="SOLUSDT",
+            label="MACD_PB/AVAX",  # multi-regime winner: choppy_bull/bear + trending_bull
+            template="macd_pullback",
+            symbol="AVAXUSDT",
             capital=cap,
             activation_threshold=0.0,
-            regime_tag="bear",
-            params=CMF_PARAMS,
-            lookback_bars=400,
-        ),
-        LiveTier(
-            label="RSI_BB/ETH",
-            template="rsi_bb_mean_reversion",
-            symbol="ETHUSDT",
-            capital=cap,
-            activation_threshold=cap * 2,
-            regime_tag="bear",
-            params=RSI_BB_PARAMS,
+            regime_tag="all",  # multi-regime; precise routing via SubRegime upgrade
+            params=MACD_PB_PARAMS,
             lookback_bars=260,
         ),
-        # ----------------------------------------------------------------
-        # Bull tiers (validated in bull paper trading)
-        # BTP is tier-1 equivalent in bull: activates immediately on
-        # regime flip. Subsequent bull tiers require profit growth.
-        # ----------------------------------------------------------------
         LiveTier(
             label="BTP/BTC",
             template="bull_trend_pullback",
             symbol="BTCUSDT",
             capital=cap,
-            activation_threshold=0.0,
+            activation_threshold=cap * 2,
             regime_tag="bull",
             params=BTP_PARAMS,
             lookback_bars=300,
@@ -329,31 +339,21 @@ def _build_tiers() -> list[LiveTier]:
             template="stoch_rsi_bull_cross",
             symbol="BTCUSDT",
             capital=cap,
-            activation_threshold=cap * 2,
+            activation_threshold=cap * 3,
             regime_tag="bull",
             params=SRC_PARAMS,
             lookback_bars=260,
         ),
-        LiveTier(
-            label="HATP/BTC",
-            template="heikin_ashi_trend_pulse",
-            symbol="BTCUSDT",
-            capital=cap,
-            activation_threshold=cap * 3,
-            regime_tag="bull",
-            params=HATP_PARAMS,
-            lookback_bars=260,
-        ),
+        # HATP/BTC REMOVED 2026-05-28 — strategy retired (DEC-2026-05-28-002).
         # ----------------------------------------------------------------
         # All-regime (ICVP is self-directing via cloud — works in both)
-        # Starts at tier-2 threshold to avoid over-allocation early.
         # ----------------------------------------------------------------
         LiveTier(
             label="ICVP/BTC",
             template="ichimoku_cloud_trend",
             symbol="BTCUSDT",
             capital=cap,
-            activation_threshold=cap * 2,
+            activation_threshold=cap * 4,
             regime_tag="all",
             params=ICVP_PARAMS,
             lookback_bars=220,
