@@ -2341,11 +2341,34 @@ parameters:
 
 ---
 
+### DEC-2026-05-31-002: PARA-02 Historical Quarantine — Read-Time Filter for Corrupted Force-Closes
+
+- **Decision:** Add a read-time filter to `scripts/validation_report.py` that drops PARA-02-contaminated trades from per-session statistics by their corruption signature, without ever modifying the database. A trade is quarantined when its `exit_price` is in [0.5, 3.0] AND the entry/exit price ratio is >10x in either direction — the unmistakable signature of a force-close booked at the dimensionless `equity / position_value` ratio (~1.x) instead of a market price. The count of dropped trades is logged per session and surfaced on `SessionStats.quarantined_trades`; sessions where >20% of raw trades were dropped are flagged (`quarantine_flag`) so the operator knows the metrics rest on a reduced sample.
+- **Context:** DEC-2026-05-31-001 fixed PARA-02 **forward-only** — it stopped new corrupted force-closes but explicitly did NOT migrate the corrupted rows already in Neon (constraint: don't touch existing trade_log data). Those historical rows book fake ~$1-3 exit prices, which distort per-session PnL/PF/Sharpe/MaxDD — the exact inputs to the promotion gate (DEC-2026-05-27-004). The validation report needed to stop trusting those specific trades without throwing away the genuine signal in the same sessions.
+- **Rationale:**
+  - **Surgical, signature-based, not date-based.** Filtering all pre-fix trades would discard genuinely good signal. Real market prices for the traded symbols (BTC ~$50k-100k, ETH ~$2k, BNB, SOL, AVAX, XRP ~$2, DOGE ~$0.15) are never simultaneously inside [0.5, 3.0] AND >10x disconnected from the entry price, so the two-condition test isolates corruption with no false positives on real trades (a real XRP trade near $2 has entry~exit, ratio ~1, so it is never flagged).
+  - **Read-only by construction.** The filter builds a filtered Python list at read time; it issues no UPDATE/DELETE. Safe to run against Neon (prod) — which is exactly where the corrupted rows live — while honoring the "no Neon mutation" constraint. DB is selected by `DATABASE_URL` (SQLite locally, Neon on Railway); the filter is DB-agnostic.
+  - **Operator visibility over silent correction.** Logging per-session counts + a >20% flag means a session whose classification improved only because corrupted losses were removed is visible, not hidden.
+- **Known limitation (accepted):** A corrupted DOGE force-close (real entry ~$0.15, exit-ratio ~1.0) yields an entry/exit ratio of ~6.7x, below the 10x threshold, so it can slip through. This is deliberate — the band is tuned to never drop genuine trades. DOGE's absolute-dollar corruption is also the smallest. Revisit only if DOGE/XRP sessions show anomalous stats.
+- **Alternatives Considered:**
+  - Date-based filter (drop all trades before commit 536bfc8): rejected — discards genuine signal; the corruption is per-trade, not per-session.
+  - Back-fill/repair the Neon rows: rejected — violates the "don't modify Neon data" constraint and is riskier than a read-time filter.
+  - Widen the band / lower the ratio threshold to catch DOGE: rejected — raises false-positive risk on genuine low-price-asset trades; not worth it for the smallest-dollar corruption.
+- **Status:** ACTIVE
+- **Date Decided:** 2026-05-31
+- **Implemented By:**
+  - `scripts/validation_report.py` — `_is_corrupt_force_close()` predicate, filter in `compute_session_stats()`, `SessionStats.quarantined_trades` + `quarantine_flag`, per-session warning log, console-report markers/summary
+  - `tests/unit/scripts/test_validation_report.py` — 9 tests (predicate detection + no-false-positives + session-stats integration + >20% flag boundary)
+- **Affected Files:** (above)
+- **References:** DEC-2026-05-31-001 (the forward-only PARA-02 code fix this complements); `docs/research/RESEARCH_FIXLIST.md` (PARA-02); DEC-2026-05-27-004 (promotion gate that consumes these stats).
+
+---
+
 **End of Decisions Log**
 
-**Total Decisions:** 71 active, 0 superseded, 5 locked (1 amended)
+**Total Decisions:** 72 active, 0 superseded, 5 locked (1 amended)
 **Last Updated:** 2026-05-31
-**Next Decision ID:** DEC-2026-05-31-002
+**Next Decision ID:** DEC-2026-05-31-003
 
 ## Phase 5 Decisions (Backtesting & Simulation)
 

@@ -89,10 +89,29 @@ class SessionStats:
     max_drawdown_pct: float
     days_active: float
     classification: str
+    # Count of trades dropped from this session's stats because they carry the
+    # PARA-02 corruption signature (force-close exit_price was a dimensionless
+    # equity/position_value ratio, not a market price). Read-time filter only —
+    # the underlying Neon row is never modified. Decision: DEC-2026-05-31-002.
+    quarantined_trades: int = 0
+
+    @property
+    def quarantine_flag(self) -> bool:
+        """True when >20% of this session's raw trades were quarantined.
+
+        Signals that the reported metrics rest on a materially smaller sample
+        than the session actually recorded — treat its classification with care.
+        """
+        raw_total = self.total_trades + self.quarantined_trades
+        if raw_total == 0:
+            return False
+        return (self.quarantined_trades / raw_total) > 0.20
 
     def to_dict(self) -> dict[str, Any]:
         """Serialize for JSON output."""
-        return asdict(self)
+        d = asdict(self)
+        d["quarantine_flag"] = self.quarantine_flag
+        return d
 
 
 def _safe_div(numerator: float, denominator: float) -> float:
@@ -167,9 +186,67 @@ def _classify(
     return "RESEARCH"
 
 
+# -----------------------------------------------------------------------------
+# PARA-02 historical quarantine — read-time filter for corrupted force-closes.
+# Decision: DEC-2026-05-31-002 (depends on DEC-2026-05-31-001, the forward-only
+# code fix). PARA-02 force-closes booked exit_price as the dimensionless
+# `equity / position_value` ratio (~1.x) instead of the market close, so some
+# historical Neon trade_log rows carry fake $1-3 exit prices that pollute
+# per-session PnL/PF/Sharpe. This filter drops ONLY those trades by signature;
+# it never touches the database.
+# -----------------------------------------------------------------------------
+_CORRUPT_EXIT_PRICE_MIN: float = 0.5
+_CORRUPT_EXIT_PRICE_MAX: float = 3.0
+_CORRUPT_ENTRY_EXIT_RATIO: float = 10.0
+# Above this fraction of dropped trades, a session's metrics rest on a
+# materially reduced sample and the session is flagged for the operator.
+_QUARANTINE_FLAG_FRACTION: float = 0.20
+
+
+def _is_corrupt_force_close(trade: dict[str, Any]) -> bool:
+    """Detect a PARA-02-contaminated trade by its unmistakable signature.
+
+    A PARA-02 force-close booked ``exit_price`` as a dimensionless
+    ``equity / position_value`` ratio (~1.x) rather than the market close
+    (see DEC-2026-05-31-001). Real market prices for the traded symbols are
+    never simultaneously inside [0.5, 3.0] AND >10x disconnected from the
+    entry price, so this pair of conditions isolates the corruption without
+    discarding genuine trades (e.g. a real XRP trade near $2 has entry~exit,
+    a ratio of ~1, so it is never flagged).
+
+    Read-time only: this never mutates the stored trade_log.
+
+    Args:
+        trade: One serialized trade dict from ``PaperTradingSession.trade_log``.
+
+    Returns:
+        True if the trade carries the corruption signature and must be dropped.
+    """
+    ep = float(trade.get("entry_price", 0.0))
+    xp = float(trade.get("exit_price", 0.0))
+    if ep <= 0 or xp <= 0:
+        return False
+    # exit_price sits in the equity/position_value ratio band AND is wildly
+    # disconnected (>10x either way) from the real entry price.
+    if _CORRUPT_EXIT_PRICE_MIN <= xp <= _CORRUPT_EXIT_PRICE_MAX and (
+        ep / xp > _CORRUPT_ENTRY_EXIT_RATIO
+        or xp / ep > _CORRUPT_ENTRY_EXIT_RATIO
+    ):
+        return True
+    return False
+
+
 def compute_session_stats(session: PaperTradingSession) -> SessionStats:
-    """Compute all live-paper statistics for one DB row."""
-    trades = session.trade_log or []
+    """Compute all live-paper statistics for one DB row.
+
+    PARA-02 quarantine (DEC-2026-05-31-002): trades carrying the corrupted
+    force-close signature are dropped before any statistic is computed, so
+    they cannot pollute PnL/PF/Sharpe/drawdown. The drop is logged per session
+    and the count is surfaced on the returned ``SessionStats``.
+    """
+    raw_trades = session.trade_log or []
+    trades = [t for t in raw_trades if not _is_corrupt_force_close(t)]
+    quarantined = len(raw_trades) - len(trades)
     pnls = [float(t.get("realized_pnl", 0.0)) for t in trades]
     returns_pct = [float(t.get("return_pct", 0.0)) for t in trades]
     wins_list = [p for p in pnls if p > 0]
@@ -189,6 +266,18 @@ def compute_session_stats(session: PaperTradingSession) -> SessionStats:
     avg_l = statistics.mean(losses_list) if losses_list else 0.0
     classification = _classify(n, pf, sharpe, max_dd)
 
+    if quarantined > 0:
+        raw_total = len(raw_trades)
+        pct_dropped = (quarantined / raw_total * 100.0) if raw_total else 0.0
+        logger.warning(
+            "para02_trades_quarantined",
+            session_id=session.session_id,
+            quarantined=quarantined,
+            raw_total=raw_total,
+            pct_dropped=round(pct_dropped, 1),
+            flagged=pct_dropped > (_QUARANTINE_FLAG_FRACTION * 100.0),
+        )
+
     return SessionStats(
         session_id=session.session_id,
         template_id=session.template_id,
@@ -207,6 +296,7 @@ def compute_session_stats(session: PaperTradingSession) -> SessionStats:
         max_drawdown_pct=max_dd,
         days_active=days_active,
         classification=classification,
+        quarantined_trades=quarantined,
     )
 
 
@@ -321,6 +411,14 @@ def print_console_report(sessions: list[SessionStats]) -> None:
     )
     print("-" * 110)
     for s in sorted(sessions, key=lambda s: (s.template_id, s.realized_pnl)):
+        # PARA-02 quarantine marker (DEC-2026-05-31-002): show how many trades
+        # were dropped, and a [!>20%] flag when the metrics rest on a reduced
+        # sample.
+        q_marker = ""
+        if s.quarantined_trades > 0:
+            q_marker = f"  Q={s.quarantined_trades}" + (
+                " [!>20%]" if s.quarantine_flag else ""
+            )
         print(
             f"{s.session_id:<40} "
             f"{s.total_trades:>4d} "
@@ -331,6 +429,7 @@ def print_console_report(sessions: list[SessionStats]) -> None:
             f"{s.realized_pnl:>+8.2f} "
             f"{s.days_active:>5.1f} "
             f"{s.classification:>14s}"
+            f"{q_marker}"
         )
 
     print()
@@ -371,6 +470,22 @@ def print_console_report(sessions: list[SessionStats]) -> None:
         f"READY_FOR_LIVE={n_ready}  OBSERVING={n_obs}  "
         f"DEGRADED={n_degr}  RESEARCH={n_research}"
     )
+
+    # PARA-02 quarantine summary (DEC-2026-05-31-002).
+    total_quarantined = sum(s.quarantined_trades for s in sessions)
+    if total_quarantined > 0:
+        flagged = [s.session_id for s in sessions if s.quarantine_flag]
+        print()
+        print(
+            f"PARA-02 quarantine: dropped {total_quarantined} corrupted "
+            f"force-close trade(s) at read time (DEC-2026-05-31-002; DB untouched)."
+        )
+        if flagged:
+            print(
+                f"  [!] >20% dropped — metrics on reduced sample: "
+                f"{', '.join(flagged)}"
+            )
+
     if n_ready == 0:
         print()
         print("[!] No sessions currently qualify for live promotion.")
