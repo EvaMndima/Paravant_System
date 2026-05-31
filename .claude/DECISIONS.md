@@ -2309,11 +2309,43 @@ parameters:
 
 ---
 
+### DEC-2026-05-31-001: Fix Research Data-Corruption + Metric-Labeling Bugs (PARA-02, PARA-08, PARA-09)
+
+- **Decision:** Fix three audit findings from `docs/research/RESEARCH_FIXLIST.md` that distort the data the live-promotion infrastructure (DEC-2026-05-27-004/005) consumes, without altering any locked decision or the live trading kill switch:
+  - **PARA-02 (HIGH):** The live-paper force-close on stop priced the final trade at `equity / position_value` — a dimensionless ratio (~1.x), not a market price — booking a BTC exit at ~$1-2 and corrupting `paper_trading_sessions.trade_log`. Fixed to force-close at the last observed market close, mirroring `BacktestEngine`'s end-of-run force-close (`price=last_bar.close`).
+  - **PARA-09 (LOW):** `largest_loss = min(all_pnl)` reported the smallest *win* as "largest loss" on loss-free runs. Fixed to compute `largest_win`/`largest_loss` over the existing winning/losing trade sets, default 0.0 when empty. The symmetric `largest_win` defect (least-bad loss mislabeled as largest win on win-free runs) is fixed in the same change.
+  - **PARA-08 (LOW):** Per-symbol `total_return` summed per-trade percentages. Fixed to compound them: `(prod(1 + return_pct/100) - 1) * 100`.
+- **Context:** The validation_report + demotion guardrail + promotion gate (DEC-2026-05-27-004/005) gate live-capital deployment by reading per-session trade logs and equity curves from Neon. PARA-02 injected fake ~$1-2 force-close prices into those logs, polluting per-session PnL stats with unknown noise. Until fixed, every promotion/demotion decision carried that contamination. PARA-08/09 are localized metric-labeling errors surfaced in the same audit; fixed opportunistically as cheap correctness wins.
+- **Rationale:**
+  - **PARA-02 root cause is missing retained state, not a bad formula.** The force-close runs after the live polling loop exits, by which point the last `series` is out of scope. The original author reverse-engineered a "price" from the equity curve, but `EquityPoint` deliberately stores no price. The fix retains the last close (`_last_close_price`) the moment each bar is processed, mirroring how `BacktestEngine` keeps `series[-1]` in scope through to its force-close. A `None`-safe fallback to the open position's `entry_price` covers the restored-position-then-immediate-stop edge case — always a real, positive price, never a fabricated one, and logged (`force_close_missing_live_close_price`) for observability.
+  - **PARA-09 reuses the existing `winning_trades`/`losing_trades` classification** (zero naming/semantic drift per zero-technical-debt rules).
+  - **PARA-08 compounding** is self-contained (needs no capital base threaded through) and is comparable in spirit to the portfolio-level compounded `total_return_pct`.
+- **Scope / safety:**
+  - Code-path-only fix for FUTURE force-closes. Existing corrupted `trade_log` rows in Neon are NOT migrated or touched.
+  - `LIVE_TRADING_ENABLED` kill switch untouched — stays fail-closed OFF (DEC-2026-05-27-001).
+  - No locked decision affected (spot/market/SQLite/monolithic). No PRD scope change.
+  - PARA-01 (the CRITICAL spot-shorts finding) is NOT addressed here — it remains gated by DEC-2026-05-28-001's staged plan.
+- **Alternatives Considered:**
+  - Persist `_last_close_price` across restarts in the state snapshot: rejected for now — adds save/load schema surface; the `entry_price` fallback already guarantees a real price in the rare no-bar-processed case. Can revisit if the warning fires in production.
+  - Back-fill/repair historical corrupted force-close rows in Neon: rejected — out of scope for a code fix; the constraint was explicitly "don't touch existing trade_log data." Validation consumers can be re-run on clean forward data.
+  - Fix only `largest_loss` (literal PARA-09): rejected — `largest_win` is the identical defect; fixing both is honest and costs one line.
+- **Status:** ACTIVE
+- **Date Decided:** 2026-05-31
+- **Implemented By:**
+  - `src/core/strategy/paper/engine.py` — `_last_close_price` state, capture in `_process_live_bar`, rewritten force-close block in `_run_live`
+  - `src/core/strategy/backtest/metrics.py` — `largest_win`/`largest_loss` over matching trade sets; compounded per-symbol `total_return`
+  - `tests/unit/paper/test_engine.py` — 2 force-close regression tests (real-price + entry-price fallback)
+  - `tests/unit/backtest/test_metrics.py` — 3 regression tests (PARA-09 both directions + PARA-08 compounding)
+- **Affected Files:** (above)
+- **References:** `docs/research/RESEARCH_FIXLIST.md` (PARA-02, PARA-08, PARA-09); DEC-2026-05-27-004 (promotion gate), DEC-2026-05-27-005 (rolling-window validation), DEC-2026-05-27-001 (kill switch).
+
+---
+
 **End of Decisions Log**
 
-**Total Decisions:** 70 active, 0 superseded, 5 locked (1 amended)
+**Total Decisions:** 71 active, 0 superseded, 5 locked (1 amended)
 **Last Updated:** 2026-05-31
-**Next Decision ID:** DEC-2026-05-31-001
+**Next Decision ID:** DEC-2026-05-31-002
 
 ## Phase 5 Decisions (Backtesting & Simulation)
 

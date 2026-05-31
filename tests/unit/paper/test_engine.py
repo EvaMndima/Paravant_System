@@ -9,6 +9,7 @@ import pytest
 
 from src.core.exceptions import PaperTradingError
 from src.core.strategy.backtest.metrics import BacktestMetrics
+from src.core.strategy.backtest.portfolio import OpenPosition
 from src.core.strategy.backtest.types import BacktestConfig
 from src.core.strategy.factory import SignalGeneratorFactory
 from src.core.strategy.paper.engine import PaperTradingEngine
@@ -288,3 +289,91 @@ class TestPaperTradingEngine:
         assert snap["initial_capital"] == 10000.0
         assert "trade_log" in snap
         assert "equity_curve" in snap
+
+    @pytest.mark.asyncio
+    async def test_live_force_close_uses_last_close_price(
+        self,
+        mock_strategy: Strategy,
+        mock_factory: MagicMock,
+        mock_series_provider: AsyncMock,
+    ) -> None:
+        """PARA-02 regression: force-close on stop must book the open position
+        at the last observed market close, not the dimensionless
+        equity/position_value ratio (~$11) the old code produced.
+        """
+        engine = PaperTradingEngine(
+            strategy=mock_strategy,
+            signal_generator_factory=mock_factory,
+            series_provider=mock_series_provider,
+            mode=PaperTradingMode.LIVE,
+        )
+
+        # Inject an open LONG position, as an in-flight/restored session holds.
+        last_close = 10000.0
+        engine._portfolio._position = OpenPosition(
+            symbol="BTCUSDT",
+            direction=SignalDirection.LONG,
+            quantity=0.1,
+            entry_price=9500.0,
+            entry_commission=0.95,
+            entry_slippage=0.5,
+            entry_time=datetime(2025, 1, 1, tzinfo=timezone.utc),
+        )
+        # Record an equity point so the OLD guard would pass and the OLD code
+        # would compute its ratio (equity 11000 / position_value 1000 = 11.0) —
+        # this is what makes the test a true regression for the price bug.
+        engine._portfolio.record_equity(
+            timestamp=datetime(2025, 1, 1, 1, tzinfo=timezone.utc),
+            current_price=last_close,
+        )
+        # The engine has "seen" the market close this run.
+        engine._last_close_price = last_close
+
+        # Pre-signal stop so the polling loop body is skipped and only the
+        # force-close path runs (deterministic, no async timing).
+        engine._stop_event.set()
+        await engine._run_live()
+
+        assert len(engine.portfolio.trade_log) == 1
+        trade = engine.portfolio.trade_log[-1]
+        # Real market price (minus sell-side slippage), NOT the ~$11 ratio.
+        assert trade.exit_price > 100.0
+        assert trade.exit_price == pytest.approx(last_close, rel=0.01)
+
+    @pytest.mark.asyncio
+    async def test_live_force_close_falls_back_to_entry_price(
+        self,
+        mock_strategy: Strategy,
+        mock_factory: MagicMock,
+        mock_series_provider: AsyncMock,
+    ) -> None:
+        """PARA-02: when no live bar was processed this run (last close is
+        None), force-close falls back to the position's entry price — a real,
+        positive price — rather than fabricating one.
+        """
+        engine = PaperTradingEngine(
+            strategy=mock_strategy,
+            signal_generator_factory=mock_factory,
+            series_provider=mock_series_provider,
+            mode=PaperTradingMode.LIVE,
+        )
+
+        entry_price = 9500.0
+        engine._portfolio._position = OpenPosition(
+            symbol="BTCUSDT",
+            direction=SignalDirection.LONG,
+            quantity=0.1,
+            entry_price=entry_price,
+            entry_commission=0.95,
+            entry_slippage=0.5,
+            entry_time=datetime(2025, 1, 1, tzinfo=timezone.utc),
+        )
+        # _last_close_price is intentionally left at its None default.
+        assert engine._last_close_price is None
+
+        engine._stop_event.set()
+        await engine._run_live()
+
+        assert len(engine.portfolio.trade_log) == 1
+        trade = engine.portfolio.trade_log[-1]
+        assert trade.exit_price == pytest.approx(entry_price, rel=0.01)

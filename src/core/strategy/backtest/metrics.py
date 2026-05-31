@@ -229,10 +229,13 @@ class BacktestMetricsCalculator:
         loss_rate_frac = n_losses / total
         expectancy = (win_rate_frac * avg_win) - (loss_rate_frac * avg_loss)
 
-        # Trade extremes
-        all_pnl = [t.realized_pnl for t in trades]
-        largest_win = max(all_pnl) if all_pnl else 0.0
-        largest_loss = min(all_pnl) if all_pnl else 0.0
+        # Trade extremes — computed over the matching trade set (PARA-09).
+        # Taking min()/max() over ALL trades mislabels the extremes: a loss-free
+        # run would report its smallest win as "largest loss", and a win-free
+        # run its least-bad loss as "largest win". Reuse the winning/losing
+        # classification above; default 0.0 when the set is empty.
+        largest_win = max((t.realized_pnl for t in winning_trades), default=0.0)
+        largest_loss = min((t.realized_pnl for t in losing_trades), default=0.0)
 
         # Duration metrics
         durations = [t.duration_hours for t in trades]
@@ -565,7 +568,15 @@ class BacktestMetricsCalculator:
                 pf = float("inf") if gross_profit > 0 else 0.0
 
             win_rate = (len(wins) / n) * 100.0
-            total_return = sum(t.return_pct for t in sym_trades)
+            # Compound per-trade returns rather than summing percentages
+            # (PARA-08). return_pct is a percent (e.g. 2.5 == +2.5%); a plain
+            # sum is not a real return and isn't comparable to the portfolio-
+            # level compounded total_return_pct. Compounding assumes each trade
+            # reinvests the prior result into the next trade's notional.
+            compounded = 1.0
+            for t in sym_trades:
+                compounded *= 1.0 + t.return_pct / 100.0
+            total_return = (compounded - 1.0) * 100.0
 
             breakdown.append({
                 "symbol": symbol,

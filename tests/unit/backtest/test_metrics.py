@@ -113,6 +113,41 @@ class TestBacktestMetricsCalculator:
         assert metrics.win_rate_pct == 0.0
         assert metrics.profit_factor == 0.0
 
+    def test_largest_loss_zero_when_no_losing_trades(self) -> None:
+        """PARA-09: with only winning trades, largest_loss is 0.0 (not the
+        smallest win), and largest_win is the biggest realized PnL."""
+        trades = [
+            _make_trade(pnl=50.0, hour_offset=0),
+            _make_trade(pnl=120.0, hour_offset=5),
+            _make_trade(pnl=30.0, hour_offset=10),
+        ]
+        equity = _make_equity_curve([10000.0, 10050.0, 10170.0, 10200.0])
+        metrics = BacktestMetricsCalculator.calculate(
+            trades=trades,
+            equity_points=equity,
+            initial_capital=10000.0,
+            config=BacktestConfig(),
+        )
+        assert metrics.largest_loss == 0.0
+        assert metrics.largest_win == 120.0
+
+    def test_largest_win_zero_when_no_winning_trades(self) -> None:
+        """PARA-09 (symmetric): with only losing trades, largest_win is 0.0
+        (not the least-bad loss), and largest_loss is the most negative PnL."""
+        trades = [
+            _make_trade(pnl=-30.0, hour_offset=0),
+            _make_trade(pnl=-80.0, hour_offset=5),
+        ]
+        equity = _make_equity_curve([10000.0, 9970.0, 9890.0])
+        metrics = BacktestMetricsCalculator.calculate(
+            trades=trades,
+            equity_points=equity,
+            initial_capital=10000.0,
+            config=BacktestConfig(),
+        )
+        assert metrics.largest_win == 0.0
+        assert metrics.largest_loss == -80.0
+
     def test_mixed_trades_win_rate(self) -> None:
         """Mixed trades should have correct win rate."""
         trades = [
@@ -393,6 +428,20 @@ class TestExtendedMetrics:
     def test_per_symbol_breakdown_empty_trades(self) -> None:
         """Empty trade list should return empty tuple."""
         assert BacktestMetricsCalculator._compute_per_symbol_breakdown([]) == ()
+
+    def test_per_symbol_total_return_compounds(self) -> None:
+        """PARA-08: per-symbol total_return_pct compounds per-trade returns
+        rather than summing percentages. Two +10% trades compound to +21%."""
+        # _make_trade uses entry_price=42000, quantity=0.1 -> entry_value=4200.
+        # pnl=420 -> return_pct = 420 / 4200 * 100 = 10.0% per trade.
+        trades = [
+            _make_trade(pnl=420.0, hour_offset=0),
+            _make_trade(pnl=420.0, hour_offset=5),
+        ]
+        breakdown = BacktestMetricsCalculator._compute_per_symbol_breakdown(trades)
+        assert len(breakdown) == 1
+        # 1.10 * 1.10 - 1 = 0.21 -> 21.0%, NOT the naive 10 + 10 = 20.0%.
+        assert breakdown[0]["total_return_pct"] == pytest.approx(21.0, abs=0.01)
 
     def test_calmar_included_in_calculate(self) -> None:
         """Full calculate() should populate calmar_ratio."""

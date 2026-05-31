@@ -108,6 +108,11 @@ class PaperTradingEngine:
         # Used to replay missed bars after Railway restarts so stop/TP checks
         # are applied to every bar, not just the latest one.
         self._last_bar_timestamp: datetime | None = None
+        # Last observed market close, captured on every processed live bar.
+        # Used to force-close an open position at a real price when the live
+        # loop stops (PARA-02), mirroring BacktestEngine's force-close at
+        # last_bar.close. None until the first live bar is processed.
+        self._last_close_price: float | None = None
 
         logger.info(
             "paper_trading_engine_created",
@@ -594,15 +599,35 @@ class PaperTradingEngine:
             except asyncio.TimeoutError:
                 continue  # Timeout expired, poll again
 
-        # Force-close on stop
-        if self._portfolio.has_position() and self._portfolio.equity_curve:
-            last_point = self._portfolio.equity_curve[-1]
-            self._trader.force_close_at_price(
-                portfolio=self._portfolio,
-                price=last_point.equity / max(1.0, last_point.position_value) if last_point.position_value > 0 else last_point.equity,
-                timestamp=datetime.now(timezone.utc),
-                config=self._config,
-            )
+        # Force-close on stop at the last observed market close, mirroring
+        # BacktestEngine's end-of-run force-close (price=last_bar.close).
+        #
+        # PARA-02: the previous code passed `equity / position_value` — a
+        # dimensionless ratio (~1.x), not a price — which booked the final
+        # trade at ~$1-2 and corrupted the session trade_log that the live-
+        # promotion validation report (DEC-2026-05-27-004/005) reads.
+        if self._portfolio.has_position():
+            close_price = self._last_close_price
+            if close_price is None:
+                # No live bar was processed this run (e.g. a position restored
+                # from a prior session, then stopped before the first poll).
+                # Fall back to the position's entry price: a real, positive
+                # price (~break-even minus exit costs) rather than an invented
+                # one. Logged so this rare path is observable in production.
+                pos = self._portfolio.position
+                close_price = pos.entry_price if pos is not None else None
+                logger.warning(
+                    "force_close_missing_live_close_price",
+                    strategy_id=self._strategy.id,
+                    fallback_entry_price=close_price,
+                )
+            if close_price is not None:
+                self._trader.force_close_at_price(
+                    portfolio=self._portfolio,
+                    price=close_price,
+                    timestamp=datetime.now(timezone.utc),
+                    config=self._config,
+                )
 
         logger.info(
             "live_paper_trading_stopped",
@@ -625,6 +650,11 @@ class PaperTradingEngine:
             series: Latest OHLCV series data.
         """
         current_bar = series[-1]
+        # Retain the latest observed close so a force-close on stop can book
+        # the position at a real market price (PARA-02). Set early — before
+        # signal/stop processing that could raise — so it always reflects the
+        # most recent bar the engine has seen.
+        self._last_close_price = current_bar.close
 
         # --- Gap-replay: check stop/TP on every bar since last poll ---
         # Iterate over all bars newer than _last_bar_timestamp. On the very
