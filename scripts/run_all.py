@@ -82,6 +82,9 @@ def main() -> None:
     signal.signal(signal.SIGTERM, _stop)
     signal.signal(signal.SIGINT, _stop)
 
+    # Lazy import to avoid circular concerns; only the supervisor needs this.
+    from src.utils.geo_block import GEO_BLOCK_EXIT_CODE
+
     # Supervision loop — poll children every 5 seconds.
     while not shutting_down:
         time.sleep(5)
@@ -92,6 +95,23 @@ def main() -> None:
                 continue  # still running
 
             if shutting_down:
+                break
+
+            # Fail-fast contract with the child runners: a geo-block
+            # cannot be fixed by retrying, so the child exits with
+            # GEO_BLOCK_EXIT_CODE (2) to signal "do not restart."
+            # Stop the WHOLE supervisor — both children share the same
+            # Binance API, so if one is geo-blocked, the other is too.
+            # Decision: DEC-2026-06-01-003.
+            if rc == GEO_BLOCK_EXIT_CODE:
+                print(
+                    f"[run_all] {s} exited with GEO_BLOCK_EXIT_CODE "
+                    f"({GEO_BLOCK_EXIT_CODE}). NOT restarting — this is a "
+                    f"Railway region issue, not a transient failure. "
+                    f"Stopping wrapper to surface the problem to the operator.",
+                    flush=True,
+                )
+                shutting_down = True
                 break
 
             restarts[s] += 1

@@ -2455,13 +2455,50 @@ parameters:
 - **Affected Files:** (above)
 - **References:** DEC-2026-06-01-001 (the gate this extends — closes its documented tier-1 follow-up + open-position-edge note); DEC-2026-05-27-004 (promotion gate thresholds — single source of truth); DEC-2026-05-27-001 (kill switch — stays OFF, untouched).
 
+### DEC-2026-06-01-003: Geo-Block Fail-Fast — Skip Useless Retries on Binance Regional Rejection
+
+- **Decision:** When a Binance API call fails with the regulatory geo-restriction signature (`"restricted location"` or `"b. Eligibility"`), both `run_paper_trading.py` and `run_live_trading.py` exit immediately with a dedicated exit code (`GEO_BLOCK_EXIT_CODE = 2`). The `run_all.py` supervisor recognizes this code and does NOT restart — it stops the whole wrapper so the operator can intervene. Diagnostic time goes from ~30 minutes of wasted retries to ~5 seconds.
+- **Context:**
+  - On 2026-06-01 the Railway service began crash-looping with Binance returning `APIError(code=0): Service unavailable from a restricted location ... 'b. Eligibility'`. Root cause was the deployment region (`europe-west4` had been set in March via commit 476878e, but the Railway dashboard region reverted at some point, possibly during a redeploy).
+  - The existing crash-restart harness wasted 25 attempts (5 inner × 5 outer) over ~30 minutes before exhausting — all attempts certain to fail because the rejection is regulatory, not transient. Each restart consumed Railway compute and produced redundant log noise.
+  - The diagnosis was non-obvious from the log pattern; only by reading commit 476878e + d14a9d2 did the root cause become clear. Future occurrences need to surface the cause in seconds, not require git archaeology.
+- **Rationale:**
+  - **Fail-closed on a known-unfixable failure.** Geo-restriction cannot self-heal on retry. The system already has fail-closed semantics for related concerns (kill switch, demotion guardrail, SubRegime UNKNOWN); this extends the same pattern to a runtime failure category.
+  - **Exit-code as inter-process contract.** The supervisor and child processes are independent Python processes; an exit code is the cleanest cross-process signal. Code `2` follows Unix convention for "misuse / configuration error" (distinct from `1` for generic crash).
+  - **Operator-facing message in the log.** When fail-fast triggers, both runners and the supervisor print a banner with: the diagnosis, the fix steps (Railway dashboard region change), known-good regions (europe-west4, asia-southeast1, europe-west1), and a back-reference to this decision + commit 476878e. The operator sees the answer in the log, not just the problem.
+  - **Signatures chosen for specificity.** `"restricted location"` and `"b. Eligibility"` are highly Binance-specific phrases. The generic `"Service unavailable"` was deliberately excluded — it would false-positive on common transient 503s that legitimately benefit from retry.
+- **False-positive avoidance (the critical safety property):**
+  - The test suite asserts the detector does NOT fire on: generic 503 Service Unavailable, network timeouts, invalid API key errors, random RuntimeError, empty strings, KeyboardInterrupt.
+  - A false negative wastes ~30 min of retries (annoying but recoverable). A false positive permanently halts the system on a transient blip (unacceptable). The asymmetry drove the signature choice.
+- **Implementation:**
+  - `src/utils/geo_block.py` (new): `GEO_BLOCK_SIGNATURES`, `GEO_BLOCK_EXIT_CODE`, `is_geo_block_error()`, `print_geo_block_message()`.
+  - `scripts/run_paper_trading.py` `__main__`: detect + print + exit-with-code-2 BEFORE the standard retry loop runs.
+  - `scripts/run_live_trading.py` `__main__`: same pattern, with `logger.error("live_geo_block_detected", ...)` for structured-log correlation.
+  - `scripts/run_all.py` supervisor poll loop: when a child's `proc.poll()` returns `GEO_BLOCK_EXIT_CODE`, the supervisor sets `shutting_down = True` and prints a clear log line — it does not restart because both children share the same Binance API and one being geo-blocked implies the other is too.
+  - `tests/unit/utils/test_geo_block.py` (new): 18 tests covering detection, rejection, exit-code contract, operator message content.
+- **Alternatives Considered:**
+  - **Catch the specific `APIError` exception type and check its code/message.** Rejected — would tie the fail-fast logic to python-binance's exception hierarchy, making it fragile to library updates. String-signature matching is library-agnostic.
+  - **Add `"Service unavailable"` to the signatures.** Rejected — false-positive risk on legitimate 503s. The two specific phrases we kept are unique to Binance regulatory rejections.
+  - **Retry once with exponential backoff before fail-fast.** Rejected — the rejection is regulatory state, not load state; "wait and retry" cannot fix it.
+  - **Auto-switch to a different region/proxy.** Rejected as out of scope; that's an infrastructure decision, not a code one. The fix path remains operator-driven via Railway dashboard.
+- **Status:** ACTIVE
+- **Date Decided:** 2026-06-01
+- **Implemented By:** New `src/utils/geo_block.py` module; integration in `run_paper_trading.py`, `run_live_trading.py`, `run_all.py`; 18 unit tests in `tests/unit/utils/test_geo_block.py`.
+- **Affected Files:**
+  - `src/utils/geo_block.py` (new)
+  - `scripts/run_paper_trading.py`
+  - `scripts/run_live_trading.py`
+  - `scripts/run_all.py`
+  - `tests/unit/utils/test_geo_block.py` (new)
+- **References:** Commit 476878e (original March 2026 region fix), commit d14a9d2 (region key removed from railway.toml because Railway only supports dashboard region config), Railway logs from 2026-06-01T16:40 onward.
+
 ---
 
 **End of Decisions Log**
 
-**Total Decisions:** 75 active, 0 superseded, 5 locked (1 amended)
+**Total Decisions:** 76 active, 0 superseded, 5 locked (1 amended)
 **Last Updated:** 2026-06-01
-**Next Decision ID:** DEC-2026-06-01-003
+**Next Decision ID:** DEC-2026-06-01-004
 
 ## Phase 5 Decisions (Backtesting & Simulation)
 

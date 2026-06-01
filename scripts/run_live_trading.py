@@ -2068,6 +2068,12 @@ async def main() -> None:
 if __name__ == "__main__":
     import time as _time
 
+    from src.utils.geo_block import (
+        GEO_BLOCK_EXIT_CODE,
+        is_geo_block_error,
+        print_geo_block_message,
+    )
+
     MAX_CRASH_RESTARTS = 5
     CRASH_COOLDOWN = 60
 
@@ -2079,6 +2085,19 @@ if __name__ == "__main__":
             print("\nKeyboard interrupt — exiting.")
             break
         except Exception as fatal:
+            # Fail-fast on Binance geo-block: retries cannot fix a
+            # regulatory IP rejection. Exit with the dedicated code
+            # that tells the supervisor NOT to restart.
+            # Decision: DEC-2026-06-01-003.
+            if is_geo_block_error(fatal):
+                logger.error(
+                    "live_geo_block_detected",
+                    error=str(fatal),
+                    attempt=attempt,
+                )
+                print_geo_block_message(context="live_trading")
+                sys.exit(GEO_BLOCK_EXIT_CODE)
+
             print(
                 f"\nFATAL ERROR (attempt {attempt}/{MAX_CRASH_RESTARTS}): {fatal}",
                 flush=True,

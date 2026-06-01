@@ -902,6 +902,12 @@ async def main(lite: bool = False) -> None:
 if __name__ == "__main__":
     import time as _time
 
+    from src.utils.geo_block import (
+        GEO_BLOCK_EXIT_CODE,
+        is_geo_block_error,
+        print_geo_block_message,
+    )
+
     parser = argparse.ArgumentParser(description="PARAVANT Paper Trading Runner")
     parser.add_argument(
         "--lite",
@@ -921,6 +927,14 @@ if __name__ == "__main__":
         except KeyboardInterrupt:
             break
         except Exception as fatal:
+            # Fail-fast on Binance geo-block: retries cannot fix a
+            # regulatory IP rejection, so exit with the dedicated code
+            # that tells the supervisor (run_all.py) NOT to restart.
+            # Decision: DEC-2026-06-01-003.
+            if is_geo_block_error(fatal):
+                print_geo_block_message(context="paper_trading")
+                sys.exit(GEO_BLOCK_EXIT_CODE)
+
             print(
                 f"FATAL (attempt {attempt}/{MAX_CRASH_RESTARTS}): {fatal}",
                 flush=True,
