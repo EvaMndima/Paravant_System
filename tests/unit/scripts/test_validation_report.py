@@ -12,8 +12,13 @@ from datetime import datetime, timezone
 from types import SimpleNamespace
 
 from scripts.validation_report import (
+    PromotionDistance,
+    SessionStats,
+    _distance_cells,
     _is_corrupt_force_close,
+    compact_text,
     compute_session_stats,
+    promotion_distance,
 )
 
 
@@ -111,3 +116,131 @@ class TestQuarantineInSessionStats:
         assert stats.total_trades == 5
         assert stats.quarantined_trades == 1
         assert stats.quarantine_flag is False
+
+
+def _stats(
+    *,
+    session_id: str = "live_test_BTCUSDT",
+    total_trades: int = 0,
+    profit_factor: float = 0.0,
+    sharpe_per_trade: float = 0.0,
+    max_drawdown_pct: float = 0.0,
+    classification: str = "RESEARCH",
+) -> SessionStats:
+    """Build a SessionStats with only the gate-relevant fields varied.
+
+    Non-gate fields are filled with neutral placeholders so the distance
+    computation (which reads only the four gate dimensions) is exercised in
+    isolation.
+    """
+    return SessionStats(
+        session_id=session_id,
+        template_id="test_template",
+        symbol="BTCUSDT",
+        initial_capital=20.0,
+        cash=20.0,
+        total_trades=total_trades,
+        wins=0,
+        losses=0,
+        win_rate_pct=0.0,
+        realized_pnl=0.0,
+        profit_factor=profit_factor,
+        sharpe_per_trade=sharpe_per_trade,
+        avg_win=0.0,
+        avg_loss=0.0,
+        max_drawdown_pct=max_drawdown_pct,
+        days_active=0.0,
+        classification=classification,
+    )
+
+
+class TestPromotionDistance:
+    """Distance-to-promotion gap computation (DEC-2026-06-01-002)."""
+
+    def test_research_zero_trades_needs_full_thirty(self) -> None:
+        d = promotion_distance(_stats(total_trades=0))
+        # N=0 -> needs the full 30 trades; PF/Sharpe 0 -> below floors.
+        assert d.trades_needed == 30
+        assert d.pf_deficit == 1.35
+        assert d.sharpe_deficit == 1.0
+        assert d.dd_overage == 0.0  # 0% DD is within the 5% ceiling
+        assert d.is_ready is False
+
+    def test_partial_progress_floors_at_zero(self) -> None:
+        # N=20 (need +10), PF=1.5 (clears 1.35 -> 0), Sharpe=0.7 (need +0.30),
+        # DD=7% (over the 5% ceiling by 2.0).
+        d = promotion_distance(
+            _stats(total_trades=20, profit_factor=1.5,
+                   sharpe_per_trade=0.7, max_drawdown_pct=7.0)
+        )
+        assert d.trades_needed == 10
+        assert d.pf_deficit == 0.0
+        assert round(d.sharpe_deficit, 4) == 0.3
+        assert d.dd_overage == 2.0
+
+    def test_infinite_pf_clears_pf_dimension(self) -> None:
+        # All-wins sessions have PF=+inf; that must read as a 0 deficit, never
+        # poison the gap with infinity.
+        d = promotion_distance(
+            _stats(total_trades=30, profit_factor=float("inf"),
+                   sharpe_per_trade=2.0, max_drawdown_pct=1.0)
+        )
+        assert d.pf_deficit == 0.0
+        assert d.is_ready is True
+
+    def test_is_ready_matches_all_zero_gaps(self) -> None:
+        # Exactly meeting every threshold -> all gaps zero -> is_ready True.
+        d = promotion_distance(
+            _stats(total_trades=30, profit_factor=1.35,
+                   sharpe_per_trade=1.0, max_drawdown_pct=5.0)
+        )
+        assert d == PromotionDistance(0, 0.0, 0.0, 0.0)
+        assert d.is_ready is True
+
+
+class TestDistanceCells:
+    """ASCII status-cell rendering (project rule: no unicode glyphs)."""
+
+    def test_ok_cells_when_satisfied(self) -> None:
+        cells = _distance_cells(PromotionDistance(0, 0.0, 0.0, 0.0))
+        assert cells == {"trades": "[OK]", "pf": "[OK]", "sharpe": "[OK]", "dd": "[OK]"}
+
+    def test_waiting_and_miss_markers(self) -> None:
+        cells = _distance_cells(PromotionDistance(18, 0.35, 0.30, 2.0))
+        assert cells["trades"] == "[...] +18"
+        assert cells["pf"] == "[MISS] +0.35"
+        assert cells["sharpe"] == "[MISS] +0.30"
+        assert cells["dd"] == "[MISS] -2.0%"
+
+    def test_cells_are_ascii_only(self) -> None:
+        # Guard against accidental reintroduction of unicode glyphs.
+        cells = _distance_cells(PromotionDistance(5, 0.1, 0.1, 0.1))
+        for value in cells.values():
+            assert value.isascii()
+
+
+class TestCompactTextTradeGap:
+    """Compact/Telegram mode shows only the trade gap for brevity."""
+
+    def test_includes_trade_gap_for_non_ready_sessions(self) -> None:
+        sessions = [
+            _stats(session_id="live_a_BTCUSDT", total_trades=12,
+                   profit_factor=1.1, classification="OBSERVING"),
+            _stats(session_id="live_b_ETHUSDT", total_trades=5,
+                   profit_factor=1.1, classification="RESEARCH"),
+        ]
+        text = compact_text(sessions)
+        # Closest-to-ready (fewest trades needed) listed first: a needs +18, b +25.
+        assert "Trades to READY:" in text
+        assert "live_a_BTCUSDT +18" in text
+        assert "live_b_ETHUSDT +25" in text
+        assert text.index("live_a_BTCUSDT") < text.index("live_b_ETHUSDT")
+
+    def test_ready_sessions_excluded_from_trade_gap(self) -> None:
+        sessions = [
+            _stats(session_id="live_ready_BTCUSDT", total_trades=40,
+                   profit_factor=2.0, sharpe_per_trade=1.5,
+                   classification="READY_FOR_LIVE"),
+        ]
+        text = compact_text(sessions)
+        assert "Trades to READY:" not in text

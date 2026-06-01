@@ -2427,11 +2427,41 @@ parameters:
 
 ---
 
+### DEC-2026-06-01-002: Uniform Tier-1 Auto-Promotion Gate + Distance-to-Promotion Reporting
+
+- **Decision:** Two operational refinements to the auto-promotion gate (DEC-2026-06-01-001):
+  1. **Tier 1 is now gated identically to expansion tiers.** A new `_tier1_activation_blocked(template_id)` in `scripts/run_live_trading.py` applies the same READY_FOR_LIVE classification check to the operator-chosen primary tier (`EXPANSION_TIERS[0]`) at startup. If the verdict is a clear non-READY (`db_ok=True`), tier 1 does NOT auto-activate: the runner logs a warning, sends a one-time Telegram alert, and leaves `tier1.active = False`. The gate fails OPEN on DB error (mirrors the demotion guardrail), so a transient outage never blocks a restart.
+  2. **`scripts/validation_report.py` now reports distance-to-promotion.** A new `promotion_distance(stats) -> PromotionDistance` computes, for any session, the minimum additional progress needed on each gate dimension: `trades_needed`, `pf_deficit`, `sharpe_deficit`, `dd_overage` (each floored at 0; a +inf PF reads as 0 deficit). Rendered in the console report (`print_distance_section`, ASCII `[OK]`/`[...]`/`[MISS]` markers), in `--compact`/`--telegram` (trade gap only, for brevity), and in `--json` (`distance_to_promotion`, keyed by session_id).
+- **Context:** DEC-2026-06-01-001 deliberately left tier 1 exempt from the gate and called extending it "a one-line follow-up if desired." With the system now structurally complete and waiting on calendar paper data, the operator wanted (a) the gate rule to be uniform across every live tier so there is no special-case path to reason about at re-enable time, and (b) the daily validation report to answer not just "is this strategy READY?" but "exactly what does each maturing strategy still need?" — turning the report into an actionable dashboard for the calendar wait.
+- **Rationale:**
+  - **Uniformity removes a reasoning hazard:** with tier 1 gated, "no live tier activates unless READY_FOR_LIVE" is now universally true, rather than "...unless it's tier 1." One rule, one mental model, fewer ways to be surprised at re-enable.
+  - **Single source of truth preserved:** `_tier1_activation_blocked` delegates to the existing `_paper_strategy_classification` (which reuses the validation-report helpers), so no thresholds are duplicated — the tier-1 gate, the expansion gate, and the report can never disagree (zero drift).
+  - **Self-healing via the existing loop:** a blocked tier 1 is simply left inactive, so the expansion-activation loop re-evaluates it every poll (its `activation_threshold` is 0.0) and brings it online automatically once paper data clears the gate. This reuses one control-flow path instead of adding a separate tier-1 retry path. Startup pre-sets the `_promotion_alerted` and `_degradation_alerted` state flags so the first poll's re-check does not emit a duplicate blocked alert (honors the existing "alert once per session" contract).
+  - **Distance metric agrees with the gate by construction:** a session whose four distance dimensions are all zero is exactly a READY_FOR_LIVE session, so the new report cannot contradict `_classify`. The distance is purely informational; `classification` remains the source of truth.
+  - **ASCII-only markers:** the report uses `[OK]`/`[...]`/`[MISS]` rather than unicode glyphs, per the project rule against unicode in generated output.
+- **Open-position edge (the reason 06-01-001 deferred this):** DEC-2026-06-01-001 cited "the unmanaged-open-position edge to the bootstrap path" as why it left tier 1 exempt — if tier 1 is blocked while holding an open position, stop/TP enforcement does not run for that position. This is accepted and mitigated rather than eliminated: (1) the runner only launches when `LIVE_TRADING_ENABLED` is truthy, which stays OFF; (2) at the actual re-enable the operator will only flip the switch once tier 1's paper data is READY, so the gate will not block it then; (3) the blocked-tier alert explicitly states when a position is open and unmanaged so the operator can intervene manually; (4) the fail-open-on-DB-error contract means a restart during a transient outage still activates and resumes managing the position.
+- **Alternatives Considered:**
+  - Leave tier 1 exempt (status quo): rejected — the operator explicitly wanted uniformity; the special-case is a latent reasoning hazard.
+  - Manage an open position even when the gate blocks new entries: rejected for v1 — that is a larger change (a "manage-only, no-entry" tier mode) that deserves its own decision and tests; the mitigations above bound the risk for the current dormant state.
+  - Show distance as an extra column in the existing per-session table: rejected — too wide for the console; a dedicated section reads better and is easy to omit for READY sessions.
+  - Full per-dimension distance in the Telegram compact mode: rejected — trade gap only keeps the message tidy; the full breakdown lives in the console + JSON.
+- **Status:** ACTIVE
+- **Date Decided:** 2026-06-01
+- **Implemented By:**
+  - `scripts/run_live_trading.py` — `_tier1_activation_blocked()`; tier-1 startup gate + blocked-tier alert with dedup-flag pre-set in `main()`
+  - `scripts/validation_report.py` — `PromotionDistance`, `promotion_distance()`, `_distance_cells()`, `print_distance_section()`; compact-mode trade gap; `--json` `distance_to_promotion`
+  - `tests/unit/scripts/test_promotion_gate.py` — `TestTier1ActivationGate` (blocked / RESEARCH / READY-allowed / fail-open)
+  - `tests/unit/scripts/test_validation_report.py` — `TestPromotionDistance`, `TestDistanceCells`, `TestCompactTextTradeGap`
+- **Affected Files:** (above)
+- **References:** DEC-2026-06-01-001 (the gate this extends — closes its documented tier-1 follow-up + open-position-edge note); DEC-2026-05-27-004 (promotion gate thresholds — single source of truth); DEC-2026-05-27-001 (kill switch — stays OFF, untouched).
+
+---
+
 **End of Decisions Log**
 
-**Total Decisions:** 74 active, 0 superseded, 5 locked (1 amended)
+**Total Decisions:** 75 active, 0 superseded, 5 locked (1 amended)
 **Last Updated:** 2026-06-01
-**Next Decision ID:** DEC-2026-06-01-002
+**Next Decision ID:** DEC-2026-06-01-003
 
 ## Phase 5 Decisions (Backtesting & Simulation)
 

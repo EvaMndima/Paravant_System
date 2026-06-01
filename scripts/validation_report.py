@@ -116,6 +116,40 @@ class SessionStats:
         return d
 
 
+@dataclass(frozen=True)
+class PromotionDistance:
+    """How far a session is from clearing each READY_FOR_LIVE gate dimension.
+
+    Each field is the minimum additional progress needed on that dimension to
+    satisfy the promotion gate (DEC-2026-05-27-004); 0 means the dimension
+    already passes. A session is READY exactly when all four fields are zero,
+    which (by construction) agrees with ``_classify`` returning READY_FOR_LIVE.
+    Purely informational — ``classification`` remains the source of truth.
+    Decision: DEC-2026-06-01-002.
+    """
+
+    trades_needed: int
+    pf_deficit: float
+    sharpe_deficit: float
+    dd_overage: float
+
+    @property
+    def is_ready(self) -> bool:
+        """True when no dimension has any remaining gap."""
+        return (
+            self.trades_needed == 0
+            and self.pf_deficit == 0.0
+            and self.sharpe_deficit == 0.0
+            and self.dd_overage == 0.0
+        )
+
+    def to_dict(self) -> dict[str, Any]:
+        """Serialize for JSON output."""
+        d = asdict(self)
+        d["is_ready"] = self.is_ready
+        return d
+
+
 def _safe_div(numerator: float, denominator: float) -> float:
     """Return numerator/denominator or 0.0 if denominator is zero."""
     return numerator / denominator if denominator else 0.0
@@ -186,6 +220,40 @@ def _classify(
     ):
         return "OBSERVING"
     return "RESEARCH"
+
+
+def promotion_distance(stats: SessionStats) -> PromotionDistance:
+    """Compute the minimum additional progress needed to reach READY_FOR_LIVE.
+
+    For each promotion-gate dimension (DEC-2026-05-27-004) this returns the gap
+    between the session's current value and the READY threshold, floored at
+    zero (a dimension already satisfied reads 0). It lets the operator see, at
+    a glance, exactly what each maturing strategy still needs rather than only
+    a categorical label. Decision: DEC-2026-06-01-002.
+
+    Args:
+        stats: Computed statistics for one session.
+
+    Returns:
+        A ``PromotionDistance`` with per-dimension gaps.
+    """
+    g = PROMOTION_GATE
+    trades_needed = max(0, int(g["ready_min_trades"]) - stats.total_trades)
+    # Profit factor can be +inf (all wins, zero losses); that clears the PF
+    # floor outright, so the deficit is 0 (math.inf would poison max()).
+    pf_deficit = (
+        max(0.0, float(g["ready_min_pf"]) - stats.profit_factor)
+        if math.isfinite(stats.profit_factor)
+        else 0.0
+    )
+    sharpe_deficit = max(0.0, float(g["ready_min_sharpe"]) - stats.sharpe_per_trade)
+    dd_overage = max(0.0, stats.max_drawdown_pct - float(g["ready_max_dd_pct"]))
+    return PromotionDistance(
+        trades_needed=trades_needed,
+        pf_deficit=pf_deficit,
+        sharpe_deficit=sharpe_deficit,
+        dd_overage=dd_overage,
+    )
 
 
 # -----------------------------------------------------------------------------
@@ -387,6 +455,45 @@ def _fmt_pf(pf: float) -> str:
     return f"{pf:.2f}"
 
 
+# Status markers for the distance-to-promotion view. ASCII only (project rule:
+# no unicode glyphs in generated output). [OK] = dimension already passes;
+# [...] = waiting on more trades (sample too small); [MISS] = a metric is below
+# the threshold with a concrete gap shown. Decision: DEC-2026-06-01-002.
+def _distance_cells(d: PromotionDistance) -> dict[str, str]:
+    """Render each gate dimension as an aligned ASCII status cell."""
+    trades = "[OK]" if d.trades_needed == 0 else f"[...] +{d.trades_needed}"
+    pf = "[OK]" if d.pf_deficit == 0.0 else f"[MISS] +{d.pf_deficit:.2f}"
+    sharpe = "[OK]" if d.sharpe_deficit == 0.0 else f"[MISS] +{d.sharpe_deficit:.2f}"
+    dd = "[OK]" if d.dd_overage == 0.0 else f"[MISS] -{d.dd_overage:.1f}%"
+    return {"trades": trades, "pf": pf, "sharpe": sharpe, "dd": dd}
+
+
+def print_distance_section(sessions: list[SessionStats]) -> None:
+    """Print, for each non-READY session, what it still needs to be promoted.
+
+    READY sessions are omitted (their distance is all-zero by definition).
+    Decision: DEC-2026-06-01-002.
+    """
+    pending = [s for s in sessions if s.classification != "READY_FOR_LIVE"]
+    if not pending:
+        return
+    print()
+    print("DISTANCE TO PROMOTION (what each non-READY session still needs):")
+    print(
+        f"{'session_id':<40} {'trades':<11} {'PF':<13} "
+        f"{'Sharpe':<13} {'MaxDD':<12}"
+    )
+    print("-" * 110)
+    # Closest-to-ready first: fewest trades still needed, then smallest PF gap.
+    for s in sorted(pending, key=lambda s: (promotion_distance(s).trades_needed,
+                                            promotion_distance(s).pf_deficit)):
+        c = _distance_cells(promotion_distance(s))
+        print(
+            f"{s.session_id:<40} {c['trades']:<11} {c['pf']:<13} "
+            f"{c['sharpe']:<13} {c['dd']:<12}"
+        )
+
+
 def print_console_report(sessions: list[SessionStats]) -> None:
     """Print the full report to stdout."""
     if not sessions:
@@ -488,6 +595,11 @@ def print_console_report(sessions: list[SessionStats]) -> None:
                 f"{', '.join(flagged)}"
             )
 
+    # Distance-to-promotion: for every non-READY session, the concrete gap on
+    # each gate dimension (DEC-2026-06-01-002). This is the dashboard during the
+    # calendar wait — it answers "what is each maturing strategy still missing?"
+    print_distance_section(sessions)
+
     if n_ready == 0:
         print()
         print("[!] No sessions currently qualify for live promotion.")
@@ -508,6 +620,27 @@ def compact_text(sessions: list[SessionStats]) -> str:
         f"READY_FOR_LIVE: {n_ready}" + (f" ({', '.join(ready_list)})" if ready_list else ""),
         f"DEGRADED: {n_degr}" + (f" ({', '.join(degr_list)})" if degr_list else ""),
     ]
+
+    # Distance to promotion — compact mode shows only the TRADE gap for brevity
+    # (the full per-dimension breakdown lives in the console report).
+    # Decision: DEC-2026-06-01-002. Closest-to-ready first; cap the list so the
+    # Telegram message stays tidy.
+    trade_gaps = sorted(
+        (
+            (s.session_id, promotion_distance(s).trades_needed)
+            for s in sessions
+            if s.classification != "READY_FOR_LIVE"
+            and promotion_distance(s).trades_needed > 0
+        ),
+        key=lambda item: item[1],
+    )
+    if trade_gaps:
+        shown = trade_gaps[:6]
+        gap_str = ", ".join(f"{sid} +{need}" for sid, need in shown)
+        if len(trade_gaps) > len(shown):
+            gap_str += f", +{len(trade_gaps) - len(shown)} more"
+        parts.append(f"Trades to READY: {gap_str}")
+
     return "\n".join(parts)
 
 
@@ -552,6 +685,13 @@ def main() -> None:
             "promotion_gate": PROMOTION_GATE,
             "sessions": [s.to_dict() for s in sessions],
             "per_template": aggregate_by_template(sessions),
+            # Distance to promotion for every non-READY session, keyed by
+            # session_id (DEC-2026-06-01-002).
+            "distance_to_promotion": {
+                s.session_id: promotion_distance(s).to_dict()
+                for s in sessions
+                if s.classification != "READY_FOR_LIVE"
+            },
         }
         print(json.dumps(out, indent=2, default=str))
         return

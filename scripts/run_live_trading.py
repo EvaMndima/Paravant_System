@@ -667,6 +667,39 @@ def _paper_strategy_classification(template_id: str) -> tuple[str, bool]:
     return _classify(n, pf, sharpe, max_dd), True
 
 
+def _tier1_activation_blocked(template_id: str) -> tuple[bool, str]:
+    """Decide whether tier 1 must NOT auto-activate at startup.
+
+    Applies the same auto-promotion gate as expansion tiers
+    (DEC-2026-06-01-001) to the operator-chosen primary tier so the
+    READY_FOR_LIVE requirement is uniform across every live tier
+    (DEC-2026-06-01-002, closing the tier-1 exemption left open by
+    DEC-2026-06-01-001).
+
+    Fail-open contract (identical to ``_paper_strategy_is_degraded`` and the
+    expansion-tier gate): when the DB cannot be read, ``db_ok`` is False and
+    this returns ``(False, "")`` — a transient outage must never block a
+    restart, because an inactive tier 1 leaves any open position unmanaged
+    (no stop/TP enforcement). Only a successfully-computed non-READY verdict
+    blocks; that fail-closed path is the point of the gate.
+
+    Args:
+        template_id: Strategy template backing tier 1 (``EXPANSION_TIERS[0]``).
+
+    Returns:
+        (blocked, reason). ``blocked`` is True only on a clear non-READY
+        classification; ``reason`` is a one-line explanation for the log +
+        Telegram alert, empty when not blocked.
+    """
+    classification, db_ok = _paper_strategy_classification(template_id)
+    if db_ok and classification != "READY_FOR_LIVE":
+        return True, (
+            f"live-paper performance classified {classification}, "
+            f"not READY_FOR_LIVE"
+        )
+    return False, ""
+
+
 def _make_session_id() -> str:
     """Build unique session key for the primary (tier-1) live config."""
     return f"live_{LIVE_TEMPLATE}_{LIVE_SYMBOL}"
@@ -1614,10 +1647,15 @@ async def main() -> None:
     for tier in EXPANSION_TIERS:
         tier.generator = factory.get_generator(tier.template)
 
-    # Activate tier 1 (threshold=0, always starts immediately)
+    # Activate tier 1 (threshold=0) — now subject to the SAME auto-promotion
+    # gate as expansion tiers (DEC-2026-06-01-002). Tier 1 was exempt under
+    # DEC-2026-06-01-001 ("two decisions" follow-up); this closes that gap so
+    # READY_FOR_LIVE is required uniformly across every live tier. State is
+    # loaded first (read-only) so the alert reports the real position/PnL
+    # whether or not the gate lets the tier trade.
     tier1 = EXPANSION_TIERS[0]
-    tier1.active = True
     tier1.state = load_state(store, tier1.session_id, tier1.symbol, tier1.state_file)
+    tier1_blocked, tier1_block_reason = _tier1_activation_blocked(tier1.template)
 
     mode_label = "TESTNET" if testnet else "REAL MONEY"
     pos_detail = "FLAT"
@@ -1627,23 +1665,65 @@ async def main() -> None:
             f"${tier1.state.get('entry_price', 0):,.2f}"
         )
 
-    await send_alert(
-        title=f"Live Trading Started [{mode_label}]",
-        message=(
-            f"Tier 1: {tier1.label}\n"
-            f"Capital/strategy: ${PER_STRATEGY_CAPITAL:.2f} "
-            f"({PER_STRATEGY_ALLOCATION_PCT:.0%} of ${LIVE_CAPITAL:.2f}, "
-            f"max {MAX_STRATEGIES_LIVE_CONCURRENT} concurrent)\n"
-            f"Per Trade: {POSITION_SIZE_FRACTION:.0%} of equity\n"
-            f"Risk: daily -{MAX_DAILY_LOSS_PCT:.0%} | DD -{MAX_DRAWDOWN_PCT:.0%}\n"
-            f"Mode: {mode_label}\n"
-            f"Position: {pos_detail}\n"
-            f"Realized: ${tier1.state.get('realized_pnl', 0):+.2f}\n"
-            f"Trades: {tier1.state.get('total_trades', 0)}\n"
-            f"Expansion tiers waiting: "
-            f"{sum(1 for t in EXPANSION_TIERS[1:] if not t.active)}"
-        ),
-    )
+    if tier1_blocked:
+        # tier1.active stays False — uniform with expansion-tier gating. The
+        # kill switch is independent and remains in effect (DEC-2026-05-27-001).
+        # If a prior position is open it is NOT managed while inactive; the
+        # alert surfaces this so the operator can intervene manually.
+        logger.warning(
+            "live_tier1_activation_blocked_not_ready",
+            tier=tier1.label,
+            template=tier1.template,
+            reason=tier1_block_reason,
+            in_position=tier1.state.get("in_position", False),
+        )
+        unmanaged_note = (
+            "\n[!] An open position exists and is NOT managed while tier 1 is "
+            "inactive — close it manually if needed."
+            if tier1.state.get("in_position") else ""
+        )
+        await send_alert(
+            title=f"Tier 1 BLOCKED — Not Started [{mode_label}]",
+            message=(
+                f"Tier 1: {tier1.label} ({tier1.template})\n"
+                f"Blocked: {tier1_block_reason}.\n"
+                f"Gate (DEC-2026-05-27-004): N>=30 AND PF>=1.35 AND "
+                f"Sharpe>=1.0 AND MaxDD<=5%.\n"
+                f"Tier 1 will NOT trade until paper data clears the gate.\n"
+                f"Position: {pos_detail}{unmanaged_note}\n"
+                f"Realized: ${tier1.state.get('realized_pnl', 0):+.2f}\n"
+                f"Trades: {tier1.state.get('total_trades', 0)}"
+            ),
+            level=AlertLevel.WARNING,
+        )
+        # Tier 1 stays inactive, so the expansion-activation loop will re-check
+        # it every poll (threshold 0.0) — desirable, as it lets tier 1 come
+        # online automatically once paper data clears the gate. Pre-set the
+        # alert-dedup flags so that re-check does not emit a duplicate blocked
+        # alert this session (mirrors the expansion-tier "alert once" contract;
+        # both flags set because the verdict may be DEGRADED, which the
+        # demotion check would otherwise re-alert).
+        tier1.state["_promotion_alerted"] = True
+        tier1.state["_degradation_alerted"] = True
+    else:
+        tier1.active = True
+        await send_alert(
+            title=f"Live Trading Started [{mode_label}]",
+            message=(
+                f"Tier 1: {tier1.label}\n"
+                f"Capital/strategy: ${PER_STRATEGY_CAPITAL:.2f} "
+                f"({PER_STRATEGY_ALLOCATION_PCT:.0%} of ${LIVE_CAPITAL:.2f}, "
+                f"max {MAX_STRATEGIES_LIVE_CONCURRENT} concurrent)\n"
+                f"Per Trade: {POSITION_SIZE_FRACTION:.0%} of equity\n"
+                f"Risk: daily -{MAX_DAILY_LOSS_PCT:.0%} | DD -{MAX_DRAWDOWN_PCT:.0%}\n"
+                f"Mode: {mode_label}\n"
+                f"Position: {pos_detail}\n"
+                f"Realized: ${tier1.state.get('realized_pnl', 0):+.2f}\n"
+                f"Trades: {tier1.state.get('total_trades', 0)}\n"
+                f"Expansion tiers waiting: "
+                f"{sum(1 for t in EXPANSION_TIERS[1:] if not t.active)}"
+            ),
+        )
 
     # Regime detection: coarse (BTC daily EMA50/EMA200) + fine SubRegime
     # (adds ADX trend strength + realized-vol classification on top of macro).

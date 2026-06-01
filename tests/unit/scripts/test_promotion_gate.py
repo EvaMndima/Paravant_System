@@ -11,7 +11,10 @@ from __future__ import annotations
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
-from scripts.run_live_trading import _paper_strategy_classification
+from scripts.run_live_trading import (
+    _paper_strategy_classification,
+    _tier1_activation_blocked,
+)
 
 
 def _trade(
@@ -107,3 +110,49 @@ class TestQuarantineApplied:
         with _patch_db([_session(good + corrupt)]):
             classification, db_ok = _paper_strategy_classification("with_corruption")
         assert (classification, db_ok) == ("READY_FOR_LIVE", True)
+
+
+class TestTier1ActivationGate:
+    """The tier-1 auto-promotion gate (DEC-2026-06-01-002).
+
+    Tier 1 was exempt from the gate under DEC-2026-06-01-001; this closes that
+    gap so the READY_FOR_LIVE requirement is uniform across every live tier.
+    ``_tier1_activation_blocked`` delegates to the already-tested classifier,
+    so these tests verify only the block/allow/fail-open decision wrapping it.
+    """
+
+    def test_blocked_when_not_ready(self) -> None:
+        # The blocked path: a maturing OBSERVING strategy (N=10, PF>=1.0 but
+        # not yet READY) must NOT auto-start tier 1.
+        trades = [_trade(10.0, 1.0) for _ in range(6)] + [_trade(-5.0, -0.5) for _ in range(4)]
+        with _patch_db([_session(trades)]):
+            blocked, reason = _tier1_activation_blocked("observing_strat")
+        assert blocked is True
+        assert "OBSERVING" in reason
+        assert "not READY_FOR_LIVE" in reason
+
+    def test_blocked_when_research_zero_trades(self) -> None:
+        # The exact gap the gate closes for the primary tier: a brand-new
+        # strategy with N=0 classifies RESEARCH and must be blocked.
+        with _patch_db([_session([])]):
+            blocked, reason = _tier1_activation_blocked("brand_new")
+        assert blocked is True
+        assert "RESEARCH" in reason
+
+    def test_allowed_when_ready(self) -> None:
+        # The tier-1-activates path still works: a READY_FOR_LIVE template is
+        # not blocked, so main() flips tier1.active = True as before.
+        trades = [_trade(10.0, 1.5 if i % 2 == 0 else 2.5) for i in range(30)]
+        with _patch_db([_session(trades)]):
+            blocked, reason = _tier1_activation_blocked("ready_strat")
+        assert blocked is False
+        assert reason == ""
+
+    def test_fail_open_on_db_error(self) -> None:
+        # A transient DB outage must NOT block tier 1 (fail-open), mirroring
+        # the demotion guardrail — an inactive tier 1 leaves any open position
+        # unmanaged, so a restart must not be blocked on a DB read failure.
+        with patch("src.data.database.get_db", side_effect=Exception("db down")):
+            blocked, reason = _tier1_activation_blocked("any")
+        assert blocked is False
+        assert reason == ""
