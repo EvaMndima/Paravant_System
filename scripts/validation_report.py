@@ -48,7 +48,9 @@ from src.data.database import get_db, init_db
 from src.data.models.paper_session import PaperTradingSession
 from src.utils.logging import get_logger, setup_logging
 
-setup_logging(level="WARNING")
+# NOTE: setup_logging() is invoked in main(), not at module scope, so importing
+# this module's reusable helpers (e.g. from run_live_trading's promotion gate)
+# has no logging side effects. Decision: DEC-2026-06-01-001.
 logger = get_logger(__name__)
 
 
@@ -530,6 +532,7 @@ async def send_telegram_summary(text: str) -> None:
 
 
 def main() -> None:
+    setup_logging(level="WARNING")
     parser = argparse.ArgumentParser(description="Live-paper validation report")
     parser.add_argument("--json", action="store_true",
                         help="Output JSON instead of console table")

@@ -69,6 +69,18 @@ from src.data.models.paper_session import PaperTradingSession
 from src.data.store import DataStore
 from src.utils.logging import get_logger
 
+# Reuse the canonical promotion-gate logic from the validation report so the
+# live auto-promotion gate (DEC-2026-06-01-001) and the report (DEC-2026-05-27-004)
+# can never disagree. Import-safe: validation_report calls setup_logging() only
+# inside its main(), not at module scope.
+from scripts.validation_report import (
+    _classify,
+    _is_corrupt_force_close,
+    _max_drawdown_pct,
+    _profit_factor,
+    _sharpe_per_trade,
+)
+
 logger = get_logger(__name__)
 
 # ---------------------------------------------------------------------------
@@ -586,6 +598,73 @@ def _paper_strategy_is_degraded(template_id: str) -> tuple[bool, str]:
             f"Paper PF={pf:.2f} over {n} trades (< {DEGRADATION_MAX_PF} threshold)"
         )
     return False, ""
+
+
+def _paper_strategy_classification(template_id: str) -> tuple[str, bool]:
+    """Classify a template's pooled live-paper performance for the promotion gate.
+
+    Reuses the canonical promotion-gate logic from ``scripts.validation_report``
+    (DEC-2026-05-27-004), so the live auto-promotion gate and the daily report
+    can never disagree: pools every PARA-02-quarantined trade across the
+    template's paper sessions, computes N / profit factor / per-trade Sharpe /
+    max drawdown, and returns one of READY_FOR_LIVE / OBSERVING / DEGRADED /
+    RESEARCH.
+
+    Fail-open contract (mirrors ``_paper_strategy_is_degraded``): the second
+    tuple element ``db_ok`` is False when the database could not be read. The
+    caller treats that as "cannot determine" and does NOT block — so a transient
+    DB outage never blocks a restart (which would leave an open position
+    unmanaged). A successfully-computed non-READY classification has
+    ``db_ok=True`` and the caller blocks: that fail-closed path is the point of
+    the gate (DEC-2026-06-01-001).
+
+    Args:
+        template_id: Strategy template to classify (pooled across its symbols,
+            consistent with the demotion check).
+
+    Returns:
+        (classification, db_ok). On DB error: ("RESEARCH", False) — a safe
+        placeholder the caller ignores because db_ok is False.
+    """
+    try:
+        from src.data.database import get_db
+
+        with get_db() as db:
+            rows = list(
+                db.query(PaperTradingSession)
+                .filter(PaperTradingSession.template_id == template_id)
+                .all()
+            )
+    except Exception as exc:
+        logger.warning(
+            "promotion_classification_failed",
+            template_id=template_id,
+            error=str(exc),
+        )
+        return "RESEARCH", False
+
+    pnls: list[float] = []
+    returns_pct: list[float] = []
+    starting_capital = 0.0
+    for row in rows:
+        starting_capital += float(getattr(row, "initial_capital", 0.0) or 0.0)
+        for trade in (row.trade_log or []):
+            # PARA-02 quarantine (DEC-2026-05-31-002): exclude corrupted
+            # force-close trades so they cannot pollute the classification.
+            if _is_corrupt_force_close(trade):
+                continue
+            pnls.append(float(trade.get("realized_pnl", 0.0)))
+            returns_pct.append(float(trade.get("return_pct", 0.0)))
+
+    n = len(pnls)
+    wins_sum = sum(p for p in pnls if p > 0)
+    losses_sum = sum(p for p in pnls if p <= 0)
+    pf = _profit_factor(wins_sum, losses_sum)
+    sharpe = _sharpe_per_trade(returns_pct)
+    # Pool MaxDD against the summed per-session starting capital. With no rows
+    # (or zero capital) n is also 0, so _classify returns RESEARCH regardless.
+    max_dd = _max_drawdown_pct(pnls, starting_capital) if starting_capital > 0 else 0.0
+    return _classify(n, pf, sharpe, max_dd), True
 
 
 def _make_session_id() -> str:
@@ -1687,6 +1766,38 @@ async def main() -> None:
                                 level=AlertLevel.WARNING,
                             )
                             tier.state["_degradation_alerted"] = True
+                        continue
+
+                    # Auto-promotion gate (DEC-2026-06-01-001): a tier may only
+                    # activate if its pooled live-paper performance is classified
+                    # READY_FOR_LIVE. Closes the gap where a brand-new (N=0 ->
+                    # RESEARCH) or still-maturing (OBSERVING) strategy passed the
+                    # demotion check — which only catches PF<0.8 at N>=10 — and
+                    # activated with no validation. Fails OPEN when the DB can't
+                    # be read (db_ok False), mirroring the demotion check, so a
+                    # transient outage never blocks a restart.
+                    classification, db_ok = _paper_strategy_classification(tier.template)
+                    if db_ok and classification != "READY_FOR_LIVE":
+                        logger.info(
+                            "live_tier_activation_blocked_not_ready",
+                            tier=tier.label,
+                            classification=classification,
+                        )
+                        if not tier.state.get("_promotion_alerted"):
+                            await send_alert(
+                                title=f"Tier Activation Blocked: {tier.label}",
+                                message=(
+                                    f"{tier.label} ({tier.template}) is eligible by "
+                                    f"equity + regime but live-paper performance is "
+                                    f"classified {classification}, not READY_FOR_LIVE.\n"
+                                    f"Gate (DEC-2026-05-27-004): N>=30 AND PF>=1.35 "
+                                    f"AND Sharpe>=1.0 AND MaxDD<=5%.\n"
+                                    f"Tier stays inactive until paper data clears "
+                                    f"the gate."
+                                ),
+                                level=AlertLevel.WARNING,
+                            )
+                            tier.state["_promotion_alerted"] = True
                         continue
 
                     # Portfolio capital limits (PARA-12 / DEC-2026-05-31-003):

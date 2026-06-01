@@ -2397,11 +2397,41 @@ parameters:
 
 ---
 
+### DEC-2026-06-01-001: Auto-Promotion Gate — Require READY_FOR_LIVE Before Live Tier Activation
+
+- **Decision:** A live expansion tier may only activate if its pooled live-paper performance is classified **READY_FOR_LIVE** by the canonical promotion gate (DEC-2026-05-27-004: N>=30 AND PF>=1.35 AND per-trade Sharpe>=1.0 AND MaxDD<=5%). Implemented by a new `_paper_strategy_classification(template_id)` in `scripts/run_live_trading.py`, checked in the tier-activation loop after the existing demotion check. Also: a daily Railway cron runs `validation_report --telegram` at 09:00 UTC for passive visibility (`docs/operations/RAILWAY_CRONS.md`).
+- **Context:** The demotion guardrail (DEC-2026-05-27-004 / `_paper_strategy_is_degraded`) only blocks a tier when paper data shows N>=10 AND PF<0.8. A brand-new strategy with **N=0** classifies RESEARCH and sailed through the activation check with zero validation — as did any OBSERVING (N>=10, PF>=1.0 but not yet proven) strategy. This gate closes that gap: activation now requires positive proof of readiness, not merely the absence of degradation. This is the last structural safety before live re-enable.
+- **Rationale:**
+  - **Single source of truth:** `_paper_strategy_classification` reuses the exact validation-report helpers (`_classify`, `_profit_factor`, `_sharpe_per_trade`, `_max_drawdown_pct`, `_is_corrupt_force_close`) rather than re-deriving thresholds, so the live gate and the daily report can never disagree (zero drift). To make those helpers importable without side effects, `validation_report`'s module-level `setup_logging()` was moved into its `main()`.
+  - **PARA-02 quarantine applied:** the classifier excludes corrupted force-close trades (DEC-2026-05-31-002) before computing stats, so contaminated historical rows cannot fake a READY verdict.
+  - **Fail-open on DB error, fail-closed on a clear verdict:** `_paper_strategy_classification` returns `(classification, db_ok)`. When the DB can't be read (`db_ok=False`) the caller does NOT block — mirroring `_paper_strategy_is_degraded`, so a transient outage never blocks a restart (which would leave an open position unmanaged). A successfully-computed non-READY verdict blocks. The fail-closed path is the point of the gate; the fail-open path preserves restart resilience. The residual risk (a brand-new strategy activating during a DB outage at its first activation) is small, bounded by the per-strategy capital slice, and symmetric with the existing demotion design.
+  - **Alert-once:** a blocked tier sends one Telegram alert per session via a `_promotion_alerted` state flag, mirroring the demotion-blocked alert pattern (no per-poll spam).
+  - **Relationship to demotion:** the gate logically subsumes the demotion check (READY implies not-degraded), but demotion is retained — it fires first with a more specific "PF=x degraded" alert for the actively-bleeding case, and is defense-in-depth.
+- **Scope — tier 1 exempt (deliberate):** the gate applies to **expansion tiers only**. Tier 1 (the operator-chosen primary, `EXPANSION_TIERS[0]`) is bootstrapped active at startup and bypasses the activation loop — exactly as it already bypasses the demotion guardrail. The operator explicitly selects tier 1 and has daily-report visibility into its classification before flipping `LIVE_TRADING_ENABLED`; automation vets the auto-expansion tiers that activate later as equity grows. Extending the gate to tier 1 is a one-line follow-up if desired, but is intentionally not done here to keep the change surgical and avoid introducing the unmanaged-open-position edge to the bootstrap path.
+- **Graduated promotion (OBSERVING at 50% capital) — SKIPPED in v1:** considered allowing OBSERVING strategies to activate at half the normal capital slice. Rejected for v1 because variable per-tier capital interacts with the PER_STRATEGY min-notional floor (DEC-2026-05-31-003: a half-slice could fall below Binance's $5 minimum and silently never trade) and the reserve math, and deserves its own decision with its own tests. The v1 gate is binary: READY_FOR_LIVE or wait.
+- **Safety:** dormant until re-enable — `run_live_trading` only launches when `LIVE_TRADING_ENABLED` is truthy (DEC-2026-05-27-001), which stays OFF. No locked decision touched. The daily cron is read-only (DEC-2026-05-31-002) and safe against Neon.
+- **Alternatives Considered:**
+  - Duplicate the `_classify` thresholds in `run_live_trading`: rejected — drift risk; import the single source instead.
+  - Fail closed on DB error: rejected — would block restarts during transient outages and leave open positions unmanaged, inconsistent with the demotion guardrail's documented rationale.
+  - Gate tier 1 too: deferred — see scope above; consistent with existing demotion exemption, surgical.
+  - Graduated OBSERVING promotion: deferred — see above.
+- **Status:** ACTIVE
+- **Date Decided:** 2026-06-01
+- **Implemented By:**
+  - `scripts/run_live_trading.py` — `_paper_strategy_classification()`; promotion-gate block in the activation loop; import of validation-report helpers
+  - `scripts/validation_report.py` — `setup_logging()` moved into `main()` (import-safety)
+  - `tests/unit/scripts/test_promotion_gate.py` — 7 tests (all 4 classification states, multi-session pooling, fail-open on DB error, PARA-02 quarantine applied)
+  - `docs/operations/RAILWAY_CRONS.md` — daily validation-report cron setup
+- **Affected Files:** (above)
+- **References:** DEC-2026-05-27-004 (promotion gate thresholds — the canonical logic reused); DEC-2026-05-31-002 (PARA-02 quarantine, applied in the classifier); DEC-2026-05-31-003 (per-strategy capital model the gate guards); DEC-2026-05-27-001 (kill switch).
+
+---
+
 **End of Decisions Log**
 
-**Total Decisions:** 73 active, 0 superseded, 5 locked (1 amended)
-**Last Updated:** 2026-05-31
-**Next Decision ID:** DEC-2026-05-31-004
+**Total Decisions:** 74 active, 0 superseded, 5 locked (1 amended)
+**Last Updated:** 2026-06-01
+**Next Decision ID:** DEC-2026-06-01-002
 
 ## Phase 5 Decisions (Backtesting & Simulation)
 
