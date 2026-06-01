@@ -93,6 +93,34 @@ COMMISSION_RATE: float = 0.001
 MAX_DAILY_LOSS_PCT: float = float(os.getenv("MAX_DAILY_LOSS_PCT", "0.10"))   # 10% of initial capital
 MAX_DRAWDOWN_PCT: float = float(os.getenv("MAX_DRAWDOWN_PCT", "0.20"))       # 20% drawdown from initial capital
 
+# ---------------------------------------------------------------------------
+# Portfolio capital model (PARA-12 / DEC-2026-05-31-003).
+#
+# Previously every live tier was allocated the FULL LIVE_CAPITAL, so N
+# concurrent strategies double-counted the account N times and per-strategy
+# returns were not additive (the PARA-12 finding). The portfolio model gives
+# each strategy a SLICE of total capital and bounds how many run at once and
+# how much capital may be committed in aggregate.
+#
+# Each strategy is allocated PER_STRATEGY_ALLOCATION_PCT of LIVE_CAPITAL.
+# At most MAX_STRATEGIES_LIVE_CONCURRENT run simultaneously, and total
+# committed capital across active tiers may never exceed
+# CAPITAL_RESERVE_FRACTION of LIVE_CAPITAL (leaving a cash buffer for fees,
+# slippage, and emergency exits — the reserve principle from
+# docs/research/PORTFOLIO_LAYER_DESIGN.md section 4.3).
+# ---------------------------------------------------------------------------
+MAX_STRATEGIES_LIVE_CONCURRENT: int = int(
+    os.environ.get("MAX_STRATEGIES_LIVE_CONCURRENT", "4")
+)
+PER_STRATEGY_ALLOCATION_PCT: float = float(
+    os.environ.get("PER_STRATEGY_ALLOCATION_PCT", "0.20")
+)
+CAPITAL_RESERVE_FRACTION: float = float(
+    os.environ.get("CAPITAL_RESERVE_FRACTION", "0.85")
+)
+# Capital slice allocated to each live strategy (derived, not the full account).
+PER_STRATEGY_CAPITAL: float = LIVE_CAPITAL * PER_STRATEGY_ALLOCATION_PCT
+
 # Polling interval in seconds (matches paper trading engine)
 POLLING_INTERVAL: int = 60
 
@@ -301,11 +329,17 @@ def _build_tiers() -> list[LiveTier]:
     Bull tiers run when RegimeState.is_bull is True.
     All-regime tiers run regardless of regime.
 
-    Activation thresholds use multiples of LIVE_CAPITAL so they scale
-    automatically with any starting capital (e.g. LIVE_CAPITAL=50 means
-    tier 2 activates at $100, not $40).
+    Activation thresholds use multiples of the per-strategy capital slice
+    (PER_STRATEGY_CAPITAL) so they remain reachable as the active book grows
+    (PARA-12 / DEC-2026-05-31-003).
     """
-    cap = LIVE_CAPITAL
+    # PARA-12: `cap` is the PER-STRATEGY capital slice. Both per-tier capital
+    # and the activation thresholds scale with it, so a tier's threshold stays
+    # reachable from the sum of active slices + PnL (a threshold tied to the
+    # full LIVE_CAPITAL could never be reached from $4 slices). At
+    # LIVE_CAPITAL=$100 with 20% slices this reproduces the original
+    # $0/$40/$60/$80 ladder exactly.
+    cap = PER_STRATEGY_CAPITAL
     tiers = [
         # ----------------------------------------------------------------
         # Bear tiers (validated in bear paper trading, ordered by conviction)
@@ -445,6 +479,56 @@ def _tier_regime_match(
         or (tier.regime_tag == "bear" and regime.is_bear)
         or (tier.regime_tag == "bull" and regime.is_bull)
     )
+
+
+def _can_activate_tier(
+    tier: LiveTier,
+    all_tiers: list[LiveTier],
+    *,
+    max_concurrent: int,
+    reserve_cap_usdt: float,
+) -> tuple[bool, str]:
+    """Decide whether an eligible tier may activate under portfolio limits.
+
+    Portfolio capital model (PARA-12 / DEC-2026-05-31-003). Assumes the
+    caller has already confirmed the tier is eligible by regime, equity
+    threshold, and is not degraded; this adds the two portfolio-level rails:
+
+      1. Concurrency cap — at most ``max_concurrent`` tiers active at once,
+         so capital and correlated risk stay bounded regardless of how many
+         tiers are otherwise eligible.
+      2. Capital reserve — the PROJECTED committed capital (currently active
+         tiers plus this candidate) must not exceed ``reserve_cap_usdt``.
+         The projected (not current-only) check is deliberate: a current-only
+         test would permit one activation that overshoots the reserve.
+
+    Committed capital uses ``tier.capital`` (the fixed allocation), not live
+    equity — the reserve protects the cash buffer, not mark-to-market value.
+
+    Args:
+        tier: The candidate (inactive) tier being considered for activation.
+        all_tiers: Full tier list; active members are summed/counted.
+        max_concurrent: Maximum number of simultaneously active tiers.
+        reserve_cap_usdt: Absolute ceiling on total committed capital
+            (typically ``LIVE_CAPITAL * CAPITAL_RESERVE_FRACTION``).
+
+    Returns:
+        (allowed, reason). ``reason`` is empty when allowed, else a one-line
+        explanation of which rail blocked activation.
+    """
+    active = [t for t in all_tiers if t.active]
+    if len(active) >= max_concurrent:
+        return False, (
+            f"concurrency cap reached ({len(active)}/{max_concurrent} active)"
+        )
+    committed = sum(t.capital for t in active)
+    projected = committed + tier.capital
+    if projected > reserve_cap_usdt:
+        return False, (
+            f"capital reserve: committed ${committed:.2f} + ${tier.capital:.2f} "
+            f"= ${projected:.2f} would exceed reserve cap ${reserve_cap_usdt:.2f}"
+        )
+    return True, ""
 
 
 def _paper_strategy_is_degraded(template_id: str) -> tuple[bool, str]:
@@ -1368,7 +1452,11 @@ async def main() -> None:
     print("=" * 60)
     print("PARAVANT Live Trading Runner (Multi-Tier)")
     print(f"Tier 1:    {LIVE_TEMPLATE} / {LIVE_SYMBOL}")
-    print(f"Capital:   ${LIVE_CAPITAL:.2f} USDT per tier")
+    print(
+        f"Capital:   ${LIVE_CAPITAL:.2f} total | "
+        f"${PER_STRATEGY_CAPITAL:.2f}/strategy ({PER_STRATEGY_ALLOCATION_PCT:.0%}), "
+        f"max {MAX_STRATEGIES_LIVE_CONCURRENT} concurrent"
+    )
     print(f"Testnet:   {os.getenv('BINANCE_TESTNET', 'true')}")
     print(f"Max Daily Loss: {MAX_DAILY_LOSS_PCT:.0%} | Max Drawdown: {MAX_DRAWDOWN_PCT:.0%}")
     print(f"Expansion tiers: {len(EXPANSION_TIERS)} defined")
@@ -1382,14 +1470,24 @@ async def main() -> None:
         print("Server IP: could not determine")
     print("=" * 60)
 
-    usdt_per_trade = LIVE_CAPITAL * POSITION_SIZE_FRACTION
+    # PARA-12 (DEC-2026-05-31-003): each strategy trades its PER_STRATEGY_CAPITAL
+    # slice, not the full account, so the minimum-notional check uses the slice.
+    # Fail closed — refuse to start a config whose per-strategy trade would be
+    # rejected by Binance, rather than activating tiers that silently never
+    # place a valid order.
+    usdt_per_trade = PER_STRATEGY_CAPITAL * POSITION_SIZE_FRACTION
     if usdt_per_trade < BINANCE_MIN_NOTIONAL:
+        min_live_capital = math.ceil(
+            BINANCE_MIN_NOTIONAL
+            / (PER_STRATEGY_ALLOCATION_PCT * POSITION_SIZE_FRACTION)
+        )
         print(
-            f"ERROR: Capital ${LIVE_CAPITAL:.2f} x {POSITION_SIZE_FRACTION:.0%} = "
-            f"${usdt_per_trade:.2f} is below Binance minimum notional "
-            f"(${BINANCE_MIN_NOTIONAL:.2f}). "
-            f"Increase LIVE_CAPITAL_USDT to at least "
-            f"${math.ceil(BINANCE_MIN_NOTIONAL / POSITION_SIZE_FRACTION):.0f}."
+            f"ERROR: Per-strategy capital ${PER_STRATEGY_CAPITAL:.2f} "
+            f"(= ${LIVE_CAPITAL:.2f} x {PER_STRATEGY_ALLOCATION_PCT:.0%}) "
+            f"x {POSITION_SIZE_FRACTION:.0%} position size = ${usdt_per_trade:.2f}, "
+            f"below Binance minimum notional (${BINANCE_MIN_NOTIONAL:.2f}).\n"
+            f"For the portfolio capital model, set LIVE_CAPITAL_USDT to at least "
+            f"${min_live_capital:.0f} (or raise PER_STRATEGY_ALLOCATION_PCT)."
         )
         sys.exit(1)
 
@@ -1454,7 +1552,9 @@ async def main() -> None:
         title=f"Live Trading Started [{mode_label}]",
         message=(
             f"Tier 1: {tier1.label}\n"
-            f"Capital/tier: ${LIVE_CAPITAL:.2f}\n"
+            f"Capital/strategy: ${PER_STRATEGY_CAPITAL:.2f} "
+            f"({PER_STRATEGY_ALLOCATION_PCT:.0%} of ${LIVE_CAPITAL:.2f}, "
+            f"max {MAX_STRATEGIES_LIVE_CONCURRENT} concurrent)\n"
             f"Per Trade: {POSITION_SIZE_FRACTION:.0%} of equity\n"
             f"Risk: daily -{MAX_DAILY_LOSS_PCT:.0%} | DD -{MAX_DRAWDOWN_PCT:.0%}\n"
             f"Mode: {mode_label}\n"
@@ -1588,6 +1688,25 @@ async def main() -> None:
                             )
                             tier.state["_degradation_alerted"] = True
                         continue
+
+                    # Portfolio capital limits (PARA-12 / DEC-2026-05-31-003):
+                    # concurrency cap + capital reserve. An eligible,
+                    # non-degraded tier still waits if the portfolio is already
+                    # at its strategy count or capital ceiling.
+                    can_activate, block_reason = _can_activate_tier(
+                        tier,
+                        EXPANSION_TIERS,
+                        max_concurrent=MAX_STRATEGIES_LIVE_CONCURRENT,
+                        reserve_cap_usdt=LIVE_CAPITAL * CAPITAL_RESERVE_FRACTION,
+                    )
+                    if not can_activate:
+                        logger.info(
+                            "live_tier_activation_deferred",
+                            tier=tier.label,
+                            reason=block_reason,
+                        )
+                        continue
+
                     tier.active = True
                     tier.state = load_state(
                         store, tier.session_id, tier.symbol, tier.state_file

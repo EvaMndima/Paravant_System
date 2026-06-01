@@ -2364,11 +2364,44 @@ parameters:
 
 ---
 
+### DEC-2026-05-31-003: Portfolio Capital Model (PARA-12) — Per-Strategy Allocation, Concurrency Cap, Capital Reserve
+
+- **Decision:** Replace the "every live tier owns the full LIVE_CAPITAL" model in `scripts/run_live_trading.py` with a minimum-viable portfolio capital model:
+  - **Per-strategy allocation:** each tier's `capital` is a slice = `LIVE_CAPITAL * PER_STRATEGY_ALLOCATION_PCT` (default 20%), not the full account.
+  - **Concurrency cap:** at most `MAX_STRATEGIES_LIVE_CONCURRENT` (default 4) tiers active at once, in tier-definition order, even if more are eligible by regime + threshold.
+  - **Capital reserve:** total committed capital across active tiers may never exceed `LIVE_CAPITAL * CAPITAL_RESERVE_FRACTION` (default 0.85); the gate uses the PROJECTED total (active + candidate), not current-only, so no single activation can overshoot the reserve.
+  - Both rails live in a pure, unit-tested helper `_can_activate_tier()`, called in the activation loop after the existing regime/threshold/degradation checks.
+- **Context:** PARA-12 (RESEARCH_FIXLIST): every backtest and every live tier assumed it owned the whole account, so N concurrent strategies double-counted capital N times and per-strategy returns were not additive — portfolio risk was unknown. This is the last structural blocker before live re-enable. The full portfolio layer (ReturnStreamStore, CorrelationEngine, risk-parity Allocator — `docs/research/PORTFOLIO_LAYER_DESIGN.md`) is large and deferred; this decision implements only the capital-allocation + concurrency + reserve rails needed to stop the double-counting and bound aggregate exposure.
+- **Rationale:**
+  - **Slice, not full account:** directly fixes the double-counting. At `LIVE_CAPITAL=$100` with 20% slices, per-strategy capital is $20 and the tier ladder reproduces the original $0/$40/$60/$80 thresholds exactly — the model is the original design expressed honestly at portfolio scale.
+  - **Projected reserve check:** a current-only "if committed > cap" test would allow one activation to breach the reserve; checking `committed + candidate` keeps the 15% buffer intact. Committed capital uses the fixed `tier.capital`, not mark-to-market equity, because the reserve protects the cash buffer.
+  - **Concurrency cap reinforces the decorrelation cap (DEC-2026-05-27-006):** bounds how many strategies — hence how much correlated risk — can be live at once, independent of the same-direction position cap.
+  - **Activation thresholds rebased to the per-strategy slice:** thresholds are multiples of `PER_STRATEGY_CAPITAL`, not `LIVE_CAPITAL`. Tied to the full account they would be unreachable (a $4 slice can never make `active_equity` hit a $40 threshold), so tiers 2-4 would never activate. Rebasing keeps "grow the active book before adding a strategy" reachable.
+- **Minimum-capital consequence (IMPORTANT, money-relevant):** each strategy trades `PER_STRATEGY_CAPITAL * POSITION_SIZE_FRACTION`. With $20 × 20% × 25% = $1, below Binance's $5 minimum notional. The startup guard is now per-strategy-aware and **fails closed** (`sys.exit(1)`) with the exact floor: the 4-strategy model needs `LIVE_CAPITAL ≥ $100` (= 5 / (0.20 × 0.25)), or a higher `PER_STRATEGY_ALLOCATION_PCT`. On the current $20 account the live harness will refuse to start — by design, better than activating tiers that silently never place a valid order.
+- **Safety:**
+  - **Dormant until re-enable:** `run_live_trading` is only launched by `run_all.py` when `LIVE_TRADING_ENABLED` is truthy (DEC-2026-05-27-001); the switch stays OFF, so this changes nothing about live behavior until explicitly turned on with adequate capital.
+  - Sub-min-notional already fails safe at order time (`calculate_quantity` returns 0.0 + warns), so even a misconfig cannot place an invalid order.
+  - All env-overridable; no locked decision touched (still Binance spot, market orders, SQLite/Neon).
+- **Alternatives Considered:**
+  - Full portfolio layer now (CorrelationEngine + Allocator + risk parity): rejected as too large for this step; deferred to PORTFOLIO_LAYER_DESIGN phased rollout. This MVP unblocks live re-enable without it.
+  - Current-only reserve check (literal "total_active_capital > cap"): rejected — permits a single overshoot past the reserve; projected check is safer.
+  - Keep thresholds on LIVE_CAPITAL: rejected — makes tiers 2-4 unreachable under sliced capital (a real bug caught during implementation).
+  - Auto-scale per-strategy % up when few strategies run: rejected as gold-plating; explicit config + fail-closed guard is simpler and safer.
+- **Status:** ACTIVE
+- **Date Decided:** 2026-05-31
+- **Implemented By:**
+  - `scripts/run_live_trading.py` — `MAX_STRATEGIES_LIVE_CONCURRENT`, `PER_STRATEGY_ALLOCATION_PCT`, `CAPITAL_RESERVE_FRACTION`, `PER_STRATEGY_CAPITAL`; `_can_activate_tier()`; `_build_tiers` capital + threshold rebased to the slice; per-strategy fail-closed min-notional guard; activation-loop gate; display labels
+  - `tests/unit/scripts/test_live_capital_model.py` — 6 tests (concurrency cap both sides, reserve both sides, projected-overshoot block, default-config coherence)
+- **Affected Files:** (above)
+- **References:** `docs/research/RESEARCH_FIXLIST.md` (PARA-12); `docs/research/PORTFOLIO_LAYER_DESIGN.md` (full layer, deferred); DEC-2026-05-27-006 (decorrelation cap), DEC-2026-05-27-001 (kill switch), DEC-2026-05-28-002 (the 5 KEEP strategies this allocates across).
+
+---
+
 **End of Decisions Log**
 
-**Total Decisions:** 72 active, 0 superseded, 5 locked (1 amended)
+**Total Decisions:** 73 active, 0 superseded, 5 locked (1 amended)
 **Last Updated:** 2026-05-31
-**Next Decision ID:** DEC-2026-05-31-003
+**Next Decision ID:** DEC-2026-05-31-004
 
 ## Phase 5 Decisions (Backtesting & Simulation)
 
