@@ -2494,11 +2494,285 @@ parameters:
 
 ---
 
+### DEC-2026-06-04-001: Adopt Research Layer PRD v2.0 — Bounded `research/` Module with One-Way Dependency
+
+- **Decision:** Ratify `docs/research/RESEARCH_LAYER_PRD.md` v2.0 as the governing document for all research-layer work. Structure as a top-level `research/` module in the existing repository (NOT a separate project), with the strict one-way dependency rule: `src/` does NOT import from `research/`; `research/` imports from `src/` freely. Strategies graduate from research to production by moving the file from `research/generators/` to `src/core/strategy/generators/` via `scripts/promote_to_production.py`.
+- **Context:** The PARAVANT trading system has matured to a production-quality MVP but the research process feeding it is ad-hoc (no pre-registration, no DSR, no per-symbol cost modeling, no leakage detection, no institutional memory of failed strategies). After three rounds of PRD review (v1.0 → critique → v2.0 → external review of v2.0 + four points baked in), the document is good enough to build. Continued refinement would itself become the "never finish building" trap the PRD warns against.
+- **Rationale:**
+  - **Bounded co-existence over full separation:** sharing data pipelines, regime detector, backtest engine, and decision audit is high-leverage; the one-way dependency boundary prevents research's exploratory standards from contaminating production code.
+  - **No MVP scope change:** locked trading decisions (crypto-only, Binance-only, spot-long-only, market orders) remain in force. The research layer operates entirely upstream of live execution.
+  - **Provability + capital-trajectory framing:** at $20 paper / $100 live floor capital, the research layer cannot serve near-term income generation. The framing is audit-grade documentation as the durable asset — supporting either external capital paths (raise, prop allocation, licensing) or the operator's eventual personal capital trajectory.
+- **Alternatives Considered:**
+  - **Separate project for research:** rejected — would force re-implementation tax on every promotion (research strategy → production strategy duplicates code) and split the decision audit trail.
+  - **Mix research into `src/`:** rejected — would contaminate production code with exploratory standards and looser dependencies (sklearn, scipy, statsmodels).
+  - **Keep ad-hoc research process:** rejected — produces structurally biased results (selection bias, cost-blindness, lookahead), as the BTF post-mortem demonstrates.
+- **Status:** ACTIVE
+- **Date Decided:** 2026-06-04
+- **Implemented By:** `docs/research/RESEARCH_LAYER_PRD.md` v2.0
+- **Affected Files:** `docs/research/RESEARCH_LAYER_PRD.md`, future `research/` directory tree
+- **References:** External Claude critique cycles (3 rounds), DEC-2026-05-31-003 (portfolio capital model), DEC-2026-06-01-001/002 (auto-promotion gate to be amended)
+
+---
+
+### DEC-2026-06-04-002: Mandatory Methodology Primitives for Research Layer
+
+- **Decision:** All research-stage strategy evaluation MUST use the following methodology primitives, enforced by `scripts/eval_research_strategy.py`: (1) **Pre-registration** — every hypothesis declares expected PF, Sharpe, regime, and fail modes BEFORE backtest; CLI refuses to run if missing. (2) **Per-symbol cost modeling** — spread (95th percentile historical) + fee (Binance taker) + slippage (per-symbol historical), with cost model "verified" only against ≥10 real paper-trading fills per symbol; until verified, costs default to 2x estimate (extra-conservative). (3) **Leakage detection** — automated checks for future timestamps in lookback, survivor bias, restatement bias, index reconstitution effects; CLI refuses to run if leakage detected. (4) **Walk-forward validation** — rolling 6-month train / 1-month test for ALL parameter optimization; test data NEVER seen during parameter selection. (5) **Deflated Sharpe Ratio (DSR)** — Bailey/Lopez de Prado 2014, with proper effective-K counting (parameter combos × symbols × timeframes, NOT just ledger entries).
+- **Context:** The previous research process lacked all five primitives. The recently-retired BTF strategy (Q1 100% WR → live PF 0.75) likely failed from a combination of thin-sample overfit + cost-blindness + selection bias — protected against by these primitives.
+- **Rationale:**
+  - **Cost modeling is THE most likely cause of historical backtest-to-live degradation.** On a strategy with 2.8% wins / 1.4% losses, a 0.5% round-trip cost flips PF from 1.5 to <1.0. Without honest cost modeling, backtest results are systematically optimistic.
+  - **Leakage detection is cheap insurance.** A 100% backtest WR is almost always a bug (lookahead, restatement, survivor) — not selection bias. Detection catches the bug class.
+  - **Effective K must include the full hypothesis space.** A grid search of 100 parameter combos × 5 symbols × 3 timeframes = 1,500 effective trials per hypothesis, not 1. The previous (v1.0) homemade multiple-testing formula `1 + 0.05 * ln(K)` was arbitrary and undercounted K by 2-3 orders of magnitude — removed from v2.0; DSR (which already incorporates effective K correctly) is the sole correction.
+  - **Walk-forward is the only structural overfit protection.** Single-window optimization on full history is the #1 cause of overfit.
+  - **Pre-registration eliminates "I knew it would work" bias.** Results dramatically exceeding pre-registration are a RED FLAG (likely overfit or leakage), not a green light.
+- **Alternatives Considered:**
+  - **Optional methodology (operator chooses):** rejected — defeats the purpose; methodology that's optional gets skipped under deadline pressure.
+  - **Keep homemade multi-testing formula:** rejected — not Bonferroni-equivalent, 0.05 coefficient arbitrary, redundant with DSR.
+  - **K = ledger entries only:** rejected — undercounted by 2-3 orders of magnitude, provided no real protection.
+- **Status:** ACTIVE
+- **Date Decided:** 2026-06-04
+- **Implemented By:** Phase R0.5 (weeks 1-4) — `research/backtest/cost_model.py`, `research/backtest/leakage_check.py`, `research/backtest/walk_forward.py`, `research/validation/deflated_sharpe.py`, `research/validation/effective_k.py`
+- **Affected Files:** `scripts/eval_research_strategy.py` (orchestrator), all of above
+- **References:** Bailey & Lopez de Prado 2014 (DSR), Lopez de Prado 2018 (CPCV, deferred), BTF post-mortem (project_backtest_results.md)
+
+---
+
+### DEC-2026-06-04-003: Hypothesis Ledger + Strategy Biography as Canonical Research Truth
+
+- **Decision:** Two YAML-based artifacts are the canonical source of research truth: (1) `research/hypotheses/ledger.yaml` — every hypothesis ever proposed, with pre-registration fields and current status; (2) `research/biographies/<strategy_id>.yaml` — full lifecycle record of every strategy from hypothesis through retirement, including hypothesis history, parameter history, optimization history, backtest history, paper trading history, live deployment history, decay events, re-optimization attempts, decision log, and post-mortem (if retired). Database tables with `research_` prefix are projections of YAML for querying — YAML is canonical, DB is derived.
+- **Context:** Without a canonical ledger, hypotheses get re-tested, lessons get lost, and the "graveyard" becomes dead weight instead of an active learning library. The biography schema is the same for active and retired strategies — retirement adds the post-mortem section but does not change the data structure. This makes "active vs retired" a status field, not a structural divide.
+- **Rationale:**
+  - **YAML over DB-as-source-of-truth:** human-editable, version-controlled in git, survives database migrations, readable without tooling.
+  - **Continuous biography (full circle):** captures the WHY behind every decision, supports informed operator review at Tier B deployment decisions, feeds back into future hypothesis pattern-matching via post-mortems.
+  - **Decisions inline in biography:** every state change references the DEC ID from DECISIONS.md, providing complete audit trail.
+  - **Pattern tags in post-mortems:** retired strategies' lessons are queryable; new hypothesis at Stage 2 surfaces similar past failures.
+- **Alternatives Considered:**
+  - **Database as canonical, YAML as export:** rejected — schema migrations would lock the format too rigidly; YAML's flexibility serves exploratory research better.
+  - **Markdown documents per strategy:** rejected — too unstructured for programmatic queries (effective K calculation, pattern matching).
+  - **Skip biographies, use just the ledger:** rejected — loses the institutional memory that turns the graveyard into a library.
+- **Status:** ACTIVE
+- **Date Decided:** 2026-06-04
+- **Implemented By:** `research/hypotheses/ledger.yaml`, `research/biographies/` directory, `research/biographies/schema.py`
+- **Affected Files:** Hypothesis ledger entries (Appendix B of PRD), strategy biography template (Appendix A), post-mortem template (Appendix C)
+- **References:** DEC-2026-06-04-002 (methodology primitives feed into biography fields), DEC-2026-06-04-011 (post-mortem closes the circle)
+
+---
+
+### DEC-2026-06-04-004: Strategy Graduation Path — `research/generators/` → `src/core/strategy/generators/`
+
+- **Decision:** Strategies graduate from research to production by literally moving the file from `research/generators/<name>.py` to `src/core/strategy/generators/<name>.py` via `scripts/promote_to_production.py`. The CLI runs all production-code-quality checks (type hints, docstrings, unit tests, zero-tech-debt compliance), updates STRATEGY_CONFIG with the new entry, files a decision in DECISIONS.md referencing the promotion, and creates a git commit. **No re-implementation tax** — the same code that ran research-stage evaluation runs in production.
+- **Context:** Most quant systems pay an "integration tax" when research strategies are re-implemented as production strategies (production team rewrites for performance/correctness, introducing bugs). The one-way dependency rule plus this graduation path eliminates that tax: research code is already importing from `src/` for shared infrastructure, so the only change at promotion is the file location.
+- **Rationale:**
+  - **Single implementation across pipeline:** what got DSR-validated in research is what runs in paper and live. No translation, no bugs.
+  - **Production quality bar enforced at promotion:** the script refuses to promote until the code meets production standards (full type hints, docstrings, tests).
+  - **Decision-log integration:** every promotion files a DEC entry with rationale and timing, supporting the audit-grade documentation goal.
+- **Alternatives Considered:**
+  - **Keep research and production as parallel directories with cross-imports:** rejected — would break the one-way dependency rule.
+  - **Re-implement at promotion:** rejected — introduces bugs and discourages promotion.
+- **Status:** ACTIVE
+- **Date Decided:** 2026-06-04
+- **Implemented By:** `scripts/promote_to_production.py` (Phase R0.5)
+- **Affected Files:** All research strategies that graduate
+- **References:** DEC-2026-06-04-001 (one-way dependency rule), DEC-2026-06-04-009 (opt-in deployment)
+
+---
+
+### DEC-2026-06-04-005: Paid Alt-Data Deferred to Capital Threshold ≥ $25,000 (Not Calendar Date)
+
+- **Decision:** Paid alt-data subscriptions (Glassnode at $39-$799/month, CryptoQuant at $29-$499/month, Coin Metrics Network Data Pro) are DEFERRED until working capital reaches a structural threshold, NOT a calendar date. Thresholds: Glassnode + CryptoQuant ≥ $25,000 capital; Coin Metrics Pro ≥ $50,000; Delphi Digital ≥ $100,000.
+- **Context:** PRD v1.0 placed paid alt-data integration in Phase R4 (months 11-14, calendar-scheduled). External review correctly noted the math doesn't pencil at sub-$25k capital: $68/month for the starter Glassnode + CryptoQuant subscriptions is $816/year. At $10k capital with a realistic 30% annual return, that's $3,000 gross — the subscription consumes 27% of gross profit. At $1k capital, the subscription is LARGER than realistic annual returns.
+- **Rationale:**
+  - **Subscription ROI must be structurally affordable.** Tying deferral to capital, not calendar, prevents the "we're in month 11 so we should subscribe" trap.
+  - **Free alternatives suffice at current scale.** Binance futures funding rates and open interest are available for free via API. Fear & Greed Index is free. These cover the most impactful crypto-native signals.
+  - **No commitment by default.** Decision frames paid alt-data as conditional, not promised; reduces psychological pressure to "use the subscription we're paying for" (sunk-cost trap).
+- **Alternatives Considered:**
+  - **Subscribe at Phase R4 regardless of capital (v1.0 framing):** rejected — math doesn't pencil; subscription would consume disproportionate share of returns.
+  - **Subscribe immediately for the data flow itself:** rejected — research value of unused data subscription is zero.
+  - **Never subscribe (free data only forever):** rejected — at $25k+ capital, alt-data unlocks genuinely uncorrelated edge sources worth pursuing.
+- **Status:** ACTIVE
+- **Date Decided:** 2026-06-04
+- **Implemented By:** Section 11.4 of Research Layer PRD v2.0, Appendix D Phase R4 condition
+- **Affected Files:** `docs/research/RESEARCH_LAYER_PRD.md`
+- **References:** External Claude review (capital-relative subscription math), DEC-2026-05-31-003 (current capital structure: $20 paper / $100 live floor)
+
+---
+
+### DEC-2026-06-04-006: Permanent Non-Goals — Structurally Inaccessible or Discredited Capabilities
+
+- **Decision:** The following capabilities are PERMANENTLY out of scope for the research layer, either because they are structurally inaccessible to retail or because the academic literature is clear they do not produce sustainable edge:
+  1. Price-direction ML models (LSTM/Transformer on OHLCV) — literature is clear they almost always overfit
+  2. Deep reinforcement learning agents — fail catastrophically in production
+  3. Auto-discovered strategies without human hypothesis — produce spurious correlations, data mining bias
+  4. HFT / microstructure strategies — retail latency uncompetitive
+  5. Tick-data infrastructure — storage cost prohibitive, marginal value over OHLCV at our timeframes
+  6. Proprietary alt-data licensing (satellite, ship tracking) — institutional cost (5-7 figures/year)
+  7. Co-location at exchanges — requires exchange floor space rental
+  8. Internal market making — institutional capital + regulatory approval required
+  9. Capacity analysis (size-driven slippage modeling) — not relevant below $25k account; deferred above threshold
+- **Context:** Explicitly naming what we will NOT build is as important as naming what we will. Future Claude sessions, future operator instincts, and future "what if we tried..." moments all have a documented answer.
+- **Rationale:**
+  - **Discipline preservation:** without explicit non-goals, the scope-creep gradient is one-way (always toward more features).
+  - **Lesson hard-won:** earlier project iterations included RL (PPO/DDPG) and genetic discovery in the decision layer. Excluding them is institutional learning, not received wisdom.
+  - **Cost-relative analysis:** items 5-7 fail on cost-effectiveness for retail. Items 1-3 fail on academic evidence. Items 8 and 9 fail on structural access.
+- **Alternatives Considered:**
+  - **Leave non-goals implicit (the v1.0 approach):** rejected — silence allows scope creep over years.
+  - **Include some "maybe later" for ML/RL:** rejected — ambiguity is worse than firm exclusion; if it changes, that change requires explicit decision-log entry.
+- **Status:** LOCKED — modification requires explicit PRD update + decision-log entry with strong justification
+- **Date Decided:** 2026-06-04
+- **Implemented By:** Section 4.1 of Research Layer PRD v2.0
+- **Affected Files:** `docs/research/RESEARCH_LAYER_PRD.md`
+- **References:** Lopez de Prado's "Advances in Financial Machine Learning" (ML hardness in finance), prior PARAVANT iterations (RL/genetic discovery removed)
+
+---
+
+### DEC-2026-06-04-007: Research Layer Does NOT Advance MVP Scope
+
+- **Decision:** Building the research layer does NOT advance PARAVANT to V1 or V2 of the trading system. The MVP scope rules (crypto-only, Binance-only, spot-long-only, market orders) remain locked. Research can STUDY strategies that would require out-of-scope features (multi-broker arbitrage, limit orders, futures) but those strategies CANNOT enter the live deployment pipeline without explicit unlocking via new locked-decision review.
+- **Context:** Adding rigorous research methodology to the existing trading system is depth investment within current scope, NOT scope expansion. Research findings might surface ideas that require out-of-scope features ("this strategy needs limit orders to work properly") — those are flagged as deferred-until-trading-V1, not actioned in research.
+- **Rationale:**
+  - **Locked decisions remain locked.** DEC-2026-01-15-001 through DEC-2026-01-15-005 are unchanged by this PRD.
+  - **Research operates upstream of live execution.** No research-layer change touches `scripts/run_live_trading.py` execution paths.
+  - **Live deployment criteria (Tier system) STRENGTHEN the locked decisions** by adding DSR + cost-verification + leakage-check floors on top of existing thresholds.
+- **Alternatives Considered:**
+  - **Use research findings to push for V1 features:** rejected — sequencing matters; research v0.5 must prove the funnel produces survivors before scope expansion is justified.
+- **Status:** ACTIVE
+- **Date Decided:** 2026-06-04
+- **Implemented By:** Section 4.2 of Research Layer PRD v2.0
+- **Affected Files:** `docs/research/RESEARCH_LAYER_PRD.md`, `.claude/rules/mvp-scope-control.md` (unchanged, reaffirmed)
+- **References:** DEC-2026-01-15-001 through DEC-2026-01-15-005 (locked MVP decisions)
+
+---
+
+### DEC-2026-06-04-008: Hybrid Tier A/B/C/D Promotion Model with DSR p<0.3 as Non-Negotiable Statistical Floor
+
+- **Decision:** Replace binary auto-promotion (pass/fail) with a graduated four-tier classification system: **Tier A (FULL_READY)** — DSR p<0.2, MaxDD<5%, PF≥1.35, Sharpe≥1.0, N≥30 → recommended for 100% capital slice deployment; **Tier B (PROVISIONAL_READY)** — DSR p<0.3, MaxDD<5%, PF≥1.25, Sharpe≥0.8, N≥20 → recommended for 50% capital slice deployment (the modal year-1 deployment, given trade-frequency math); **Tier C (NEEDS_WORK)** — DSR p<0.5 OR multiple soft misses → cannot deploy, needs more data or re-optimization; **Tier D (REJECT)** — DSR p≥0.5 OR MaxDD≥10% OR leakage detected OR PBO>0.5 → auto-shelved with post-mortem. Classification is mechanical, based on objective criteria. **No manual override path exists.** The Deflated Sharpe Ratio p-value < 0.3 is the **non-negotiable statistical floor** below which no strategy can deploy at ANY capital allocation, regardless of any other consideration. Hard floors also include MaxDD<5% for Tiers A/B, cost model verified, and leakage check passed.
+- **Context:** The operator correctly identified that binary auto-promotion gates are methodologically wrong: a strategy with PF 1.34 vs threshold 1.35 is statistically indistinguishable from one with PF 1.36, but the binary gate treats them as categorically different. The proposed solution was a "human override" path for strategies that "almost pass." This is the most well-documented failure mode in quant research (confirmation bias). The Tier B mechanism achieves the operator's intent (smaller bets on "almost-passing" strategies) without the override mechanism (which destroys rigor).
+- **Rationale:**
+  - **Tier B handles "almost-passing" mechanically, not via judgment.** Reduced capital instead of zero capital. No override required.
+  - **DSR is the right tool for a non-binary decision.** It encodes the probability that the edge is real, not a binary pass/fail.
+  - **Hard floors prevent the override doorway.** A strategy below DSR p<0.3 cannot deploy at any allocation. This is what separates "graduated rigor" from "human override defeats rigor."
+  - **Modal year-1 deployment is Tier B, not Tier A.** Given 12 trades/quarter at 4H/1D, N=30 takes 7-8 months per strategy. Most year-1 deployments will be Tier B at N=20-29 — this is consciously the steady state, not the exception.
+  - **N=20 floor (raised from initial N=15 proposal) hedges against DSR's reduced reliability at very small N.** Below N≈20, skew and kurtosis estimates that DSR depends on become structurally unmeasurable.
+  - **Tier classification uses BACKTEST N as primary signal.** Live performance never re-tiers a strategy upward; downward only via decay guardrail (Stage 10).
+- **Alternatives Considered:**
+  - **Keep binary auto-promotion + add manual override path:** rejected — most well-documented failure mode in quant research (confirmation bias).
+  - **Tier B at N≥15 (initial proposal):** rejected — DSR's skew/kurtosis estimates structurally unmeasurable below N≈20; "DSR p<0.3 at N=15" carries materially less weight than at N=25.
+  - **Allow operator to bypass hard floors with documented reasoning:** rejected — the floor IS the protection; an opt-out path destroys it.
+- **Status:** ACTIVE
+- **Date Decided:** 2026-06-04
+- **Implemented By:** `research/promotion/classifier.py`, `research/promotion/floors.py`, `scripts/classify_strategy.py`
+- **Affected Files:** Section 9 of Research Layer PRD v2.0
+- **References:** Operator review 2026-06-04 (proposed tier system), external Claude review 2026-06-04 (N=20 floor + modal-deployment honesty), DEC-2026-06-04-009 (opt-in deployment), DEC-2026-06-01-001/002 (will be amended)
+
+---
+
+### DEC-2026-06-04-009: Opt-In Deployment for ALL Tiers — Overrides DEC-2026-06-01-001 Opt-Out Behavior
+
+- **Decision:** All live deployments require explicit operator action (click DEPLOY). The system NEVER auto-deploys, regardless of tier classification. Tier A and Tier B both result in NOTIFICATIONS to the operator with biography link; deployment requires the operator's explicit click. This honors the trading PRD's Section 1.7 locked decision ("Autonomy model: Human approval for live deployment") and **overrides the previous opt-out behavior of DEC-2026-06-01-001/002** (which auto-activated tiers passing the gate unless operator vetoed).
+- **Context:** DEC-2026-06-01-001 was designed to protect against the "never deploy" trap by auto-activating ready strategies. External review correctly noted this silently flipped the trading PRD's locked autonomy posture from opt-in (human approval) to opt-out (auto-deploy unless vetoed). The two cannot both hold; the trading PRD's locked decision wins.
+- **Rationale:**
+  - **Locked decision in trading PRD takes precedence.** Section 1.7 ("Human approval for live deployment") is the explicit autonomy posture for the system.
+  - **Opt-in at N=30 (Tier A) is meaningful protection.** MaxDD<5% over 30 trades can be pure luck; Sharpe at N=30 has wide CI. Operator review is the right protection at this sample size.
+  - **"Never deploy" trap addressed by Tier system + calibration tracking, not by opt-out.** Strategies that have been Tier A or B for >2 weeks without deployment decision are flagged in calibration report. This pressures deployment via visibility, not via automatic action.
+- **Alternatives Considered:**
+  - **Keep opt-out behavior of 06-01-001:** rejected — contradicts trading PRD locked decision; opt-out at small N is statistically risky.
+  - **Opt-out for Tier A, opt-in for Tier B:** rejected — inconsistent autonomy posture is the worst configuration (two mental models to keep in mind).
+- **Status:** ACTIVE — supersedes opt-out behavior aspect of DEC-2026-06-01-001 and DEC-2026-06-01-002
+- **Date Decided:** 2026-06-04
+- **Implemented By:** Updates to `scripts/run_live_trading.py` (`_paper_strategy_classification`, `_tier1_activation_blocked`), notification dispatcher, `scripts/deploy_live.py` CLI
+- **Affected Files:** Section 9.7 of Research Layer PRD v2.0, `scripts/run_live_trading.py`
+- **References:** Trading PRD Section 1.7 (locked autonomy decision), DEC-2026-06-01-001 and DEC-2026-06-01-002 (require amendment), external Claude review 2026-06-04
+
+---
+
+### DEC-2026-06-04-010: Pre-Registered Stop/Pivot Gate at 2026-12-01 with Verified-Cost-Model Criteria
+
+- **Decision:** A pre-registered stop/pivot gate fires on **2026-12-01** (hard date) with the following evaluation criteria: **(A) Continue building** if at least 1 strategy has reached stable Tier A or Tier B classification AND at least 10 hypotheses tested through full pipeline AND cost model verified for 3+ symbols AND operator calibration delta < ±30% on average. **(B) STOP and reassess** if 20+ hypotheses tested with verified cost models + clean leakage checks AND zero have achieved Tier A or Tier B classification AND DSR p-values consistently > 0.5. **Pre-registered definition of "verified cost model"** (to prevent escape-hatch drift): validated against ≥10 actual paper trading fills per symbol; validation must show actual fills within 20% of cost model prediction. **If hard date arrives without methodology verification: failures count anyway.** No further development of Phase R4+ until reassessment.
+- **Context:** PRD v1.0's 30-week roadmap was structurally vulnerable to the "never finish building" trap — 2 years of tooling with zero deployed strategies, rigor as alibi. The hard date + soft criterion combo protects against this. External review correctly noted the cost-verification bottleneck means the hard date will likely fire before the soft "20 verified hypotheses" criterion is fully met for newly-introduced symbols — this is acceptable; the hard date is the protection-of-record.
+- **Rationale:**
+  - **Hard date prevents methodology-theater escape hatches.** Without "failures count regardless of validation status" clause, the operator could perpetually delay the stop by claiming "we just need to verify a few more symbols first."
+  - **Verified cost model criterion is pre-registered to prevent drift.** ≥10 fills + 20% accuracy requirement is locked NOW, cannot be relaxed later.
+  - **Soft criterion is honest-check, not escape hatch.** It functions as additional protection on the same axis as the hard date.
+  - **Continue criteria are intentionally permissive.** "At least 1 Tier A or B" is achievable evidence the funnel works; the goal is to detect "this approach genuinely doesn't work," not to set an aggressive bar.
+- **Alternatives Considered:**
+  - **Calendar only (no soft criterion):** rejected — would fire even if approach is clearly working; soft criterion provides honest-check evidence.
+  - **Soft criterion only (no hard date):** rejected — "we just need to verify a few more symbols" becomes permanently deferrable.
+  - **Different threshold for failures (10 instead of 20):** rejected — 20 provides stronger evidence that the approach is structurally flawed vs just unlucky.
+- **Status:** ACTIVE
+- **Date Decided:** 2026-06-04
+- **Implemented By:** Section 14.2 of Research Layer PRD v2.0; manual evaluation by operator on 2026-12-01
+- **Affected Files:** `docs/research/RESEARCH_LAYER_PRD.md`
+- **References:** External Claude review 2026-06-04 (escape-hatch concern), Risk 14.10 of Research Layer PRD (never deploy trap mitigation)
+
+---
+
+### DEC-2026-06-04-011: Strategy Lifecycle Pipeline Closes the Circle — Post-Mortem Completes Every Retired Strategy
+
+- **Decision:** The strategy lifecycle is an 11-stage CIRCLE, not a linear pipeline. The eleventh stage — POST-MORTEM — is mandatory for every retired strategy. The post-mortem (see Appendix C of PRD) is a structured causal analysis containing: lifecycle summary, primary cause classification (REGIME_SHIFT, PARAMETER_DECAY, MARKET_STRUCTURE_CHANGE, NEVER_VALIDATED, STATISTICAL_NOISE, OPERATIONAL_FAILURE), multi-paragraph causal analysis, contributing factors, lessons extracted with pattern tags, related active strategies with shared risk factors, and searchable terms for graveyard indexing. **Post-mortems feed back to Stage 1 (sourcing)** via pattern-tag matching — when a new hypothesis is proposed, the system surfaces post-mortems sharing pattern tags ("this hypothesis is similar to STRAT_XXX which failed because of regime-detector lag"). The graveyard is a learning library, not a memorial.
+- **Context:** Most retail quant systems treat retired strategies as dead weight — configs deleted, data archived, lessons forgotten. The post-mortem completes the full-circle institutional memory function.
+- **Rationale:**
+  - **The retired strategy IS the lesson.** Each failure carries information about which hypotheses are riskier than they appear.
+  - **Pattern-tag matching surfaces relevant lessons automatically.** Future hypotheses get matched against retired strategies without requiring the operator to remember everything.
+  - **The biography is the SAME for active and retired strategies.** Only the post-mortem section is added; the data structure does not change. "Active vs retired" is a status field, not a structural divide.
+  - **Compounding institutional memory.** Year 2 hypotheses benefit from year 1 post-mortems automatically.
+- **Alternatives Considered:**
+  - **Skip post-mortems for "obvious" failures:** rejected — "obvious" failures are exactly the ones that re-occur because no one wrote down why.
+  - **Post-mortem as free-form text only:** rejected — pattern tags require structured fields for queryability.
+- **Status:** ACTIVE
+- **Date Decided:** 2026-06-04
+- **Implemented By:** Section 10 Stage 11 of Research Layer PRD v2.0, Appendix C post-mortem template, `research/biographies/retired/` directory, `scripts/generate_post_mortem.py` (conditional per DEC-2026-06-04-008's R3.5 deferral; manual generation initially)
+- **Affected Files:** Strategy biography schema (Appendix A), post-mortem template (Appendix C)
+- **References:** Operator request 2026-06-04 ("post-mortem completes the full process, around the circle"), DEC-2026-06-04-003 (biography schema)
+
+---
+
+### DEC-2026-06-04-012: Provability + Future-Capital-Trajectory Framing — Audit-Grade Documentation as Durable Asset
+
+- **Decision:** The research layer is built under a hybrid framing confirmed by the operator: **(1) Build for provability** — audit-grade documentation that could support external capital paths (raise, prop allocation, licensing) if those materialize. Strategy biographies, decision logs, DSR-validated metrics, full-circle lifecycle tracking are first-class deliverables. **(2) Build for the operator's actual future capital trajectory** — whatever capital materializes from other sources (work, savings, business) finds a research-ready system waiting. The framing explicitly REJECTS: promising near-term income (math doesn't work at $20-$10k capital), framing as "preparing for a fundraise" (no fundraise planned), shortcuts on rigor ("it's only $100, doesn't matter"), and scope creep ("more features = more impressive").
+- **Context:** Three rounds of PRD review surfaced the implicit assumption that the system was being built for income generation. At current scale ($20 paper / $100 live floor), this is structurally impossible — even spectacular 50% annual returns on $100 produce $50, not income. The "which game" question needed explicit answering. Operator confirmed both framings simultaneously on 2026-06-04.
+- **Rationale:**
+  - **The rigor is the asset, durable independent of any specific strategy.** Strategies decay; the methodology + documentation persists.
+  - **Allocators weight real live performance heavily, even tiny live performance.** Going live at $100 starts the only clock that matters for the provability prize.
+  - **Future capital trajectory is unknown.** Building to allocator-grade standards keeps optionality open without committing to any specific external-capital path.
+  - **What we are NOT building:** a system whose unspoken goal is near-term income via $100 of capital. That goal cannot be reached by this system at this capital; naming it explicitly prevents drift.
+- **Alternatives Considered:**
+  - **Build for income generation only:** rejected — math doesn't work at $20-$10k capital; this framing leads to disappointment or shortcuts on rigor.
+  - **Build for learning/IP only (accept no income for years):** rejected — under-sells the durable asset that is being built.
+  - **Right-size time allocation downward:** rejected by operator — 70% allocation to research over 2 years is the operator's chosen investment.
+- **Status:** ACTIVE
+- **Date Decided:** 2026-06-04
+- **Implemented By:** Section 2.4 of Research Layer PRD v2.0
+- **Affected Files:** `docs/research/RESEARCH_LAYER_PRD.md`
+- **References:** External Claude reviews 2026-06-04 (raised "which game are we playing" question), operator confirmation 2026-06-04, DEC-2026-05-31-003 (current capital structure)
+
+---
+
+### DEC-2026-06-04-013: Retrospective DSR Cost Application — Incremental Pad Over Booked Costs (Data-Reality Driven)
+
+- **Decision:** The retrospective DSR run (`scripts/retrospective_dsr.py`) applies the v0 conservative cost model as an **INCREMENTAL pad over costs the simulator already booked**, NOT by re-subtracting a full cost model from the recorded returns. The recorded per-trade `return_pct` (the canonical trade source) is already net of the simulator's commission and slippage, so the realistic BASE case is the recorded return unchanged, and the CONSERVATIVE case subtracts only `max(0, conservative_round_trip_cost_pct − booked_cost_pct)`. Three consequent implementation facts are locked in:
+  1. **Canonical trade source is `PaperTradingSession.trade_log`** (a JSON array of `TradeRecord` dicts), selected by `session_id` prefix `paper_<LABEL>_`. There is no `paper_trades` SQL table (the spec's first-draft assumption). This is the SAME source `scripts/validation_report.py` reads, preserving single-source-of-truth, and it reuses `_is_corrupt_force_close` for the PARA-02 quarantine.
+  2. **Realized slippage cannot be measured.** No `signal_price`/`fill_price` fields exist; `entry_price`/`exit_price` ARE the post-slippage fills. So spread and slippage are ESTIMATED (2x-padded) for every symbol per the single-pad rule (the fee is exact and never padded). Recorded as a caveat in every biography.
+  3. **Effective K is an estimated lower bound, not DB-reconstructed.** No parameter-combination counts are recorded in the trade-log DB for these 11 strategies, so K is estimated (~1150 point / 2000 gating) with the mandatory multi-K sweep {115, 500, 2000} and an unconditional `variance_sr` sweep; the gating verdict uses the most conservative end. Derivation stored in each biography (`is_lower_bound: true`).
+- **Context:** Implementation session 2026-06-05 reconnaissance found the trade data differs materially from `docs/research/RETROSPECTIVE_DSR_SPEC.md` Section 5.1's assumptions. Applying the spec's cost model literally to already-net recorded returns would double-charge commission + slippage, rejecting real edge by being too harsh — the exact failure mode the spec's Section 6.5 warns against. Operator (Eva) was presented the fork and chose "Incremental pad only" on 2026-06-05.
+- **Rationale:**
+  - **No double-counting.** Recorded returns already embed the in-sim costs; the conservative case charges only the excess over what is booked, floored at zero.
+  - **Leg-aware notional preserved.** Exit-leg cost is charged on exit notional (`exit_price/entry_price` scaling) so large winners are not under-costed (spec 5.5-pre).
+  - **Honest about unmeasurable components.** Estimating slippage and flagging it beats fabricating a realized-slippage number from data that does not exist.
+  - **Conservative K gates.** Because no opt history exists to reconstruct K, the swept high end (2000) gates, keeping verdicts honest rather than optimistic.
+- **Alternatives Considered:**
+  - **Reconstruct gross then re-cost:** rejected by operator — live records lack a separable slippage figure (real slippage is embedded in fills), making the add-back asymmetric and itself a source of double-charge on the live leg.
+  - **Spec-literal full re-subtraction:** rejected — double-charges costs on already-net returns, manufacturing Tier-D verdicts out of real-but-modest edge.
+- **Status:** ACTIVE
+- **Date Decided:** 2026-06-05
+- **Implemented By:** `scripts/retrospective_dsr.py`, `research/backtest/cost_model.py`, `research/validation/effective_k.py`, `research/promotion/classifier.py`, `research/biographies/schema.py`, `scripts/show_strategy.py`; tests in `tests/research/`
+- **References:** `docs/research/RETROSPECTIVE_DSR_SPEC.md` (Sections 5, 5.5, 6), DEC-2026-06-04-002 (methodology primitives), DEC-2026-06-04-008 (Tier A/B/C/D + DSR floor), DEC-2026-05-31-002 (PARA-02 quarantine), operator decision 2026-06-05. NOTE: the run on real Neon trade logs is executed by the operator (local DATABASE_URL points at an empty SQLite); tier-change DEC entries for individual KEEP strategies are filed AFTER that run.
+
+---
+
 **End of Decisions Log**
 
-**Total Decisions:** 76 active, 0 superseded, 5 locked (1 amended)
-**Last Updated:** 2026-06-01
-**Next Decision ID:** DEC-2026-06-01-004
+**Total Decisions:** 89 active, 0 superseded, 5 locked (1 amended)
+**Last Updated:** 2026-06-05
+**Next Decision ID:** DEC-2026-06-04-014
 
 ## Phase 5 Decisions (Backtesting & Simulation)
 
