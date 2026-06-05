@@ -319,3 +319,38 @@ def mean_round_trip_cost_pct_by_symbol(
         totals[symbol] = totals.get(symbol, 0.0) + breakdown.conservative_round_trip_cost_pct
         counts[symbol] = counts.get(symbol, 0) + 1
     return {sym: totals[sym] / counts[sym] for sym in totals if counts[sym] > 0}
+
+
+def mean_booked_and_incremental_pct(
+    trades: list[dict[str, object]], cost_model: CostModel
+) -> tuple[float, float]:
+    """Mean booked cost and mean incremental pad (%) across a strategy's trades.
+
+    The DIAGNOSTIC that surfaces the schema-evolution risk (code review
+    2026-06-05). The incremental-pad cost decision (operator, 2026-06-05) only
+    holds if the trade records expose ``entry_commission`` /
+    ``exit_commission`` / ``slippage_cost`` so the already-booked cost can be
+    recovered. If those fields are absent in historical records,
+    ``booked_cost_pct`` is ~0 for every trade and the conservative case silently
+    degrades to double-charging (the rejected option C). A near-zero mean booked
+    cost is the unmistakable tell. The runner prints these so the operator can
+    catch it BEFORE trusting any Tier-D verdict.
+
+    Args:
+        trades: Quarantine-filtered trades for one strategy.
+        cost_model: The cost model to apply.
+
+    Returns:
+        ``(mean_booked_cost_pct, mean_incremental_pad_pct)``. Both ``0.0`` when
+        there are no trades.
+    """
+    if not trades:
+        return 0.0, 0.0
+    booked_total = 0.0
+    incremental_total = 0.0
+    for trade in trades:
+        breakdown = compute_cost_breakdown(trade, cost_model)
+        booked_total += breakdown.booked_cost_pct
+        incremental_total += breakdown.incremental_pad_pct
+    n = len(trades)
+    return booked_total / n, incremental_total / n

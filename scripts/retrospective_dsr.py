@@ -65,6 +65,7 @@ import yaml
 from research.backtest.cost_model import (
     CostModel,
     apply_cost_model,
+    mean_booked_and_incremental_pct,
     mean_round_trip_cost_pct_by_symbol,
 )
 from research.biographies.schema import (
@@ -323,6 +324,8 @@ class AnalysisResult:
     final_tier: Tier
     validation_entry: StatisticalValidationEntry
     per_symbol_round_trip_cost_pct: dict[str, float]
+    mean_booked_cost_pct: float
+    mean_incremental_pad_pct: float
 
 
 def analyze_strategy(
@@ -430,6 +433,14 @@ def analyze_strategy(
     per_symbol = _per_symbol_breakdown(trades, cost_model)
     per_symbol_costs = mean_round_trip_cost_pct_by_symbol(trades, cost_model)
 
+    # Diagnostic: mean booked cost vs mean incremental pad. A near-zero mean
+    # booked cost means the historical records lack the commission/slippage
+    # fields, so the conservative case has degraded to double-charging
+    # (code review 2026-06-05). Surfaced to the operator in the run log.
+    mean_booked_cost_pct, mean_incremental_pad_pct = mean_booked_and_incremental_pct(
+        trades, cost_model
+    )
+
     hard_floor = build_hard_floor_status(
         conservative_dsr_p_value=conservative_p,
         conservative_max_dd_pct=max_dd_adjusted,
@@ -485,6 +496,8 @@ def analyze_strategy(
         final_tier=final_tier,
         validation_entry=entry,
         per_symbol_round_trip_cost_pct=per_symbol_costs,
+        mean_booked_cost_pct=mean_booked_cost_pct,
+        mean_incremental_pad_pct=mean_incremental_pad_pct,
     )
 
 
@@ -1062,17 +1075,47 @@ def run_retrospective(
     return results
 
 
+# Below this mean booked-cost (%), the booked cost is effectively zero, which
+# means the historical records lack the commission/slippage fields and the
+# conservative case has degraded to double-charging (code review 2026-06-05).
+_BOOKED_COST_FLOOR_PCT: float = 0.01
+
+
 def _print_operator_costs(result: AnalysisResult) -> None:
-    """Print the per-symbol round-trip cost for operator sanity-check (spec 5.3)."""
+    """Print per-symbol round-trip cost + booked/incremental diagnostic (spec 5.3).
+
+    Surfaces the mean booked cost and mean incremental pad so the operator can
+    catch the schema-evolution failure mode: if mean booked cost is ~0, the
+    incremental-pad decision has silently degraded to double-charging and any
+    Tier-D verdict must NOT be trusted until investigated.
+    """
     logger.info(
         "operator_cost_check",
         strategy_id=result.strategy_id,
         n_trades=result.n_trades_analyzed,
         final_tier=_tier_label(result.final_tier),
+        mean_booked_cost_pct=round(result.mean_booked_cost_pct, 4),
+        mean_incremental_pad_pct=round(result.mean_incremental_pad_pct, 4),
         per_symbol_round_trip_cost_pct={
             k: round(v, 3) for k, v in result.per_symbol_round_trip_cost_pct.items()
         },
     )
+    if (
+        result.n_trades_analyzed > 0
+        and result.mean_booked_cost_pct < _BOOKED_COST_FLOOR_PCT
+    ):
+        logger.warning(
+            "booked_cost_near_zero",
+            strategy_id=result.strategy_id,
+            mean_booked_cost_pct=round(result.mean_booked_cost_pct, 4),
+            message=(
+                "Mean booked cost is ~0: historical records likely lack "
+                "commission/slippage fields, so the conservative case is "
+                "double-charging costs (rejected option C). Do NOT trust this "
+                "strategy's Tier-D verdict until the trade-record schema is "
+                "confirmed to carry entry_commission/exit_commission/slippage_cost."
+            ),
+        )
 
 
 def _write_reports(

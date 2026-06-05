@@ -8,6 +8,7 @@ from research.backtest.cost_model import (
     apply_cost_model,
     booked_cost_pct,
     compute_cost_breakdown,
+    mean_booked_and_incremental_pct,
     mean_round_trip_cost_pct_by_symbol,
 )
 from research.biographies.schema import CostComponentSource
@@ -27,6 +28,41 @@ def _trade(**overrides: object) -> dict[str, object]:
     }
     base.update(overrides)
     return base
+
+
+class TestBookedIncrementalDiagnostic:
+    """The diagnostic that catches the schema-evolution double-charge (review 2026-06-05)."""
+
+    def test_means_nonzero_when_cost_fields_present(self) -> None:
+        cm = CostModel.v0_unverified()
+        trades = [_trade(), _trade(symbol="BTCUSDT", entry_price=50000.0, exit_price=50000.0)]
+        booked, incremental = mean_booked_and_incremental_pct(trades, cm)
+        # Entry notional = 0.10 * 1000 = 100; booked = (0.05+0.05+0.02)/100*100 = 0.12%.
+        assert booked > 0.0
+        assert incremental >= 0.0
+
+    def test_booked_near_zero_when_cost_fields_absent(self) -> None:
+        """The schema-evolution tell: no cost fields -> booked ~0 -> double-charge."""
+        cm = CostModel.v0_unverified()
+        # Records WITHOUT commission/slippage fields (older schema).
+        legacy = [
+            {
+                "symbol": "DOGEUSDT",
+                "entry_price": 0.10,
+                "exit_price": 0.10,
+                "quantity": 1000.0,
+                "return_pct": 1.0,
+            }
+        ]
+        booked, incremental = mean_booked_and_incremental_pct(legacy, cm)
+        assert booked == 0.0  # the unmistakable tell the runner warns on
+        # With booked=0, incremental equals the full conservative round trip.
+        assert incremental > 0.0
+
+    def test_empty_trades_returns_zeros(self) -> None:
+        booked, incremental = mean_booked_and_incremental_pct([], CostModel.v0_unverified())
+        assert booked == 0.0
+        assert incremental == 0.0
 
 
 def test_v0_components_are_all_estimated_and_padded() -> None:
