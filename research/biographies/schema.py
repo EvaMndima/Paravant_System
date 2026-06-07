@@ -49,6 +49,12 @@ class Tier(str, Enum):
     variance_sr) combination pushes the DSR p-value past the deployment floor.
     ``BELOW_FLOOR`` is never a final ``current_classification`` -- the final
     verdict is always one of the four tiers (the conservative case gates it).
+
+    ``INSUFFICIENT_DATA`` (DEC-2026-06-04-014) is returned when N is below the
+    minimum at which DSR's skew/kurtosis moments are meaningful. It is distinct
+    from ``TIER_D`` (REJECT): "no data to judge" is NOT "rejected as noise".
+    Reporting a degenerate N=0..few as TIER_D would wrongly imply a strategy was
+    proven edge-less; INSUFFICIENT_DATA says only that it could not be evaluated.
     """
 
     TIER_A = "TIER_A_FULL_READY"
@@ -56,6 +62,7 @@ class Tier(str, Enum):
     TIER_C = "TIER_C_NEEDS_WORK"
     TIER_D = "TIER_D_REJECT"
     BELOW_FLOOR = "BELOW_FLOOR"
+    INSUFFICIENT_DATA = "INSUFFICIENT_DATA"
 
 
 class CostComponentSource(str, Enum):
@@ -225,6 +232,54 @@ class ClassificationHistoryEntry(BaseModel):
     notes: str = ""
 
 
+class RegimeDSRResult(BaseModel):
+    """DSR verdict for ONE regime bucket of a strategy's backtest trades.
+
+    Produced by the regime-conditional backtest DSR screen (DEC-2026-06-04-014,
+    Phase B). One of these per (strategy x regime) cell in the coverage matrix.
+
+    GUARD (DEC-2026-06-04-014 #4): a cell with ``is_descriptive=True`` is BELOW
+    the minimum N for a meaningful DSR -- it is shown for context only and never
+    gates a decision. GUARD #5: even a passing cell is a SCREEN result, not proof
+    of live edge.
+    """
+
+    model_config = ConfigDict(extra="allow")
+
+    regime: str  # coarse bucket ("bull"/"bear"/"chop") or fine SubRegime value
+    bucket_kind: str  # "coarse" | "sub_regime"
+    n_trades: int
+    pf_adjusted: float
+    sharpe_adjusted: float
+    base_dsr_p_value: float
+    conservative_dsr_p_value: float
+    tier: Tier
+    is_descriptive: bool  # True when N below the minimum -> not gating
+    effective_k: int  # includes the regime-bucket multiplier (guard #2)
+    notes: str = ""
+
+
+class RegimeCoverageRun(BaseModel):
+    """One regime-conditional DSR run's coverage matrix for a strategy.
+
+    Appended to ``regime_coverage``; keyed on ``run_id`` for idempotent re-runs.
+    ``is_screen_only`` is always True: regime-DSR is a pre-paper SCREEN, never a
+    deployment gate (DEC-2026-06-04-014 guard #1).
+    """
+
+    model_config = ConfigDict(extra="allow")
+
+    run_id: str
+    run_date: str
+    cost_model_version: str
+    data_source: str = "regenerated_backtest"
+    is_screen_only: bool = True
+    pooled_tier: Tier
+    pooled_dsr_p_value: float
+    per_regime: list[RegimeDSRResult] = Field(default_factory=list)
+    notes: str = ""
+
+
 class StrategyBiography(BaseModel):
     """Top-level strategy biography (PRD Appendix A).
 
@@ -248,6 +303,8 @@ class StrategyBiography(BaseModel):
     statistical_validation_history: list[StatisticalValidationEntry] = Field(
         default_factory=list
     )
+    # Regime-conditional backtest DSR screen results (DEC-2026-06-04-014, Phase B).
+    regime_coverage: list[RegimeCoverageRun] = Field(default_factory=list)
     decision_log: list[Any] = Field(default_factory=list)
 
     # Sections the retrospective does not own but must round-trip untouched.
@@ -275,6 +332,21 @@ class StrategyBiography(BaseModel):
             True if an entry with this ``run_id`` is already present.
         """
         return any(e.run_id == run_id for e in self.statistical_validation_history)
+
+    def has_regime_coverage(self, run_id: str) -> bool:
+        """Return True if a regime-coverage run with ``run_id`` already exists.
+
+        Idempotent-write guard for the regime-conditional DSR screen
+        (DEC-2026-06-04-014): a re-run with the same ``run_id`` does not append a
+        duplicate coverage matrix.
+
+        Args:
+            run_id: The regime-DSR run identifier to check for.
+
+        Returns:
+            True if a regime-coverage run with this ``run_id`` is present.
+        """
+        return any(e.run_id == run_id for e in self.regime_coverage)
 
     def has_classification_change(self, run_id: str) -> bool:
         """Return True if ``classification_history`` already has this ``run_id``.

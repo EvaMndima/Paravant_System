@@ -168,6 +168,62 @@ def variance_sr_point_estimate(per_strategy_sharpes: list[float]) -> float:
     return max(MIN_VARIANCE_SR, statistics.variance(finite))
 
 
+def regime_conditional_k(
+    base: EffectiveKEstimate, n_regime_buckets: int
+) -> EffectiveKEstimate:
+    """Scale an effective-K estimate by the number of regime buckets tested.
+
+    Guard #2 (DEC-2026-06-04-014): computing DSR separately within each of
+    ``n_regime_buckets`` regime buckets and keeping the best is selection bias
+    ACROSS regimes. The effective number of trials must multiply by the bucket
+    count or the deflation understates the search and the screen is dishonest::
+
+        regime_conditional_K = base_K x n_regime_buckets
+
+    The fixed sensitivity grid (115, 500, 2000) is preserved; the regime-scaled
+    point estimate is folded into the sweep so the gating (highest) K reflects
+    the larger search space.
+
+    Args:
+        base: The non-regime effective-K estimate (param-combos x symbols x
+            timeframes), e.g. from ``estimate_portfolio_k``.
+        n_regime_buckets: Number of regime buckets DSR is computed across (3 for
+            coarse bull/bear/chop, more for fine SubRegimes). Values < 1 are
+            treated as 1 (no regime split adds no trials).
+
+    Returns:
+        A new ``EffectiveKEstimate`` with point estimate and gating K scaled by
+        the bucket count and the derivation annotated for auditability.
+    """
+    buckets = max(1, n_regime_buckets)
+    scaled_point = max(1, base.point_estimate * buckets)
+    sweep = _build_sweep(scaled_point)
+    gating_k = max(sweep)
+
+    d = base.derivation
+    suffix = (
+        f" Regime-conditional: x{buckets} regime buckets counted as trials "
+        f"(guard #2, DEC-2026-06-04-014); base K {base.point_estimate} -> "
+        f"{scaled_point}."
+    )
+    derivation = EffectiveKDerivation(
+        method=d.method,
+        hypotheses_counted=d.hypotheses_counted,
+        symbols_per_hypothesis_avg=d.symbols_per_hypothesis_avg,
+        param_combos_recorded=d.param_combos_recorded,
+        param_combos_estimated=d.param_combos_estimated,
+        effective_k_point_estimate=scaled_point,
+        is_lower_bound=d.is_lower_bound,
+        notes=(d.notes + suffix).strip(),
+    )
+    return EffectiveKEstimate(
+        point_estimate=scaled_point,
+        gating_k=gating_k,
+        sweep=sweep,
+        derivation=derivation,
+    )
+
+
 def variance_sr_sweep(point_estimate: float) -> tuple[float, ...]:
     """Return the variance_sr sweep grid (factors x point estimate).
 

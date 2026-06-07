@@ -1,0 +1,119 @@
+strategy_id: CMF
+status: RETIRED
+symbols: []
+current_classification: INSUFFICIENT_DATA
+classification_history:
+- date: '2026-06-05'
+  classification: TIER_D_REJECT
+  triggered_by: retrospective_dsr_run_20260605
+  cost_model_version: v0_unverified
+  dsr_p_value: 0.9999999999431999
+  notes: 'Retrospective DSR (v0_unverified): None -> TIER_D_REJECT.'
+- date: '2026-06-07'
+  classification: INSUFFICIENT_DATA
+  triggered_by: insufficient_data_correction
+  cost_model_version: v0_unverified
+  dsr_p_value: 0.9999999999431999
+  notes: 'Corrected from TIER_D_REJECT: Neon retrospective had N=4 (<10). Per DEC-2026-06-04-014
+    data scarcity (paper geo-blocked) is INSUFFICIENT_DATA, NOT a reject/edge verdict.'
+statistical_validation_history:
+- run_date: '2026-06-05'
+  run_id: retrospective_dsr_run_20260605
+  cost_model_version: v0_unverified
+  n_trades_analyzed: 4
+  n_trades_quarantined: 0
+  pf_raw: 0.8361660147798041
+  pf_adjusted: 0.6680461733483055
+  sharpe_raw: -0.07654625207952995
+  sharpe_adjusted: -0.17011501327059358
+  max_dd_pct_pooled_base: 4.456233047779349
+  max_dd_pct_pooled_adjusted: 4.927277699962066
+  skewness: -0.02857705840086732
+  kurtosis: 1.1003184333545761
+  effective_k: 1150
+  effective_k_derivation:
+    method: estimated_lower_bound
+    hypotheses_counted: 23
+    symbols_per_hypothesis_avg: 5.0
+    param_combos_recorded: 0
+    param_combos_estimated: 1150
+    effective_k_point_estimate: 1150
+    is_lower_bound: true
+    notes: No parameter-combination counts recorded in the trade-log database for
+      these strategies; param_combos estimated at 50/hypothesis. True K is higher
+      -- treat as a lower bound. Gating verdict uses the highest swept K.
+  variance_sr: 1.0573292656609992
+  dsr_z_score: -5.997807015295328
+  dsr_p_value: 0.9999999999431999
+  base_dsr_p_value: 0.9999908572605456
+  conservative_dsr_p_value: 0.9999999999431999
+  base_tier: TIER_D_REJECT
+  conservative_tier: TIER_D_REJECT
+  fragility: false
+  dsr_k_sensitivity:
+  - k: 115
+    dsr_p_value: 0.9998076658787813
+    tier: TIER_D_REJECT
+  - k: 500
+    dsr_p_value: 0.9999831916445191
+    tier: TIER_D_REJECT
+  - k: 1150
+    dsr_p_value: 0.9999957667258652
+    tier: TIER_D_REJECT
+  - k: 2000
+    dsr_p_value: 0.9999983049950784
+    tier: TIER_D_REJECT
+  dsr_variance_sr_sensitivity:
+  - variance_sr: 0.2643323164152498
+    dsr_p_value: 0.9996261356386629
+    tier: TIER_D_REJECT
+  - variance_sr: 0.5286646328304996
+    dsr_p_value: 0.9999983049950784
+    tier: TIER_D_REJECT
+  - variance_sr: 1.0573292656609992
+    dsr_p_value: 0.9999999999431999
+    tier: TIER_D_REJECT
+  gating_k_used: 2000
+  verdict_is_fragile: false
+  per_symbol_breakdown:
+  - symbol: AVAXUSDT
+    n_trades: 1
+    pf: 0.0
+    sharpe: 0.0
+    round_trip_cost_pct: 0.6071528928222666
+    cost_source: estimated
+  - symbol: ETHUSDT
+    n_trades: 2
+    pf: 0.9215983558064759
+    sharpe: -0.028850115372912512
+    round_trip_cost_pct: 0.475164341436082
+    cost_source: estimated
+  - symbol: XRPUSDT
+    n_trades: 1
+    pf: 999.99
+    sharpe: 0.0
+    round_trip_cost_pct: 0.5548068474124114
+    cost_source: estimated
+  hard_floor_status:
+    dsr_passed: false
+    max_dd_passed: true
+    cost_model_verified: false
+    leakage_check: not_run
+  classified_tier: TIER_D_REJECT
+  classification_reasoning: Gating (conservative) DSR p=1.000, MaxDD=4.93%, N=4. Base
+    tier TIER_D_REJECT; conservative tier TIER_D_REJECT.
+  pbo_score: null
+decision_log:
+- 'PENDING-DEC: Retrospective DSR reclassified CMF from None to TIER_D_REJECT (run
+  retrospective_dsr_run_20260605). File DEC entry in BOTH .claude/DECISIONS.md and
+  .agent/DECISIONS.md after operator review.'
+hypothesis_history: []
+parameter_history: []
+optimization_history: []
+backtest_history: []
+paper_trading_history: []
+live_deployment_history: []
+decay_events: []
+reoptimization_history: []
+correlation_with_portfolio: {}
+post_mortem: null

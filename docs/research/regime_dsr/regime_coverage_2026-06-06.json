@@ -1,0 +1,47 @@
+{
+  "run_date": "2026-06-06",
+  "cost_model_version": "v0_unverified",
+  "is_screen_only": true,
+  "strategies": {
+    "BTF": {
+      "pooled_tier": "TIER_D_REJECT",
+      "pooled_dsr_p_value": 1.0,
+      "pooled_n": 997,
+      "per_regime": [
+        {
+          "regime": "bull",
+          "tier": "TIER_D_REJECT",
+          "n_trades": 411,
+          "base_dsr_p_value": 1.0,
+          "conservative_dsr_p_value": 1.0,
+          "pf_adjusted": 0.7174475145094941,
+          "sharpe_adjusted": -0.13925230323659862,
+          "is_descriptive": false,
+          "effective_k": 3450
+        },
+        {
+          "regime": "bear",
+          "tier": "TIER_D_REJECT",
+          "n_trades": 375,
+          "base_dsr_p_value": 1.0,
+          "conservative_dsr_p_value": 1.0,
+          "pf_adjusted": 0.6562468655214135,
+          "sharpe_adjusted": -0.1733685339473605,
+          "is_descriptive": false,
+          "effective_k": 3450
+        },
+        {
+          "regime": "chop",
+          "tier": "TIER_D_REJECT",
+          "n_trades": 201,
+          "base_dsr_p_value": 0.9999315907495995,
+          "conservative_dsr_p_value": 0.9999999999951381,
+          "pf_adjusted": 1.065954778764112,
+          "sharpe_adjusted": 0.02563401681859295,
+          "is_descriptive": false,
+          "effective_k": 3450
+        }
+      ]
+    }
+  }
+}

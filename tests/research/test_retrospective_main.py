@@ -148,10 +148,16 @@ def test_reports_render_without_error(k_estimate, tmp_path) -> None:
 
 
 def test_degenerate_small_sample_does_not_crash(k_estimate) -> None:
-    """A sub-2-trade sample yields the worst p-value, not an exception."""
+    """A sub-2-trade sample yields the worst p-value and INSUFFICIENT_DATA.
+
+    The DSR still computes a degenerate worst-case p (no exception), but the
+    classifier now reports INSUFFICIENT_DATA rather than a reject tier: below the
+    minimum N the verdict is "no data to judge", NOT "proven noise"
+    (DEC-2026-06-04-014). This was the 2026-06-05 Neon-run misread the guard fixes.
+    """
     result = _analyze([_trade("DOGEUSDT", 1.0, 0)], k_estimate)
     assert result.validation_entry.conservative_dsr_p_value == 1.0
-    assert result.final_tier in (Tier.TIER_C, Tier.TIER_D)
+    assert result.final_tier == Tier.INSUFFICIENT_DATA
 
 
 def test_strategy_universe_has_eleven(k_estimate) -> None:

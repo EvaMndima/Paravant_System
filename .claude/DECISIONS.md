@@ -2761,18 +2761,45 @@ parameters:
 - **Alternatives Considered:**
   - **Reconstruct gross then re-cost:** rejected by operator — live records lack a separable slippage figure (real slippage is embedded in fills), making the add-back asymmetric and itself a source of double-charge on the live leg.
   - **Spec-literal full re-subtraction:** rejected — double-charges costs on already-net returns, manufacturing Tier-D verdicts out of real-but-modest edge.
-- **Status:** ACTIVE
+- **Status:** ACTIVE — AMENDED by DEC-2026-06-04-014 (2026-06-06): the cost logic (incremental pad over already-net returns) is UNCHANGED and now also applies to regenerated backtest trades; only the trade-DATA SOURCE is extended from paper-session logs to regenerated rolling-backtest per-trade series, because the 2026-06-05 Neon run proved the paper logs are near-empty (geo-block) and the promoted-strategy backtest per-trade data was never persisted.
 - **Date Decided:** 2026-06-05
 - **Implemented By:** `scripts/retrospective_dsr.py`, `research/backtest/cost_model.py`, `research/validation/effective_k.py`, `research/promotion/classifier.py`, `research/biographies/schema.py`, `scripts/show_strategy.py`; tests in `tests/research/`
 - **References:** `docs/research/RETROSPECTIVE_DSR_SPEC.md` (Sections 5, 5.5, 6), DEC-2026-06-04-002 (methodology primitives), DEC-2026-06-04-008 (Tier A/B/C/D + DSR floor), DEC-2026-05-31-002 (PARA-02 quarantine), operator decision 2026-06-05. NOTE: the run on real Neon trade logs is executed by the operator (local DATABASE_URL points at an empty SQLite); tier-change DEC entries for individual KEEP strategies are filed AFTER that run.
 
 ---
 
+### DEC-2026-06-04-014: Retrospective/Regime-Conditional DSR Data Source — Regenerated Backtest Trades Over Empty Paper Logs (Reality-Driven; pulls Phase B forward)
+
+- **Decision:** The retrospective DSR data source changes from paper-session trade logs (`PaperTradingSession.trade_log`, per DEC-2026-06-04-013) to **REGENERATED rolling-backtest per-trade series** produced on demand by re-running `BacktestEngine` on each strategy's real config. The retrospective is extended into **regime-conditional DSR** (Phase B of the research roadmap, pulled forward): DSR is computed both POOLED per strategy AND separately WITHIN each market-regime bucket of the strategy's backtest trades, producing a strategy x regime coverage matrix. The 2026-06-04-013 cost model (incremental pad over already-net returns) is UNCHANGED and applies identically to backtest trades (verified below). Five non-negotiable guards bind regime-conditional DSR:
+  1. **It is a SCREEN, not a deployment gate.** Backtest edge degrades live. A regime-DSR pass identifies which strategy x regime pairs are WORTH paper-trading; paper/live remains the deployment gate. A regime-DSR-validated backtest NEVER bypasses paper validation.
+  2. **K counts regime-buckets as trials.** effective_K = param-combos x symbols x timeframes x REGIME-BUCKETS. Slicing 8 regimes and keeping the best is selection bias across regimes; if K does not penalize it the deflation is fake. `research/validation/effective_k.py` is extended for the regime-bucket multiplier.
+  3. **Causal regime tagging + leakage test.** Each trade is tagged with the SubRegime active AT ENTRY using only data available at that time (`historical_classifier.classify_series` on BTC daily, verified causal: each label uses EMA/ADX/trailing-ATR-percentile at bar i only). A leakage test asserts label[i] computed on `series[:i+1]` equals the full-series label[i].
+  4. **Coarse buckets where N is thin.** Start with coarse buckets (bull/bear/chop); use fine SubRegimes only where per-bucket N supports DSR. Per-bucket results below a minimum N are DESCRIPTIVE (INSUFFICIENT_DATA), not gating.
+  5. **DSR is necessary, not sufficient.** A regime-DSR pass means the backtest edge is distinguishable from selection-bias luck — a strong screen, not a guarantee of live performance.
+- **Context:** The 2026-06-05 operator-run retrospective against Neon (read-only) returned all 11 strategies as TIER_D_REJECT, but with N=0 for 6 of 11 and N<=4 for 4 more — only BTF had analyzable N (25). Reconnaissance established WHY: (a) paper trading has been down (Railway geo-block, DEC-2026-06-01-003) so paper sessions opened but orders never filled — `PaperTradingSession.trade_log` is near-empty; (b) the per-trade backtest data that justified the KEEP promotions was NEVER persisted — `scripts/backtest_rolling.py` prints/summarizes but does not store per-trade logs; (c) the local SQLite `data/trading.db` holds only old single-symbol MVP-template BTC backtests (all losing: macd_pullback BTC PF 0.26/-54.7%), NOT the regime-routed research configs. DSR requires a per-trade RETURN SERIES (it derives Sharpe/skew/kurtosis); aggregate PF/Sharpe summaries cannot feed it. Regeneration is the only source of that series for the KEEP strategies. Operator (Eva) chose "build the regenerate path" on 2026-06-06.
+- **Rationale:**
+  - **Cost-model carryover is verified, not assumed.** `portfolio.close_position()` computes `realized_pnl = gross_pnl - total_commission` with slippage already in `fill_price`, then `return_pct = realized_pnl/entry_value*100` (`src/core/strategy/backtest/portfolio.py:245`). So backtest `return_pct` is NET of commission+slippage — the same already-net property as paper. The incremental-pad logic carries over with zero changes; booked round-trip = 2x(commission_rate 0.1% + slippage_rate 0.05%) = 0.30% (matches the ~0.30% the Neon run reported).
+  - **The Neon run still has value: it validated the instrument.** BTF (the known-bad calibration control) returned N=25, raw PF 0.75 (matching its documented live PF 0.75), adjusted 0.54, Tier D — the instrument correctly fails the strategy that deserved to fail, with a healthy cost diagnostic. The instrument is sound; the DATA was the problem.
+  - **Regime-conditional answers the portfolio-construction question before paper trading.** It reveals coverage gaps (e.g. TRENDING_BULL uncovered) and tells us which strategy x regime pairs merit paper validation — directly serving the provability framing (DEC-2026-06-04-012).
+- **Alternatives Considered:**
+  - **Repoint at local SQLite as-is:** rejected — `data/trading.db` lacks the KEEP-strategy per-trade data; its only backtests are old losing single-symbol BTC template runs.
+  - **Wait for paper data to accumulate:** rejected as the near-term answer — paper is geo-blocked and N=30 takes 7-8 months/strategy (PRD 3.4); the regenerate path answers now while paper remains the eventual deployment gate.
+  - **Trust the aggregate PF/Sharpe summaries in project notes:** rejected — DSR needs the per-trade series; summaries cannot produce skew/kurtosis.
+- **Consequent actions locked in:**
+  1. The 11 paper-based TIER_D biographies from the 2026-06-05 run are NOT canonical edge verdicts (data-starved). They are superseded by the regenerated run and MUST NOT trigger any retirement/demotion. No KEEP strategy is retired on the basis of the Neon run.
+  2. The classifier gains an **INSUFFICIENT_DATA** guard (minimum-N floor) so a strategy/bucket below the floor is reported as INSUFFICIENT_DATA, never TIER_D_REJECT — "no data" and "rejected as noise" are different states.
+- **Status:** ACTIVE
+- **Date Decided:** 2026-06-06
+- **Implemented By:** `research/backtest/regime_tagging.py` (causal per-trade tagging + runnable leakage self-check), `research/validation/effective_k.py` (`regime_conditional_k` bucket-multiplier extension), `research/promotion/classifier.py` + `research/biographies/schema.py` (`Tier.INSUFFICIENT_DATA` guard + `regime_coverage` models), `scripts/regime_dsr.py` (regeneration via `BacktestEngine`, pooled + per-regime DSR reusing `analyze_strategy`, coverage matrix + biography `regime_coverage` writes), tests in `tests/research/` (`test_regime_tagging.py`, `test_regime_dsr.py`, classifier/effective_k additions); hypothesis `research/hypotheses/ledger.yaml` entry `H-2026-06-001`. NOTE: regeneration was folded into `scripts/regime_dsr.py` (peer to `backtest_rolling.py`/`retrospective_dsr.py`) rather than a separate `research/backtest/regenerate.py`, to keep the dependency direction clean (no `research/` -> `scripts/` import) and reuse `analyze_strategy` as the single statistical-core source of truth.
+- **References:** DEC-2026-06-04-013 (amended — cost logic intact, data source extended), DEC-2026-06-04-008 (Tier A/B/C/D + DSR floor), DEC-2026-06-04-012 (provability framing), DEC-2026-05-27-008 (regime-aware backtest validation / historical_classifier), DEC-2026-06-01-003 (geo-block), operator decision 2026-06-06. PRD Sections 8.5, 9, Appendix A (`regime_coverage`), Appendix B (ledger).
+
+---
+
 **End of Decisions Log**
 
-**Total Decisions:** 89 active, 0 superseded, 5 locked (1 amended)
-**Last Updated:** 2026-06-05
-**Next Decision ID:** DEC-2026-06-04-014
+**Total Decisions:** 90 active, 0 superseded, 5 locked (1 amended); DEC-2026-06-04-013 amended
+**Last Updated:** 2026-06-06
+**Next Decision ID:** DEC-2026-06-04-015
 
 ## Phase 5 Decisions (Backtesting & Simulation)
 

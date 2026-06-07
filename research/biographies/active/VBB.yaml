@@ -1,0 +1,104 @@
+strategy_id: VBB
+status: ACTIVE_LIVE
+symbols:
+- BTCUSDT
+- ETHUSDT
+- SOLUSDT
+current_classification: INSUFFICIENT_DATA
+classification_history:
+- date: '2026-06-05'
+  classification: TIER_D_REJECT
+  triggered_by: retrospective_dsr_run_20260605
+  cost_model_version: v0_unverified
+  dsr_p_value: 1.0
+  notes: 'Retrospective DSR (v0_unverified): None -> TIER_D_REJECT.'
+- date: '2026-06-07'
+  classification: INSUFFICIENT_DATA
+  triggered_by: insufficient_data_correction
+  cost_model_version: v0_unverified
+  dsr_p_value: 1.0
+  notes: 'Corrected from TIER_D_REJECT: Neon retrospective had N=0 (<10). Per DEC-2026-06-04-014
+    data scarcity (paper geo-blocked) is INSUFFICIENT_DATA, NOT a reject/edge verdict.'
+statistical_validation_history:
+- run_date: '2026-06-05'
+  run_id: retrospective_dsr_run_20260605
+  cost_model_version: v0_unverified
+  n_trades_analyzed: 0
+  n_trades_quarantined: 0
+  pf_raw: 0.0
+  pf_adjusted: 0.0
+  sharpe_raw: 0.0
+  sharpe_adjusted: 0.0
+  max_dd_pct_pooled_base: 0.0
+  max_dd_pct_pooled_adjusted: 0.0
+  skewness: 0.0
+  kurtosis: 3.0
+  effective_k: 1150
+  effective_k_derivation:
+    method: estimated_lower_bound
+    hypotheses_counted: 23
+    symbols_per_hypothesis_avg: 5.0
+    param_combos_recorded: 0
+    param_combos_estimated: 1150
+    effective_k_point_estimate: 1150
+    is_lower_bound: true
+    notes: No parameter-combination counts recorded in the trade-log database for
+      these strategies; param_combos estimated at 50/hypothesis. True K is higher
+      -- treat as a lower bound. Gating verdict uses the highest swept K.
+  variance_sr: 1.0573292656609992
+  dsr_z_score: 0.0
+  dsr_p_value: 1.0
+  base_dsr_p_value: 1.0
+  conservative_dsr_p_value: 1.0
+  base_tier: TIER_D_REJECT
+  conservative_tier: TIER_D_REJECT
+  fragility: false
+  dsr_k_sensitivity:
+  - k: 115
+    dsr_p_value: 1.0
+    tier: TIER_D_REJECT
+  - k: 500
+    dsr_p_value: 1.0
+    tier: TIER_D_REJECT
+  - k: 1150
+    dsr_p_value: 1.0
+    tier: TIER_D_REJECT
+  - k: 2000
+    dsr_p_value: 1.0
+    tier: TIER_D_REJECT
+  dsr_variance_sr_sensitivity:
+  - variance_sr: 0.2643323164152498
+    dsr_p_value: 1.0
+    tier: TIER_D_REJECT
+  - variance_sr: 0.5286646328304996
+    dsr_p_value: 1.0
+    tier: TIER_D_REJECT
+  - variance_sr: 1.0573292656609992
+    dsr_p_value: 1.0
+    tier: TIER_D_REJECT
+  gating_k_used: 2000
+  verdict_is_fragile: false
+  per_symbol_breakdown: []
+  hard_floor_status:
+    dsr_passed: false
+    max_dd_passed: true
+    cost_model_verified: false
+    leakage_check: not_run
+  classified_tier: TIER_D_REJECT
+  classification_reasoning: Gating (conservative) DSR p=1.000, MaxDD=0.00%, N=0. Base
+    tier TIER_D_REJECT; conservative tier TIER_D_REJECT.
+  pbo_score: null
+decision_log:
+- 'PENDING-DEC: Retrospective DSR reclassified VBB from None to TIER_D_REJECT (run
+  retrospective_dsr_run_20260605). File DEC entry in BOTH .claude/DECISIONS.md and
+  .agent/DECISIONS.md after operator review.'
+hypothesis_history: []
+parameter_history: []
+optimization_history: []
+backtest_history: []
+paper_trading_history: []
+live_deployment_history: []
+decay_events: []
+reoptimization_history: []
+correlation_with_portfolio: {}
+post_mortem: null

@@ -1,0 +1,81 @@
+# PARAVANT Research Layer -- Hypothesis Ledger
+#
+# Canonical, append-only record of every hypothesis tested. Schema: PRD v2.0
+# Appendix B. Database table `research_hypotheses` is a projection of this file;
+# this YAML is the human-editable source of truth (PRD Section 5.4).
+#
+# STATUS values: PROPOSED | IMPLEMENTED | BACKTESTED | TIER_A | TIER_B | TIER_C
+#                | TIER_D | RETIRED
+#
+# Decision references live in `.claude/DECISIONS.md` / `.agent/DECISIONS.md`.
+
+- id: H-2026-06-001
+  name: "Regime-conditional backtest DSR as a pre-paper screen"
+  status: IMPLEMENTED
+  proposed_date: 2026-06-06
+  proposed_by: operator
+  source: >-
+    Internal -- forced by the 2026-06-05 retrospective DSR run finding that paper
+    trade logs are near-empty (Railway geo-block) and promoted-strategy per-trade
+    backtest data was never persisted. Operator decision 2026-06-06.
+
+  # PRE-REGISTRATION ---------------------------------------------------------
+  hypothesis: |
+    Computing the Deflated Sharpe Ratio SEPARATELY within each market-regime
+    bucket of a strategy's regenerated backtest trades -- before any paper
+    trading -- identifies which (strategy x regime) pairs carry a backtest edge
+    distinguishable from selection-bias luck, and surfaces regime-coverage gaps
+    in the portfolio (e.g. no strategy covers TRENDING_BULL).
+
+    This is a SCREEN, not a deployment gate. A regime-DSR pass means the pair is
+    WORTH paper-trading; paper/live validation remains the deployment gate. DSR
+    is necessary but not sufficient for live edge.
+  regime_target: ALL  # the screen evaluates every regime bucket a strategy trades in
+  expected_pf: null   # methodology screen, not a single-strategy PF claim
+  expected_sharpe: null
+  expected_n_per_year: null
+  expected_fail_modes:
+    - "Per-bucket N too thin for DSR to be meaningful -> mitigated by coarse
+       (bull/bear/chop) buckets and an INSUFFICIENT_DATA floor (descriptive, not gating)."
+    - "Selection bias ACROSS regimes if K does not count regime buckets as trials
+       -> mitigated by effective_K x regime-bucket multiplier."
+    - "Lookahead in regime labels -> mitigated by causal classify_series + an
+       explicit leakage test (label[i] on series[:i+1] == full-series label[i])."
+    - "Backtest edge that does not survive live -> by construction this is a
+       screen; paper/live remains the gate."
+
+  # NON-NEGOTIABLE GUARDS (DEC-2026-06-04-014) -------------------------------
+  guards:
+    - "SCREEN not deployment gate; never bypasses paper validation."
+    - "K counts regime-buckets as trials (param-combos x symbols x timeframes x buckets)."
+    - "Causal regime tagging at trade ENTRY + leakage test."
+    - "Coarse buckets where N thin; below minimum N is DESCRIPTIVE (INSUFFICIENT_DATA)."
+    - "DSR necessary, not sufficient."
+
+  # IMPLEMENTATION -----------------------------------------------------------
+  implementation_file: scripts/regime_dsr.py
+  reuses:
+    - research/validation/deflated_sharpe.py   # DSR math (verified)
+    - research/validation/effective_k.py       # regime_conditional_k (bucket multiplier)
+    - research/backtest/cost_model.py          # incremental-pad (DEC-2026-06-04-013)
+    - research/backtest/regime_tagging.py       # causal per-trade SubRegime tagging
+    - scripts/retrospective_dsr.py             # analyze_strategy (single statistical core)
+    - scripts/backtest_rolling.py              # STRATEGY_PARAMS/SYMBOLS registry
+    - src/core/strategy/regime/historical_classifier.py  # causal regime labels
+    - src/core/strategy/backtest/                # backtest engine (research imports src/)
+
+  # SUBJECTS (first run) -----------------------------------------------------
+  subjects:
+    keep: [MACD_PB, BTP, VBB, SRC, ICVP]
+    control: [BTF]   # known-bad full-history control (Phase B4)
+    retired: [CMF, RSI_BB, HATP, VRB, VPT]
+
+  # RESULTS (populated post-run) ---------------------------------------------
+  results:
+    classified_tier: null
+    backtest_date: null
+    dsr_p_value: null
+    cost_model_verified: false   # v0 incremental-pad, unverified
+    leakage_check: null
+
+  biography_file: null  # regime_coverage written into each strategy's biography

@@ -41,6 +41,17 @@ DSR_P_HARD_FLOOR: float = 0.30  # p >= this cannot be Tier A or B at any allocat
 TIER_D_DSR_P: float = 0.50  # p >= this is statistical noise -> reject
 TIER_D_MAX_DD: float = 10.0  # MaxDD >= this is unacceptable risk -> reject
 
+# Minimum N below which DSR's skew/kurtosis moments are not meaningful, so the
+# verdict is not computable as evidence at all. Below this a strategy or regime
+# bucket is reported INSUFFICIENT_DATA -- DESCRIPTIVE, not a reject
+# (DEC-2026-06-04-014). This is distinct from the Tier B N>=20 DEPLOYMENT floor:
+# 10 is the floor for the verdict being meaningful; 20 is the floor for
+# deploying. A genuinely edge-less strategy with enough trades still earns
+# TIER_D; only data SCARCITY yields INSUFFICIENT_DATA. The 2026-06-05 Neon run's
+# N=0..4 strategies were wrongly shown as TIER_D_REJECT; this guard prevents that
+# "no data" -> "proven noise" misread.
+MIN_N_FOR_CLASSIFICATION: int = 10
+
 
 def classify_tier(
     dsr_p_value: float,
@@ -64,8 +75,17 @@ def classify_tier(
         n_trades: Number of trades analyzed (same across cases).
 
     Returns:
-        The ``Tier`` for this operating point.
+        The ``Tier`` for this operating point. ``INSUFFICIENT_DATA`` when
+        ``n_trades`` is below ``MIN_N_FOR_CLASSIFICATION`` (no meaningful verdict
+        possible -- distinct from a reject).
     """
+    # Insufficient data: below this N the DSR moments are not meaningful, so the
+    # verdict is not computable as evidence. Report it as such -- NOT as a reject
+    # (DEC-2026-06-04-014). Checked FIRST so a degenerate DSR p-value (e.g. p=1.0
+    # at N=0) can never masquerade as TIER_D.
+    if n_trades < MIN_N_FOR_CLASSIFICATION:
+        return Tier.INSUFFICIENT_DATA
+
     # Tier D (reject): statistical noise or unacceptable risk.
     if dsr_p_value >= TIER_D_DSR_P or max_dd_pct >= TIER_D_MAX_DD:
         return Tier.TIER_D
@@ -170,6 +190,7 @@ def recommended_action(tier: Tier) -> str:
         Tier.TIER_C: "halt_needs_work",
         Tier.TIER_D: "retire",
         Tier.BELOW_FLOOR: "halt_needs_work",
+        Tier.INSUFFICIENT_DATA: "gather_more_data",
     }[tier]
 
 
@@ -188,4 +209,8 @@ def action_description(tier: Tier) -> str:
         Tier.TIER_C: "Halt and re-evaluate -- gather more data or re-optimize (Tier C).",
         Tier.TIER_D: "Retire -- no statistically distinguishable edge (Tier D REJECT).",
         Tier.BELOW_FLOOR: "Halt -- below the deployment floor.",
+        Tier.INSUFFICIENT_DATA: (
+            "Insufficient data -- N below the minimum for a meaningful DSR. "
+            "Gather more trades; NOT a reject."
+        ),
     }[tier]

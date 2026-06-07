@@ -3,8 +3,11 @@ from __future__ import annotations
 
 from research.biographies.schema import Tier
 from research.promotion.classifier import (
+    MIN_N_FOR_CLASSIFICATION,
+    action_description,
     build_hard_floor_status,
     classify_tier,
+    recommended_action,
     resolve_final_tier,
 )
 
@@ -58,6 +61,34 @@ def test_genuine_no_edge_stays_d() -> None:
     final, fragile = resolve_final_tier(Tier.TIER_D, Tier.TIER_D)
     assert final == Tier.TIER_D
     assert fragile is False
+
+
+def test_insufficient_data_below_min_n_not_reject() -> None:
+    """N below the minimum -> INSUFFICIENT_DATA, never TIER_D (DEC-2026-06-04-014).
+
+    This is the guard for the 2026-06-05 Neon-run misread: degenerate N=0..few
+    strategies were shown as TIER_D_REJECT. "No data" is not "proven noise".
+    """
+    # N=0 with a degenerate DSR p=1.0 must NOT be a reject.
+    assert classify_tier(1.0, 0.0, 0.0, 0.0, 0) == Tier.INSUFFICIENT_DATA
+    # N just below the floor -> still insufficient, even with great metrics.
+    assert classify_tier(0.05, 1.0, 2.0, 2.0, MIN_N_FOR_CLASSIFICATION - 1) == (
+        Tier.INSUFFICIENT_DATA
+    )
+
+
+def test_at_min_n_classifies_normally() -> None:
+    """At exactly the minimum N the normal A/B/C/D logic applies again."""
+    # At the floor, a noise-level p still rejects (it has enough data to judge).
+    assert classify_tier(0.6, 2.0, 2.0, 2.0, MIN_N_FOR_CLASSIFICATION) == Tier.TIER_D
+    # And a clean low-p low-N case lands Tier C (misses Tier B's N>=20 floor).
+    assert classify_tier(0.1, 2.0, 2.0, 2.0, MIN_N_FOR_CLASSIFICATION) == Tier.TIER_C
+
+
+def test_action_maps_cover_insufficient_data() -> None:
+    """Both action maps handle INSUFFICIENT_DATA (no KeyError) and signal 'gather'."""
+    assert recommended_action(Tier.INSUFFICIENT_DATA) == "gather_more_data"
+    assert "Insufficient data" in action_description(Tier.INSUFFICIENT_DATA)
 
 
 def test_hard_floor_status_records_unverified_cost() -> None:

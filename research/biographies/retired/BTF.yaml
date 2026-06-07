@@ -1,0 +1,174 @@
+strategy_id: BTF
+status: RETIRED
+symbols: []
+current_classification: TIER_D_REJECT
+classification_history:
+- date: '2026-06-05'
+  classification: TIER_D_REJECT
+  triggered_by: retrospective_dsr_run_20260605
+  cost_model_version: v0_unverified
+  dsr_p_value: 1.0
+  notes: 'Retrospective DSR (v0_unverified): None -> TIER_D_REJECT.'
+statistical_validation_history:
+- run_date: '2026-06-05'
+  run_id: retrospective_dsr_run_20260605
+  cost_model_version: v0_unverified
+  n_trades_analyzed: 25
+  n_trades_quarantined: 0
+  pf_raw: 0.7526143220118725
+  pf_adjusted: 0.5437167094152746
+  sharpe_raw: -0.12128096799782923
+  sharpe_adjusted: -0.2529117242123581
+  max_dd_pct_pooled_base: 15.829341096893682
+  max_dd_pct_pooled_adjusted: 18.0476542802225
+  skewness: -0.3686563430993699
+  kurtosis: 1.6842197705287425
+  effective_k: 1150
+  effective_k_derivation:
+    method: estimated_lower_bound
+    hypotheses_counted: 23
+    symbols_per_hypothesis_avg: 5.0
+    param_combos_recorded: 0
+    param_combos_estimated: 1150
+    effective_k_point_estimate: 1150
+    is_lower_bound: true
+    notes: No parameter-combination counts recorded in the trade-log database for
+      these strategies; param_combos estimated at 50/hypothesis. True K is higher
+      -- treat as a lower bound. Gating verdict uses the highest swept K.
+  variance_sr: 1.0573292656609992
+  dsr_z_score: -5.997807015295328
+  dsr_p_value: 1.0
+  base_dsr_p_value: 1.0
+  conservative_dsr_p_value: 1.0
+  base_tier: TIER_D_REJECT
+  conservative_tier: TIER_D_REJECT
+  fragility: false
+  dsr_k_sensitivity:
+  - k: 115
+    dsr_p_value: 1.0
+    tier: TIER_D_REJECT
+  - k: 500
+    dsr_p_value: 1.0
+    tier: TIER_D_REJECT
+  - k: 1150
+    dsr_p_value: 1.0
+    tier: TIER_D_REJECT
+  - k: 2000
+    dsr_p_value: 1.0
+    tier: TIER_D_REJECT
+  dsr_variance_sr_sensitivity:
+  - variance_sr: 0.2643323164152498
+    dsr_p_value: 1.0
+    tier: TIER_D_REJECT
+  - variance_sr: 0.5286646328304996
+    dsr_p_value: 1.0
+    tier: TIER_D_REJECT
+  - variance_sr: 1.0573292656609992
+    dsr_p_value: 1.0
+    tier: TIER_D_REJECT
+  gating_k_used: 2000
+  verdict_is_fragile: false
+  per_symbol_breakdown:
+  - symbol: AVAXUSDT
+    n_trades: 7
+    pf: 1.006975960506023
+    sharpe: 0.002808719447470389
+    round_trip_cost_pct: 0.5984875586889812
+    cost_source: estimated
+  - symbol: BTCUSDT
+    n_trades: 5
+    pf: 0.31970596729536827
+    sharpe: -0.4193555818255192
+    round_trip_cost_pct: 0.44028632051189726
+    cost_source: estimated
+  - symbol: DOTUSDT
+    n_trades: 3
+    pf: 0.15019762200648087
+    sharpe: -0.7498850913949607
+    round_trip_cost_pct: 0.6042926270847755
+    cost_source: estimated
+  - symbol: ETHUSDT
+    n_trades: 6
+    pf: 0.6985012485008721
+    sharpe: -0.13941669132140352
+    round_trip_cost_pct: 0.47953741573555275
+    cost_source: estimated
+  - symbol: SOLUSDT
+    n_trades: 2
+    pf: 0.501858331071681
+    sharpe: -0.23453567144342508
+    round_trip_cost_pct: 0.5606406865644269
+    cost_source: estimated
+  - symbol: XRPUSDT
+    n_trades: 2
+    pf: 0.7608266410834473
+    sharpe: -0.0960464250273935
+    round_trip_cost_pct: 0.5594661668457207
+    cost_source: estimated
+  hard_floor_status:
+    dsr_passed: false
+    max_dd_passed: false
+    cost_model_verified: false
+    leakage_check: not_run
+  classified_tier: TIER_D_REJECT
+  classification_reasoning: Gating (conservative) DSR p=1.000, MaxDD=18.05%, N=25.
+    Base tier TIER_D_REJECT; conservative tier TIER_D_REJECT.
+  pbo_score: null
+regime_coverage:
+- run_id: regime_dsr_run_20260606
+  run_date: '2026-06-06'
+  cost_model_version: v0_unverified
+  data_source: regenerated_backtest
+  is_screen_only: true
+  pooled_tier: TIER_D_REJECT
+  pooled_dsr_p_value: 1.0
+  per_regime:
+  - regime: bull
+    bucket_kind: coarse
+    n_trades: 411
+    pf_adjusted: 0.7174475145094941
+    sharpe_adjusted: -0.13925230323659862
+    base_dsr_p_value: 1.0
+    conservative_dsr_p_value: 1.0
+    tier: TIER_D_REJECT
+    is_descriptive: false
+    effective_k: 3450
+    notes: screen-only; not a deployment gate
+  - regime: bear
+    bucket_kind: coarse
+    n_trades: 375
+    pf_adjusted: 0.6562468655214135
+    sharpe_adjusted: -0.1733685339473605
+    base_dsr_p_value: 1.0
+    conservative_dsr_p_value: 1.0
+    tier: TIER_D_REJECT
+    is_descriptive: false
+    effective_k: 3450
+    notes: screen-only; not a deployment gate
+  - regime: chop
+    bucket_kind: coarse
+    n_trades: 201
+    pf_adjusted: 1.065954778764112
+    sharpe_adjusted: 0.02563401681859295
+    base_dsr_p_value: 0.9999315907495995
+    conservative_dsr_p_value: 0.9999999999951381
+    tier: TIER_D_REJECT
+    is_descriptive: false
+    effective_k: 3450
+    notes: screen-only; not a deployment gate
+  notes: Regime-conditional backtest DSR SCREEN (DEC-2026-06-04-014). NOT a deployment
+    gate; paper/live validation still required. K x3 regime buckets.
+decision_log:
+- 'PENDING-DEC: Retrospective DSR reclassified BTF from None to TIER_D_REJECT (run
+  retrospective_dsr_run_20260605). File DEC entry in BOTH .claude/DECISIONS.md and
+  .agent/DECISIONS.md after operator review.'
+hypothesis_history: []
+parameter_history: []
+optimization_history: []
+backtest_history: []
+paper_trading_history: []
+live_deployment_history: []
+decay_events: []
+reoptimization_history: []
+correlation_with_portfolio: {}
+post_mortem: null

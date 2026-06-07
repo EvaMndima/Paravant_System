@@ -8,6 +8,7 @@ from research.validation.effective_k import (
     MIN_VARIANCE_SR,
     RETROSPECTIVE_K_SWEEP,
     estimate_portfolio_k,
+    regime_conditional_k,
     variance_sr_point_estimate,
     variance_sr_sweep,
 )
@@ -99,3 +100,52 @@ def test_variance_sr_sweep_respects_floor() -> None:
     """Sweep values never drop below the variance_sr floor."""
     grid = variance_sr_sweep(MIN_VARIANCE_SR / 10.0)
     assert all(v >= MIN_VARIANCE_SR for v in grid)
+
+
+def test_regime_conditional_k_multiplies_by_bucket_count() -> None:
+    """Guard #2: effective K multiplies by the number of regime buckets tested."""
+    base = estimate_portfolio_k(
+        hypotheses_counted=10,
+        symbols_per_hypothesis_avg=5.0,
+        param_combos_recorded=0,
+        param_combos_estimated=1150,
+    )
+    scaled = regime_conditional_k(base, n_regime_buckets=3)
+    assert scaled.point_estimate == base.point_estimate * 3
+    assert scaled.point_estimate in scaled.sweep
+    assert scaled.gating_k == max(scaled.sweep)
+    # Auditable: derivation records the regime multiplier.
+    assert "regime buckets" in scaled.derivation.notes
+    assert scaled.derivation.effective_k_point_estimate == base.point_estimate * 3
+
+
+def test_regime_conditional_k_floors_bucket_count_at_one() -> None:
+    """Zero/negative bucket counts are treated as 1 (no extra trials)."""
+    base = estimate_portfolio_k(
+        hypotheses_counted=5,
+        symbols_per_hypothesis_avg=3.0,
+        param_combos_recorded=400,
+        param_combos_estimated=0,
+    )
+    same = regime_conditional_k(base, n_regime_buckets=0)
+    assert same.point_estimate == base.point_estimate
+
+
+def test_regime_conditional_k_increases_deflation() -> None:
+    """More regime buckets => higher gating K => higher (worse) DSR p-value."""
+    base = estimate_portfolio_k(
+        hypotheses_counted=10,
+        symbols_per_hypothesis_avg=5.0,
+        param_combos_recorded=0,
+        param_combos_estimated=200,
+    )
+    scaled = regime_conditional_k(base, n_regime_buckets=3)
+    p_base = deflated_sharpe_ratio(
+        observed_sharpe=0.5, variance_sr=0.05, n_trials=base.gating_k,
+        n_returns=40, skewness=-0.1, kurtosis=3.0,
+    ).dsr_p_value
+    p_scaled = deflated_sharpe_ratio(
+        observed_sharpe=0.5, variance_sr=0.05, n_trials=scaled.gating_k,
+        n_returns=40, skewness=-0.1, kurtosis=3.0,
+    ).dsr_p_value
+    assert p_scaled >= p_base - 1e-12

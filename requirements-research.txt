@@ -23,6 +23,13 @@ arch>=6.2             # GARCH / tail-risk modeling (later phases)
 # Config + serialization.
 PyYAML>=6.0           # hypothesis ledger + strategy biographies (canonical store)
 
+# Network trust (regime_dsr regeneration fetches OHLCV from Binance). Routes TLS
+# verification through the OS trust store so environments behind a TLS-inspecting
+# proxy/AV (whose private root is in the OS store, not certifi) can verify
+# Binance's cert. Does NOT disable verification. Used only by scripts/regime_dsr.py
+# (DEC-2026-06-04-014); the live system is unaffected.
+truststore>=0.10      # OS trust store for TLS-inspected environments
+
 # Exploratory + reporting (later phases; not needed for retrospective DSR).
 jupyter>=1.0          # notebook environment (conditional Phase R6)
 matplotlib>=3.8       # sensitivity plots (Phase R3+)
