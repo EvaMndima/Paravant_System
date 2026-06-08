@@ -541,6 +541,22 @@ See Appendix D. Each is gated on the previous tier producing validated survivors
 
 These are mandatory primitives that ALL strategy evaluation must use. They are not optional. They are enforced by `eval_research_strategy.py`.
 
+### 8.0 Pre-DSR Quality Gate (precedes everything below)
+
+**Added 2026-06-08 — DEC-2026-06-04-018. Full checklist: `docs/research/HYPOTHESIS_QUALITY_GATE.md`.**
+
+A reasoning-quality gate sits UPSTREAM of DSR so a DSR trial is spent only on theoretically-sound, feasible, non-duplicate hypotheses. DSR is the EVIDENCE gate and it deflates by effective K, so every idea tested raises the bar for every survivor — the gate keeps research in confirmation mode (theory first), not search/data-mining mode. Three stages:
+
+- **Stage 1 — reasoning scorecard (no data):** hard gates (mechanism stated; falsifiable fail modes; sample-size feasibility; not a known-dead graveyard pattern) plus scored dimensions (mechanism strength, inverse-crowding, crypto-native fit, regime specificity, parameter parsimony, diversity, source credibility). Most ideas die here, cheaply, with no DSR trial spent.
+- **Stage 2 — blind structural feasibility profile (optional; data but NO performance):** confirm it runs, trade count adequate, holding-period/turnover/per-regime coverage sane — reporting structure ONLY.
+- **Stage 3 — DSR** (8.1-8.9 below), the unchanged evidence gate.
+
+Failures are tagged FUNDAMENTAL (never revisit) vs FIXABLE (diagnosable near-miss = seedbed for a corrected hypothesis); a mechanism x regime coverage map directs sourcing at the unexplored complement.
+
+**Two hard lines (non-negotiable):** (1) no performance peek before DSR — pre-DSR data checks are STRUCTURAL only; computing/showing PF/Sharpe/returns pre-DSR irreversibly biases the test. (2) No algorithmic strategy generation from failures — failures steer HUMAN mechanism choice, never a spec-generator (the DEC-2026-06-04-006 auto-discovery non-goal).
+
+Sequencing: adopted NOW as a by-hand checklist; automated tooling DEFERRED until the rubric proves which dimensions discriminate and that triage is the bottleneck.
+
 ### 8.1 Pre-Registration
 
 Every hypothesis MUST declare BEFORE backtest:
