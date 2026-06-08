@@ -234,6 +234,20 @@ STRATEGY_PARAMS: dict[str, dict[str, Any]] = {
         "volume_period": 20,
         "volume_threshold": 1.3,
     },
+    # Forward hypothesis loop -- H-2026-06-002 (TRENDING_BULL breakout-continuation).
+    # donchian_atr is an EXISTING production template (already in
+    # SignalGeneratorFactory) that was never DSR-screened; registered here for the
+    # regime-DSR screen via the research-side eval registry (DEC-2026-06-04-019).
+    # Params are the entry's pre-registered defaults in research/hypotheses/ledger.yaml.
+    "donchian_atr": {
+        "donchian_period": 20,
+        "atr_period": 14,
+        "atr_threshold": 0.005,
+        "atr_stop_multiplier": 2.0,
+        "volume_ma_period": 20,
+        "volume_multiplier": 1.2,
+        "ema_regime_period": 200,
+    },
 }
 
 STRATEGY_SYMBOLS: dict[str, list[str]] = {
@@ -258,6 +272,9 @@ STRATEGY_SYMBOLS: dict[str, list[str]] = {
         "BTCUSDT", "ETHUSDT", "BNBUSDT", "SOLUSDT",
         "XRPUSDT", "AVAXUSDT", "DOGEUSDT",
     ],
+    # Forward hypothesis loop -- H-2026-06-002. Multi-symbol (4 liquid majors) is
+    # the breadth correction the retired VRB lacked (it was BTC-only).
+    "donchian_atr": ["BTCUSDT", "ETHUSDT", "BNBUSDT", "SOLUSDT"],
 }
 
 

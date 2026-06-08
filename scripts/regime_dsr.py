@@ -88,6 +88,9 @@ RESEARCH_LABEL_TO_TEMPLATE: dict[str, str] = {
     "HATP": "heikin_ashi_trend_pulse",
     "VRB": "volatility_regime_breakout",
     "VPT": "vpt_momentum",
+    # Forward hypothesis loop (DEC-2026-06-04-019): an EXISTING production template
+    # never DSR-screened. H-2026-06-002 -- TRENDING_BULL breakout-continuation.
+    "DONCHIAN_ATR": "donchian_atr",
 }
 
 # Below this per-bucket N a regime cell is DESCRIPTIVE, not gating (guard #4).
@@ -136,6 +139,7 @@ _DEFAULT_MARKET_BY_LABEL: dict[str, str] = {
     "HATP": "spot",
     "VRB": "spot",
     "VPT": "spot",
+    "DONCHIAN_ATR": "spot",  # long-only breakout-continuation; spot deployment mode
 }
 
 

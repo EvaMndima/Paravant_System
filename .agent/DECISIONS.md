@@ -2876,11 +2876,30 @@ parameters:
 
 ---
 
+### DEC-2026-06-04-019: Research Generator Registration Path for the Forward Hypothesis Loop
+
+- **Decision:** New research-only strategy generators live in `research/generators/<name>.py`, subclass the production `src.core.strategy.signals.SignalGenerator`, and are loaded into the eval (`scripts/regime_dsr.py`) at RUNTIME via the factory's existing `SignalGeneratorFactory.register_generator()` hook plus a research-side params/symbols/market registry. They are NEVER added to `src/core/strategy/factory.py`'s `_DEFAULT_GENERATORS` (i.e. never enter `src/`) before DSR validation + promotion. Separately, an EXISTING production template that was simply never DSR-screened (e.g. `donchian_atr`) is screened by registering its params/symbols/label in the eval registry only (`STRATEGY_PARAMS`/`STRATEGY_SYMBOLS` in `scripts/backtest_rolling.py` + `RESEARCH_LABEL_TO_TEMPLATE`/`_DEFAULT_MARKET_BY_LABEL` in `scripts/regime_dsr.py`) -- it is already legitimately in `src/`, so no new `src/` code is added. This is the only glue the forward loop needs (the FIRST SMALL TASK of the 2026-06-08 session).
+- **Context:** Starting the forward hypothesis loop (source -> quality-gate -> formalize -> register -> DSR screen) requires a way to screen a brand-new hypothesis. `regime_dsr.py` evaluates strategies registered in `scripts/backtest_rolling.py` and instantiated by `template_id` via `SignalGeneratorFactory`. Two registration paths were possible; the choice is forced by the existing rules rather than open.
+- **Rationale:**
+  - **Preserves the one-way dependency (PRD Section 5.2: `src/` never imports `research/`).** A new research generator subclasses the `src/` base (research->src import is allowed) and is injected into the factory at runtime; `src/` is never edited and never imports `research/`.
+  - **Respects the lifecycle (PRD Section 10, Stage 8).** Promotion `research/generators/` -> `src/` happens ONLY after validation. Putting an unvalidated generator in `_DEFAULT_GENERATORS` would promote-before-proof. The runtime `register_generator()` hook (already present in `src/core/strategy/factory.py`) makes the clean path zero-cost.
+  - **No parallel eval tool.** `regime_dsr.py` IS the eval; the research registry feeds the SAME screen. No `eval_research_strategy.py` is built (the session prompt's explicit non-goal).
+  - **Spawn-worker note (implementation).** `regime_dsr.py`'s parallel workers spawn fresh processes (Windows spawn) and construct their own `SignalGeneratorFactory()`; a NEW research generator must therefore be registered INSIDE the worker (`_backtest_series_worker` or its loader), not only the parent. (Existing production templates like `donchian_atr` are already in `_DEFAULT_GENERATORS`, so they need no runtime registration and parallel workers are safe as-is.)
+- **Alternatives Considered:**
+  - **Add new research generators to `_DEFAULT_GENERATORS` (the literal "pragmatic" path):** rejected -- promotes unvalidated code into `src/` before DSR, breaking the lifecycle and the one-way dependency.
+  - **Build a separate `scripts/eval_research_strategy.py`:** rejected -- duplicates `regime_dsr.py` (the session prompt's explicit "do not build a parallel eval tool").
+- **Status:** ACTIVE
+- **Date Decided:** 2026-06-08
+- **Implemented By:** `scripts/backtest_rolling.py` (`donchian_atr` params/symbols for H-2026-06-002), `scripts/regime_dsr.py` (`DONCHIAN_ATR` label + spot market), `research/hypotheses/ledger.yaml` (H-2026-06-002/003 registration blocks). The `research/generators/` runtime loader is built when H-2026-06-003's funding generator lands.
+- **References:** DEC-2026-06-04-014 (regime-DSR screen this feeds), DEC-2026-06-04-018 (the pre-DSR quality gate upstream), PRD Section 5.2 (one-way dependency) + Section 10 (lifecycle Stages 3/8). Session prompt 2026-06-08 "HOW THE EVAL ACTUALLY WORKS" + FIRST SMALL TASK.
+
+---
+
 **End of Decisions Log**
 
-**Total Decisions:** 94 active, 0 superseded, 5 locked (1 amended); DEC-2026-06-04-013 amended
+**Total Decisions:** 95 active, 0 superseded, 5 locked (1 amended); DEC-2026-06-04-013 amended
 **Last Updated:** 2026-06-08
-**Next Decision ID:** DEC-2026-06-04-019
+**Next Decision ID:** DEC-2026-06-04-020
 
 ## Phase 5 Decisions (Backtesting & Simulation)
 

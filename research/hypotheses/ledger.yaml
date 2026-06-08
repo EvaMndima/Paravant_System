@@ -92,3 +92,205 @@
     reexamine: [MACD_PB]   # documented edge did not reproduce
 
   biography_file: research/biographies/active/<strategy_id>.yaml  # regime_coverage written per strategy
+
+# ===========================================================================
+# FORWARD HYPOTHESIS LOOP -- TRENDING_BULL regime (the uncovered gap).
+# All 5 KEEP strategies are bear/choppy; every trending_bull cell is weak
+# (regime_dsr_run_20260607). A validated bull/trend strategy fills the gap AND
+# matches the live regime. Sourced + Stage-1 quality-gated (DEC-2026-06-04-018)
+# 2026-06-08; operator approved BOTH H-2026-06-002 and H-2026-06-003.
+# NOTE: a third candidate (buy-the-dip trend pullback) was REJECTED at the
+# Stage-1 hard gate as a duplicate of the active BTP (bull_trend_pullback) and
+# the retired MACD_PB pullback family -- no DSR trial spent.
+# ===========================================================================
+
+- id: H-2026-06-002
+  name: "Bull-regime Donchian breakout-continuation (trend-filtered, multi-symbol)"
+  status: PROPOSED
+  proposed_date: 2026-06-08
+  proposed_by: llm_suggest   # Claude-sourced from trend-following literature; operator approved 2026-06-08
+  source: >-
+    Trend-following / time-series-momentum literature (Hurst, Ooi & Pedersen
+    "A Century of Evidence on Trend Following"; Quantpedia channel-breakout
+    entries; Liu & Tsyvinski 2021 crypto momentum). Sourced for the uncovered
+    TRENDING_BULL regime.
+
+  # PRE-REGISTRATION ---------------------------------------------------------
+  hypothesis: |
+    In an established bull regime (price above a rising long EMA), a breakout to
+    a new N-bar high CONTINUES rather than reverts, because traders who
+    repeatedly FADE new highs in an uptrend (mean-reversion shorts, limit-sellers
+    at prior resistance / round numbers) get run over and stopped/liquidated (a
+    short squeeze), while slow institutional inflow (spot-ETF era) keeps bidding
+    the trend. The edge is long-only continuation, gated to the bull regime so
+    counter-regime false breakouts (dead-cat bounces) are excluded.
+
+    Counterparty: resistance-faders and mean-reversion shorts at new highs in a
+    bull. Persistence: behavioral (fading new highs is a durable instinct) +
+    structural (inflows rebalance over weeks).
+
+    IMPLEMENTATION (reuse, NOT a clone): this mechanism is ALREADY implemented in
+    production as the `donchian_atr` generator (EMA(200)-gated Donchian breakout,
+    long-only in bull, volume + ATR confirmation). Per the quality gate's
+    "not a duplicate" hard gate and the zero-tech-debt reuse rule, the hypothesis
+    is tested by SCREENING the existing `donchian_atr` across a multi-symbol bull
+    universe via scripts/regime_dsr.py -- NOT by authoring a near-clone. It has
+    never been DSR-screened. The multi-symbol universe is the breadth correction
+    that retired VRB lacked.
+  regime_target: TRENDING_BULL
+  expected_pf: 1.30          # honest prior; results >> this would be a RED FLAG
+  expected_sharpe: 0.80
+  expected_n_per_year: 40    # pooled across the bull universe on 1H
+  expected_fail_modes:
+    - "Pre-cost only: gross PF > 1 but net of conservative round-trip costs <= 1
+       (the VPT cost-blindness pattern)."
+    - "Crowded/arbitraged: TS-momentum on liquid majors at 1H may carry no
+       residual edge (the low inverse-crowding flag) -> DSR p above the 0.30 floor."
+    - "Thin per-regime N: infrequent trending_bull breakouts -> N < 30 -> the
+       trending_bull cell is descriptive, not gating."
+    - "Regime-transition whipsaw: EMA(200) gate lags, admitting late-cycle
+       breakouts that fail."
+
+  # QUALITY GATE (DEC-2026-06-04-018, Stage 1 -- by hand) ---------------------
+  quality_gate:
+    stage1_hard_gates:
+      mechanism_stated: true
+      falsifiable_fail_modes: true
+      sample_size_feasible: true     # multi-symbol 1H over 540d -> N>=30 plausible
+      not_known_dead_pattern: true   # FIXABLE-adjacent to VRB (breadth) / BTF
+                                     # (single-window); differentiated by multi-
+                                     # symbol breadth + rolling DSR gate
+    stage1_scores:   # 0-3 each; pass = mechanism_strength>=2 AND total>=14/21
+      mechanism_strength: 2
+      crowding_inverse: 1
+      crypto_native_fit: 1
+      regime_specificity: 3
+      parameter_parsimony: 3
+      diversity_contribution: 2
+      source_credibility: 2
+      total: 14
+    verdict: PASS_MARGINAL   # exactly at threshold; weak dim (inverse-crowding)
+                             # is precisely what DSR will adjudicate
+
+  # IMPLEMENTATION + EVAL ROUTING --------------------------------------------
+  implementation_file: src/core/strategy/generators/donchian_atr.py   # EXISTING; reused
+  eval_path: "python -m scripts.regime_dsr --strategy DONCHIAN_ATR"
+  registration:
+    research_label: DONCHIAN_ATR
+    template_id: donchian_atr
+    parameters:
+      donchian_period: 20
+      atr_period: 14
+      atr_threshold: 0.005
+      atr_stop_multiplier: 2.0
+      volume_ma_period: 20
+      volume_multiplier: 1.2
+      ema_regime_period: 200
+    symbols: [BTCUSDT, ETHUSDT, BNBUSDT, SOLUSDT]
+    market: spot   # long-only continuation; spot is the deployment mode
+    note: >-
+      Wired via the research-side registry + factory.register_generator runtime
+      hook (DEC-2026-06-04-019). src/ unchanged.
+
+  effective_k_at_proposal: null   # computed by regime_dsr at screen time
+                                  # (base K x regime-bucket multiplier)
+
+  # GRAVEYARD CROSS-CHECK -----------------------------------------------------
+  similar_retired_strategies:
+    - strategy_id: VRB
+      relevant_lessons: ["INSUFFICIENT_BREADTH (BTC-only) -> corrected by multi-symbol universe."]
+    - strategy_id: BTF
+      relevant_lessons: ["THIN_SAMPLE_OVERFIT (single-window) -> avoided by rolling 540d + DSR floor."]
+    - strategy_id: VPT
+      relevant_lessons: ["COST_BLINDNESS -> must clear conservative round-trip costs with margin."]
+
+  results: null   # populated post-screen
+  biography_file: research/biographies/active/DONCHIAN_ATR.yaml
+
+- id: H-2026-06-003
+  name: "Funding-confirmed trend continuation (perp funding as a bull filter)"
+  status: PROPOSED
+  proposed_date: 2026-06-08
+  proposed_by: llm_suggest   # Claude-sourced (crypto funding-premium); operator approved 2026-06-08
+  source: >-
+    Crypto perpetual funding-rate literature (carry/basis + funding-premium
+    studies; CryptoQuant/Glassnode free research blogs). Binance futures funding
+    is free (PRD Section 11.1). Sourced for the uncovered TRENDING_BULL regime as
+    a derivatives-flow mechanism the portfolio entirely lacks.
+
+  # PRE-REGISTRATION ---------------------------------------------------------
+  hypothesis: |
+    In a sustained bull trend, perpetual-swap funding is persistently POSITIVE
+    (leveraged longs crowd the long side and pay funding). A SPOT long that
+    enters when (a) price is in an established uptrend AND (b) funding is positive
+    but BELOW an extreme/euphoric cap captures the leveraged demand pushing spot
+    up, while the spot position pays no funding (it free-rides). The extreme cap
+    avoids blowoff tops where over-leveraged longs cascade-liquidate and price
+    sharply reverses.
+
+    Counterparty: trend-faders/shorts squeezed by leveraged-long demand; funding
+    is paid BY leveraged longs, which the spot long does not pay. Persistence:
+    structural -- perps are the dominant crypto venue and bull-market leverage
+    demand is durable retail behavior.
+
+    Crypto-native: funding has no equity analogue. Adds a DERIVATIVES-FLOW
+    mechanism the portfolio lacks (all 5 KEEP are price/volume only).
+  regime_target: TRENDING_BULL
+  expected_pf: 1.40          # honest prior; results >> this would be a RED FLAG
+  expected_sharpe: 0.90
+  expected_n_per_year: 30
+  expected_fail_modes:
+    - "Funding adds no marginal value over a plain trend filter
+       (long-when-funding-positive ~= long-always) -> no edge beyond H-2026-06-002."
+    - "Thin N: funding-gated entries may be infrequent -> trending_bull N < 30."
+    - "Funding-data leakage: using the funding print stamped AFTER the bar it
+       informs (must use funding known at/before entry; causal only)."
+    - "Edge only at blowoff tops (cap mis-set) -> reverses with liquidations."
+
+  # QUALITY GATE (DEC-2026-06-04-018, Stage 1 -- by hand) ---------------------
+  quality_gate:
+    stage1_hard_gates:
+      mechanism_stated: true
+      falsifiable_fail_modes: true
+      sample_size_feasible: true
+      not_known_dead_pattern: true   # no funding-based corpse in the graveyard
+    stage1_scores:
+      mechanism_strength: 3
+      crowding_inverse: 2
+      crypto_native_fit: 3
+      regime_specificity: 3
+      parameter_parsimony: 2
+      diversity_contribution: 3
+      source_credibility: 2
+      total: 18
+    verdict: PASS
+
+  # IMPLEMENTATION + EVAL ROUTING --------------------------------------------
+  implementation_file: research/generators/funding_confirmed_trend.py   # TO BUILD
+  eval_path: "python -m scripts.regime_dsr --strategy FUNDING_TREND"
+  infrastructure_required:
+    - "Funding-rate data channel plumbed into the backtest engine (Binance
+       futures funding is FREE, PRD 11.1). New infra is justified by this
+       scorecard-passing hypothesis per DEC-2026-06-04-018 (build a tool only
+       when a tested hypothesis demonstrably needs it) -- NOT before."
+  registration:
+    research_label: FUNDING_TREND
+    template_id: funding_confirmed_trend
+    parameters:
+      trend_ema_period: 100
+      funding_positive_threshold: 0.0
+      funding_extreme_cap_pct_per_8h: 0.05
+      atr_period: 14
+      atr_stop_multiplier: 2.0
+      risk_reward_ratio: 2.5
+    symbols: [BTCUSDT, ETHUSDT, BNBUSDT, SOLUSDT]
+    market: spot
+    note: >-
+      Generator in research/generators/ (subclasses src SignalGenerator),
+      loaded via factory.register_generator runtime hook (DEC-2026-06-04-019).
+      src/ unchanged.
+
+  effective_k_at_proposal: null
+  similar_retired_strategies: []   # novel mechanism; no funding-based corpse
+  results: null
+  biography_file: research/biographies/active/FUNDING_TREND.yaml
