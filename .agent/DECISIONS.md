@@ -2795,11 +2795,31 @@ parameters:
 
 ---
 
+### DEC-2026-06-04-015: Backtest Engine `lookback_window` Optimization (O(n^2) -> O(n), Opt-In, Equivalence-Gated)
+
+- **Decision:** Add an OPT-IN `lookback_window: int | None = None` parameter to `BacktestEngine.run_backtest`. When `None` (default), each bar's signal is generated from the FULL history up to that bar -- the original behavior, byte-for-byte unchanged, so every existing caller (production backtests) is unaffected. When set to `W`, the engine passes only the trailing `max(W, min_bars)` bars to the generator each step, collapsing the per-bar indicator recomputation from O(i) to O(W) and the whole loop from **O(n^2) to O(n)**. The research regime-DSR runner (`scripts/regime_dsr.py`) uses `W=1800` but ONLY for templates PROVEN window-safe by `tests/unit/backtest/test_window_equivalence.py` (the 5 KEEP templates: macd_pullback, bull_trend_pullback, volume_balance_breakout, stoch_rsi_bull_cross, ichimoku_cloud_trend); all other templates run full-history (`None`) because they may use inception-cumulative / recursive indicators (vpt_momentum running VPT, heikin_ashi recursion) or are simply not yet equivalence-covered. The runner also caches regenerated trades on disk so re-runs skip fetch+backtest entirely.
+- **Context:** The regime-conditional DSR regeneration over 540 days of 1H data took ~4-5 hours per strategy and ~13 hours for the five KEEP strategies (operator-observed). Profiling (2026-06-07) isolated the cost precisely: network fetch = 8.1s for 14,041 bars (0.85%); the backtest = 943.9s for ONE symbol (99%). Root cause in `engine.py`: the loop sliced `series.slice(0, i+1)` (the full growing history) every bar -- which also re-sorts in `OHLCVSeries.__init__` -- and `generator.generate()` recomputed every indicator (EMA/MACD/ATR/ADX/RSI/BB/Ichimoku) from scratch over that growing slice. O(n^2) (really O(n^2 log n)).
+- **Rationale:**
+  - **Windowing exploits indicator convergence.** EMA/MACD/RSI/ADX/BB/Ichimoku are bounded-lookback or exponentially-converging; a trailing window of 1800 reproduces EMA(200)-class values to ~1e-8, and since signals are comparisons, decisions never flip. **Proven trade-identical on real data: 102 vs 102 trades, 943.9s -> 156.4s (6.0x).**
+  - **Equivalence-gated, not assumed.** `test_window_equivalence.py` proves (a) indicator numeric convergence (EMA-200/ADX full vs window <=1e-6), (b) signal-stream equivalence across sampled bars where 1000+ older bars are dropped, (c) the default path is unchanged. A real-data trade-level spot-check (102==102) confirmed it before any run trusted it.
+  - **Opt-in + safe-list = zero production risk.** Default `None` means the live/production backtests are byte-identical to before; only the research runner opts in, and only for templates whose equivalence is proven. Cumulative-indicator templates stay full-history.
+- **Alternatives Considered:**
+  - **GPU:** rejected -- a backtest is a sequential, data-dependent, branch-heavy loop over a few MB; GPUs accelerate large dense parallel math and would sit idle. Wrong tool.
+  - **Extended thinking / "UltraThink":** rejected (category error) -- that is model reasoning depth, not Python execution speed; it cannot affect runtime.
+  - **Vectorized "compute indicators once" engine rewrite:** deferred -- the exact (no-approximation) fix, but a large cross-generator refactor; windowing is contained, opt-in, and equivalence-proven now. Revisit if more speed is needed.
+  - **Multiprocessing only:** complementary, not a substitute -- it parallelizes independent symbol backtests (CPU cores) but does not reduce per-symbol cost; can be layered on top later.
+- **Status:** ACTIVE
+- **Date Decided:** 2026-06-07
+- **Implemented By:** `src/core/strategy/backtest/engine.py` (`lookback_window` param + windowed loop), `tests/unit/backtest/test_window_equivalence.py` (equivalence gate), `scripts/regime_dsr.py` (`WINDOW_SAFE_TEMPLATES`, `DEFAULT_LOOKBACK_WINDOW=1800`, on-disk trade cache)
+- **References:** DEC-2026-06-04-014 (regime-conditional DSR that surfaced the cost), profiling 2026-06-07 (8.1s fetch vs 943.9s backtest), real-data spot-check 102==102 trades / 6.0x, operator decision 2026-06-07 ("also do the engine windowing fix").
+
+---
+
 **End of Decisions Log**
 
-**Total Decisions:** 90 active, 0 superseded, 5 locked (1 amended); DEC-2026-06-04-013 amended
-**Last Updated:** 2026-06-06
-**Next Decision ID:** DEC-2026-06-04-015
+**Total Decisions:** 91 active, 0 superseded, 5 locked (1 amended); DEC-2026-06-04-013 amended
+**Last Updated:** 2026-06-07
+**Next Decision ID:** DEC-2026-06-04-016
 
 ## Phase 5 Decisions (Backtesting & Simulation)
 

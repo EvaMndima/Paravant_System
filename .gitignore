@@ -82,3 +82,7 @@ Thumbs.db
 # AI agent skills (local tool configurations, not project code)
 .agent/skills/
 .claude/skills/
+
+# Research layer transient artifacts (regenerable; not committed)
+research/.cache/
+docs/research/regime_dsr/_*.log

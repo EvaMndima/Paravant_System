@@ -111,6 +111,116 @@ statistical_validation_history:
   classification_reasoning: Gating (conservative) DSR p=1.000, MaxDD=2.52%, N=4. Base
     tier TIER_D_REJECT; conservative tier TIER_D_REJECT.
   pbo_score: null
+regime_coverage:
+- run_id: regime_dsr_run_20260607
+  run_date: '2026-06-07'
+  cost_model_version: v0_unverified
+  data_source: regenerated_backtest
+  is_screen_only: true
+  pooled_tier: TIER_D_REJECT
+  pooled_dsr_p_value: 0.9999999999998563
+  per_regime:
+  - regime: bull
+    bucket_kind: coarse
+    n_trades: 85
+    pf_adjusted: 0.9093691594765118
+    sharpe_adjusted: -0.04136441277563123
+    base_dsr_p_value: 0.9976912768847176
+    conservative_dsr_p_value: 0.9999997871779462
+    tier: TIER_D_REJECT
+    is_descriptive: false
+    effective_k: 3450
+    notes: screen-only; not a deployment gate
+  - regime: bear
+    bucket_kind: coarse
+    n_trades: 35
+    pf_adjusted: 0.6448727218907737
+    sharpe_adjusted: -0.19241780379475615
+    base_dsr_p_value: 0.9950947765993812
+    conservative_dsr_p_value: 0.9999874622881757
+    tier: TIER_D_REJECT
+    is_descriptive: false
+    effective_k: 3450
+    notes: screen-only; not a deployment gate
+  - regime: chop
+    bucket_kind: coarse
+    n_trades: 26
+    pf_adjusted: 0.5140361333802003
+    sharpe_adjusted: -0.2804457203980679
+    base_dsr_p_value: 0.9980911636220908
+    conservative_dsr_p_value: 0.9999840349101408
+    tier: TIER_D_REJECT
+    is_descriptive: false
+    effective_k: 3450
+    notes: screen-only; not a deployment gate
+  - regime: trending_bull
+    bucket_kind: sub_regime
+    n_trades: 47
+    pf_adjusted: 0.8480512160138426
+    sharpe_adjusted: -0.07206478437976634
+    base_dsr_p_value: 0.9910798781500616
+    conservative_dsr_p_value: 0.999960861820341
+    tier: TIER_D_REJECT
+    is_descriptive: true
+    effective_k: 3450
+    notes: DESCRIPTIVE fine SubRegime -- diagnostic only, never gating
+  - regime: high_vol
+    bucket_kind: sub_regime
+    n_trades: 15
+    pf_adjusted: 0.41868966937771435
+    sharpe_adjusted: -0.38208159273046666
+    base_dsr_p_value: 0.9941751468191903
+    conservative_dsr_p_value: 0.9995641997441448
+    tier: TIER_D_REJECT
+    is_descriptive: true
+    effective_k: 3450
+    notes: DESCRIPTIVE fine SubRegime -- diagnostic only, never gating
+  - regime: choppy_bull
+    bucket_kind: sub_regime
+    n_trades: 38
+    pf_adjusted: 1.0062034112335854
+    sharpe_adjusted: 0.002655560128277962
+    base_dsr_p_value: 0.9370413871986605
+    conservative_dsr_p_value: 0.9989383365427065
+    tier: TIER_D_REJECT
+    is_descriptive: true
+    effective_k: 3450
+    notes: DESCRIPTIVE fine SubRegime -- diagnostic only, never gating
+  - regime: trending_bear
+    bucket_kind: sub_regime
+    n_trades: 18
+    pf_adjusted: 0.962119817367135
+    sharpe_adjusted: -0.01682626868701002
+    base_dsr_p_value: 0.8534872046211712
+    conservative_dsr_p_value: 0.9852069141317186
+    tier: TIER_D_REJECT
+    is_descriptive: true
+    effective_k: 3450
+    notes: DESCRIPTIVE fine SubRegime -- diagnostic only, never gating
+  - regime: choppy_bear
+    bucket_kind: sub_regime
+    n_trades: 17
+    pf_adjusted: 0.4006014994745495
+    sharpe_adjusted: -0.39323443001050273
+    base_dsr_p_value: 0.9950542421880948
+    conservative_dsr_p_value: 0.9998672594151298
+    tier: TIER_D_REJECT
+    is_descriptive: true
+    effective_k: 3450
+    notes: DESCRIPTIVE fine SubRegime -- diagnostic only, never gating
+  - regime: ranging
+    bucket_kind: sub_regime
+    n_trades: 11
+    pf_adjusted: 0.8299712476714756
+    sharpe_adjusted: -0.0769162673490088
+    base_dsr_p_value: 0.8291885848887345
+    conservative_dsr_p_value: 0.9725667967645142
+    tier: TIER_D_REJECT
+    is_descriptive: true
+    effective_k: 3450
+    notes: DESCRIPTIVE fine SubRegime -- diagnostic only, never gating
+  notes: Regime-conditional backtest DSR SCREEN (DEC-2026-06-04-014). NOT a deployment
+    gate; paper/live validation still required. K x3 regime buckets.
 decision_log:
 - 'PENDING-DEC: Retrospective DSR reclassified ICVP from None to TIER_D_REJECT (run
   retrospective_dsr_run_20260605). File DEC entry in BOTH .claude/DECISIONS.md and

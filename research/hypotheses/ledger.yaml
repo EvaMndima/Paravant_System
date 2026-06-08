@@ -70,12 +70,25 @@
     control: [BTF]   # known-bad full-history control (Phase B4)
     retired: [CMF, RSI_BB, HATP, VRB, VPT]
 
-  # RESULTS (populated post-run) ---------------------------------------------
+  # RESULTS (populated post-run 2026-06-07) ----------------------------------
   results:
-    classified_tier: null
-    backtest_date: null
-    dsr_p_value: null
+    backtest_date: 2026-06-07
+    window_days: 540
     cost_model_verified: false   # v0 incremental-pad, unverified
-    leakage_check: null
+    leakage_check: passed        # causal tagging self-check held on BTC daily
+    btf_calibration: PASSED      # known-bad control -> Tier D in all regimes
+    verdict: |
+      No KEEP strategy has a DSR-validated edge in ANY regime (every base DSR
+      p-value >= 0.67; floor is 0.30). The fine SubRegime breakdown DID surface
+      faint, regime-specific POSITIVE cost-adjusted edge that the coarse view
+      masked -- strongest in VBB (choppy_bear PF 1.38 / +0.14 Sharpe, choppy_bull
+      PF 1.20), then SRC (ranging PF 1.47, choppy_bull PF 1.06) and BTP (ranging
+      PF 1.22) -- but all are thin-N and none clears DSR (best base p = 0.67).
+      MACD_PB shows NO positive regime cell: its documented choppy_bear edge
+      (PF 2.33) did not reproduce (now PF 0.76), consistent with time-window
+      selection bias / decay. Treat as a SCREEN result: VBB/SRC choppy cells are
+      the "worth paper-trading first" shortlist; none earns live capital.
+    paper_trade_shortlist: [VBB.choppy_bear, VBB.choppy_bull, SRC.choppy_bull, SRC.ranging, BTP.ranging]
+    reexamine: [MACD_PB]   # documented edge did not reproduce
 
-  biography_file: null  # regime_coverage written into each strategy's biography
+  biography_file: research/biographies/active/<strategy_id>.yaml  # regime_coverage written per strategy

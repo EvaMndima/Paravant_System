@@ -32,6 +32,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import pickle
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -45,6 +46,7 @@ from research.backtest.cost_model import CostModel
 from research.backtest.regime_tagging import (
     COARSE_BUCKETS,
     bucket_by_coarse,
+    bucket_by_sub_regime,
     build_regime_timeline,
     is_labeling_causal,
     tag_trades,
@@ -92,6 +94,28 @@ RESEARCH_LABEL_TO_TEMPLATE: dict[str, str] = {
 # Matches the Tier B deployment N floor (DEC-2026-06-04-008): below it a regime
 # verdict is shown for context but carries no weight.
 MIN_BUCKET_N: int = 20
+
+# Backtest lookback window for the O(n^2)->O(n) engine optimization
+# (DEC-2026-06-04-015). 1800 bars reproduces EMA(200)-class indicators to ~1e-8,
+# proven trade-identical on real data (102==102 trades, 6x faster).
+DEFAULT_LOOKBACK_WINDOW: int = 1800
+
+# Templates PROVEN window-safe by tests/unit/backtest/test_window_equivalence.py
+# (bounded-lookback indicators only). Other templates run with the full history
+# (lookback_window=None) because they use inception-cumulative / recursive
+# indicators (e.g. vpt_momentum's running VPT, heikin_ashi recursion) OR are
+# simply not yet covered by the equivalence test -- conservative by default.
+WINDOW_SAFE_TEMPLATES: frozenset[str] = frozenset({
+    "macd_pullback",
+    "bull_trend_pullback",
+    "volume_balance_breakout",
+    "stoch_rsi_bull_cross",
+    "ichimoku_cloud_trend",
+})
+
+# On-disk cache for regenerated trades so re-runs (fine-breakdown tweaks, K
+# tuning) skip the expensive fetch+backtest entirely. NOT committed (transient).
+CACHE_DIR = Path("research/.cache/regime_dsr")
 
 # Per-strategy execution model for regeneration. SHORT-side (bear) strategies
 # can only express their edge with shorts enabled, so they MUST be backtested in
@@ -202,6 +226,63 @@ def _backtest_config(market: str) -> BacktestConfig:
     )
 
 
+async def _fetch_with_retry(
+    fetcher: MarketDataFetcher,
+    *,
+    symbol: str,
+    timeframe: str,
+    start_date: datetime,
+    end_date: datetime,
+    retries: int = 4,
+) -> OHLCVSeries:
+    """Fetch OHLCV with bounded retry + backoff on TRANSIENT connection errors.
+
+    Binance occasionally resets a connection mid-fetch (ConnectionResetError /
+    requests ConnectionError) when many paginated requests arrive quickly. That
+    is transient and retryable -- distinct from a regional 451 geo-block, which
+    fails fast upstream (DEC-2026-06-01-003). Without this, a single reset during
+    a multi-symbol regeneration aborts the whole run.
+
+    Args:
+        fetcher: The market-data fetcher.
+        symbol: Trading pair.
+        timeframe: Candle timeframe (e.g. ``1h``, ``1d``).
+        start_date: Inclusive UTC start.
+        end_date: Inclusive UTC end.
+        retries: Max attempts before giving up.
+
+    Returns:
+        The fetched ``OHLCVSeries``.
+
+    Raises:
+        Exception: The last transient error if all attempts fail.
+    """
+    import requests.exceptions as rex
+
+    transient = (
+        rex.ConnectionError, rex.Timeout, rex.ChunkedEncodingError,
+        ConnectionError, OSError,
+    )
+    last_exc: Exception | None = None
+    for attempt in range(1, retries + 1):
+        try:
+            return await fetcher.fetch_historical_ohlcv(
+                symbol=symbol, timeframe=timeframe,
+                start_date=start_date, end_date=end_date,
+            )
+        except transient as exc:
+            last_exc = exc
+            wait = 2.0 * attempt
+            logger.warning(
+                "regime_dsr_fetch_retry",
+                symbol=symbol, timeframe=timeframe, attempt=attempt,
+                error=str(exc), wait_s=wait,
+            )
+            await asyncio.sleep(wait)
+    assert last_exc is not None
+    raise last_exc
+
+
 async def regenerate_pooled_trades(
     label: str,
     *,
@@ -209,6 +290,7 @@ async def regenerate_pooled_trades(
     lookback_days: int,
     market: str = "spot",
     testnet: bool = False,
+    use_cache: bool = True,
 ) -> RegeneratedTrades:
     """Re-run the backtest for ``label`` and pool its per-trade series.
 
@@ -216,12 +298,18 @@ async def regenerate_pooled_trades(
     with EMA(200) warmup), runs ``BacktestEngine`` per symbol, and pools the
     serialized trade logs. Network-bound (Binance); never writes to the network.
 
+    Performance (DEC-2026-06-04-015): window-safe templates use the engine's
+    ``lookback_window`` optimization (~6x faster, trade-identical -- proven by
+    tests/unit/backtest/test_window_equivalence.py). Results are cached on disk so
+    re-runs skip the fetch+backtest entirely.
+
     Args:
         label: Research label (must be in ``RESEARCH_LABEL_TO_TEMPLATE``).
         end_date: Timezone-aware UTC end of the backtest window.
         lookback_days: Length of the analysis window in days.
         market: ``"spot"`` or ``"futures"``.
         testnet: Whether to use the Binance testnet client.
+        use_cache: If True, read/write the on-disk regeneration cache.
 
     Returns:
         A ``RegeneratedTrades`` with pooled trades and the BTC daily anchor.
@@ -232,6 +320,22 @@ async def regenerate_pooled_trades(
     template = RESEARCH_LABEL_TO_TEMPLATE[label]
     symbols = list(STRATEGY_SYMBOLS[template])
     params = dict(STRATEGY_PARAMS[template])
+    # Only PROVEN-safe templates use the windowing optimization; others run the
+    # full history (conservative -- correctness over speed).
+    window = DEFAULT_LOOKBACK_WINDOW if template in WINDOW_SAFE_TEMPLATES else None
+
+    cache_path = (
+        CACHE_DIR
+        / f"{label}_{end_date.strftime('%Y%m%d')}_{lookback_days}d_{market}_w{window}.pkl"
+    )
+    if use_cache and cache_path.exists():
+        with cache_path.open("rb") as fh:
+            cached: RegeneratedTrades = pickle.load(fh)
+        logger.info(
+            "regime_dsr_cache_hit",
+            label=label, path=str(cache_path), trades=len(cached.trades),
+        )
+        return cached
 
     client = BinanceClient(testnet=testnet)
     fetcher = MarketDataFetcher(client)
@@ -243,14 +347,16 @@ async def regenerate_pooled_trades(
     hourly_start = end_date - timedelta(days=lookback_days + 45)
     daily_start = end_date - timedelta(days=lookback_days + 300)
 
-    btc_daily = await fetcher.fetch_historical_ohlcv(
-        symbol="BTCUSDT", timeframe="1d", start_date=daily_start, end_date=end_date,
+    btc_daily = await _fetch_with_retry(
+        fetcher, symbol="BTCUSDT", timeframe="1d",
+        start_date=daily_start, end_date=end_date,
     )
 
     pooled: list[dict[str, Any]] = []
     for symbol in symbols:
-        series = await fetcher.fetch_historical_ohlcv(
-            symbol=symbol, timeframe="1h", start_date=hourly_start, end_date=end_date,
+        series = await _fetch_with_retry(
+            fetcher, symbol=symbol, timeframe="1h",
+            start_date=hourly_start, end_date=end_date,
         )
         strategy = SimpleNamespace(
             id=f"regime_dsr_{label}_{symbol}",
@@ -258,17 +364,26 @@ async def regenerate_pooled_trades(
             template_id=template,
             parameters=params,
         )
-        result = engine.run_backtest(strategy=strategy, series=series, config=config)
+        result = engine.run_backtest(
+            strategy=strategy, series=series, config=config, lookback_window=window,
+        )
         pooled.extend(t.to_dict() for t in result.trade_log)
         logger.info(
             "regime_dsr_symbol_backtested",
             label=label, symbol=symbol, trades=len(result.trade_log),
+            lookback_window=window,
         )
 
-    return RegeneratedTrades(
+    regen = RegeneratedTrades(
         label=label, template=template, symbols=symbols,
         trades=pooled, btc_daily=btc_daily,
     )
+    if use_cache:
+        CACHE_DIR.mkdir(parents=True, exist_ok=True)
+        with cache_path.open("wb") as fh:
+            pickle.dump(regen, fh)
+        logger.info("regime_dsr_cache_write", label=label, path=str(cache_path))
+    return regen
 
 
 def compute_regime_coverage(
@@ -354,6 +469,36 @@ def compute_regime_coverage(
                 is_descriptive=is_descriptive,
                 effective_k=regime_k.gating_k,
                 notes=note,
+            )
+        )
+
+    # Fine SubRegime breakdown -- DIAGNOSTIC ONLY (always descriptive, never
+    # gating). The coarse buckets merge trending+choppy within a direction, which
+    # MASKS the documented choppy-specific edge of several KEEP strategies (their
+    # choppy_bear/choppy_bull edge is hidden inside the bear/bull cells alongside
+    # trending losses). These fine cells expose pf_adjusted / sharpe_adjusted per
+    # SubRegime -- both K-INDEPENDENT -- so "did the choppy_bear edge survive
+    # honest costs" is directly visible even where per-bucket N is thin.
+    for sub, sub_trades in bucket_by_sub_regime(tagged).items():
+        res = rd.analyze_strategy(
+            f"{strategy_id}::{sub.value}", status, sub_trades,
+            k_estimate=regime_k, variance_sr_point=variance_sr_point,
+            cost_model=cost_model, run_id=run_id, run_date=run_date,
+        )
+        e = res.validation_entry
+        cells.append(
+            RegimeDSRResult(
+                regime=sub.value,
+                bucket_kind="sub_regime",
+                n_trades=res.n_trades_analyzed,
+                pf_adjusted=e.pf_adjusted,
+                sharpe_adjusted=e.sharpe_adjusted,
+                base_dsr_p_value=e.base_dsr_p_value,
+                conservative_dsr_p_value=e.conservative_dsr_p_value,
+                tier=res.final_tier,
+                is_descriptive=True,  # fine cells never gate (guard #4)
+                effective_k=regime_k.gating_k,
+                notes="DESCRIPTIVE fine SubRegime -- diagnostic only, never gating",
             )
         )
 
@@ -486,6 +631,38 @@ def render_coverage_matrix_md(
         else:
             lines.append(f"- **{bucket.upper()}**: NO gating Tier A/B coverage (GAP)")
 
+    # Fine SubRegime breakdown -- the diagnostic the coarse table cannot show.
+    # PF(adj) and Sharpe(adj) are K-INDEPENDENT, so they answer "does the
+    # documented choppy edge survive honest costs" regardless of the gate.
+    lines += [
+        "",
+        "## Fine SubRegime Breakdown (DESCRIPTIVE -- never gating)",
+        "",
+        "The coarse buckets merge trending+choppy within a direction, masking "
+        "choppy-specific edge. These per-SubRegime cells expose where edge "
+        "actually concentrates. **PF(adj) and Sharpe(adj) are K-independent**: "
+        "PF(adj) > 1 with a positive Sharpe is a real (if thin) edge worth "
+        "paper-trading even when the cell does not gate.",
+        "",
+        "| Strategy | SubRegime | N | PF(adj) | Sharpe(adj) | base DSR p |",
+        "|----------|-----------|---|---------|-------------|------------|",
+    ]
+    for label, analysis in analyses.items():
+        fine = [c for c in analysis.coverage_run.per_regime
+                if c.bucket_kind == "sub_regime"]
+        for c in sorted(fine, key=lambda x: x.regime):
+            flag = " *" if (c.pf_adjusted > 1.0 and c.sharpe_adjusted > 0.0) else ""
+            lines.append(
+                f"| {label} | {c.regime}{flag} | {c.n_trades} | "
+                f"{c.pf_adjusted:.2f} | {c.sharpe_adjusted:+.3f} | "
+                f"{c.base_dsr_p_value:.3f} |"
+            )
+    lines += [
+        "",
+        "`*` = PF(adj) > 1 and Sharpe(adj) > 0 (a positive cost-adjusted edge in "
+        "that SubRegime -- the cells worth paper-trading first).",
+    ]
+
     lines += [
         "",
         "## Honest Caveats",
@@ -527,6 +704,7 @@ def render_coverage_json(
             "per_regime": [
                 {
                     "regime": c.regime,
+                    "bucket_kind": c.bucket_kind,
                     "tier": rd._tier_label(c.tier),
                     "n_trades": c.n_trades,
                     "base_dsr_p_value": c.base_dsr_p_value,
@@ -550,6 +728,7 @@ async def run_regime_dsr(
     market_override: str | None = None,
     output_dir: Path,
     cost_model: CostModel | None = None,
+    use_cache: bool = True,
 ) -> dict[str, RegimeAnalysis]:
     """Regenerate, tag, and screen all ``labels``; write biographies + reports.
 
@@ -579,6 +758,7 @@ async def run_regime_dsr(
         logger.info("regime_dsr_market_selected", label=label, market=market)
         regen = await regenerate_pooled_trades(
             label, end_date=end_date, lookback_days=lookback_days, market=market,
+            use_cache=use_cache,
         )
         # Guard #3: verify the regime labelling is causal on THIS BTC-daily series
         # before trusting any verdict derived from it.
@@ -692,6 +872,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--output-dir", type=str, default=str(OUTPUT_DIR))
     parser.add_argument("--skip-dsr-gate", action="store_true",
                         help="Skip the DSR math verification pre-flight (NOT recommended).")
+    parser.add_argument("--no-cache", action="store_true",
+                        help="Ignore the on-disk regeneration cache (force fresh fetch+backtest).")
     return parser.parse_args(argv)
 
 
@@ -743,6 +925,7 @@ def main(argv: list[str] | None = None) -> int:
             lookback_days=args.lookback_days,
             market_override=args.market,
             output_dir=Path(args.output_dir),
+            use_cache=not args.no_cache,
         )
     )
     logger.info("regime_dsr_complete", labels=labels)

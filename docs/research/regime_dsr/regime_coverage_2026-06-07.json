@@ -1,0 +1,582 @@
+{
+  "run_date": "2026-06-07",
+  "cost_model_version": "v0_unverified",
+  "is_screen_only": true,
+  "strategies": {
+    "MACD_PB": {
+      "pooled_tier": "TIER_D_REJECT",
+      "pooled_dsr_p_value": 0.9999999997667013,
+      "pooled_n": 113,
+      "per_regime": [
+        {
+          "regime": "bull",
+          "bucket_kind": "coarse",
+          "tier": "TIER_D_REJECT",
+          "n_trades": 64,
+          "base_dsr_p_value": 0.9996215623079683,
+          "conservative_dsr_p_value": 0.9999994595877937,
+          "pf_adjusted": 0.7417952899576442,
+          "sharpe_adjusted": -0.13883570164786274,
+          "is_descriptive": false,
+          "effective_k": 3450
+        },
+        {
+          "regime": "bear",
+          "bucket_kind": "coarse",
+          "tier": "TIER_D_REJECT",
+          "n_trades": 35,
+          "base_dsr_p_value": 0.9670999576394997,
+          "conservative_dsr_p_value": 0.9993581424411764,
+          "pf_adjusted": 0.8926508260706061,
+          "sharpe_adjusted": -0.05206864354916816,
+          "is_descriptive": false,
+          "effective_k": 3450
+        },
+        {
+          "regime": "chop",
+          "bucket_kind": "coarse",
+          "tier": "TIER_D_REJECT",
+          "n_trades": 13,
+          "base_dsr_p_value": 0.9836470713662915,
+          "conservative_dsr_p_value": 0.997830998396219,
+          "pf_adjusted": 0.4381788908224145,
+          "sharpe_adjusted": -0.3735510030926362,
+          "is_descriptive": true,
+          "effective_k": 3450
+        },
+        {
+          "regime": "choppy_bull",
+          "bucket_kind": "sub_regime",
+          "tier": "TIER_D_REJECT",
+          "n_trades": 29,
+          "base_dsr_p_value": 0.975586053167776,
+          "conservative_dsr_p_value": 0.9988136572008661,
+          "pf_adjusted": 0.8372476239281954,
+          "sharpe_adjusted": -0.08202559879951418,
+          "is_descriptive": true,
+          "effective_k": 3450
+        },
+        {
+          "regime": "trending_bull",
+          "bucket_kind": "sub_regime",
+          "tier": "TIER_D_REJECT",
+          "n_trades": 35,
+          "base_dsr_p_value": 0.9961468927498383,
+          "conservative_dsr_p_value": 0.9999004114386589,
+          "pf_adjusted": 0.6816197204871561,
+          "sharpe_adjusted": -0.17796077328511514,
+          "is_descriptive": true,
+          "effective_k": 3450
+        },
+        {
+          "regime": "high_vol",
+          "bucket_kind": "sub_regime",
+          "tier": "INSUFFICIENT_DATA",
+          "n_trades": 3,
+          "base_dsr_p_value": 0.9767675614710325,
+          "conservative_dsr_p_value": 0.9837709241083812,
+          "pf_adjusted": 0.0,
+          "sharpe_adjusted": -2.646258689303227,
+          "is_descriptive": true,
+          "effective_k": 3450
+        },
+        {
+          "regime": "ranging",
+          "bucket_kind": "sub_regime",
+          "tier": "TIER_D_REJECT",
+          "n_trades": 10,
+          "base_dsr_p_value": 0.8478130681771139,
+          "conservative_dsr_p_value": 0.9583962076124742,
+          "pf_adjusted": 0.848821579611086,
+          "sharpe_adjusted": -0.07446724720327644,
+          "is_descriptive": true,
+          "effective_k": 3450
+        },
+        {
+          "regime": "trending_bear",
+          "bucket_kind": "sub_regime",
+          "tier": "TIER_D_REJECT",
+          "n_trades": 21,
+          "base_dsr_p_value": 0.898469620161823,
+          "conservative_dsr_p_value": 0.989766053047318,
+          "pf_adjusted": 0.9739331571678477,
+          "sharpe_adjusted": -0.012029052277347864,
+          "is_descriptive": true,
+          "effective_k": 3450
+        },
+        {
+          "regime": "choppy_bear",
+          "bucket_kind": "sub_regime",
+          "tier": "TIER_D_REJECT",
+          "n_trades": 14,
+          "base_dsr_p_value": 0.9093501257529286,
+          "conservative_dsr_p_value": 0.986683432628579,
+          "pf_adjusted": 0.7635041770075673,
+          "sharpe_adjusted": -0.12152374745652739,
+          "is_descriptive": true,
+          "effective_k": 3450
+        }
+      ]
+    },
+    "BTP": {
+      "pooled_tier": "TIER_D_REJECT",
+      "pooled_dsr_p_value": 1.0,
+      "pooled_n": 409,
+      "per_regime": [
+        {
+          "regime": "bull",
+          "bucket_kind": "coarse",
+          "tier": "TIER_D_REJECT",
+          "n_trades": 242,
+          "base_dsr_p_value": 0.9999999999854869,
+          "conservative_dsr_p_value": 1.0,
+          "pf_adjusted": 0.6979700742803463,
+          "sharpe_adjusted": -0.158928377159838,
+          "is_descriptive": false,
+          "effective_k": 3450
+        },
+        {
+          "regime": "bear",
+          "bucket_kind": "coarse",
+          "tier": "TIER_D_REJECT",
+          "n_trades": 99,
+          "base_dsr_p_value": 0.9997461508377243,
+          "conservative_dsr_p_value": 0.9999999819583664,
+          "pf_adjusted": 0.8557263396468111,
+          "sharpe_adjusted": -0.06852363536422174,
+          "is_descriptive": false,
+          "effective_k": 3450
+        },
+        {
+          "regime": "chop",
+          "bucket_kind": "coarse",
+          "tier": "TIER_D_REJECT",
+          "n_trades": 65,
+          "base_dsr_p_value": 0.9984405596454768,
+          "conservative_dsr_p_value": 0.9999981799477017,
+          "pf_adjusted": 0.8216499928602099,
+          "sharpe_adjusted": -0.07847102815380219,
+          "is_descriptive": false,
+          "effective_k": 3450
+        },
+        {
+          "regime": "high_vol",
+          "bucket_kind": "sub_regime",
+          "tier": "TIER_D_REJECT",
+          "n_trades": 19,
+          "base_dsr_p_value": 0.9886406842639734,
+          "conservative_dsr_p_value": 0.9985786620808195,
+          "pf_adjusted": 0.500613460088766,
+          "sharpe_adjusted": -0.2836329925514086,
+          "is_descriptive": true,
+          "effective_k": 3450
+        },
+        {
+          "regime": "trending_bull",
+          "bucket_kind": "sub_regime",
+          "tier": "TIER_D_REJECT",
+          "n_trades": 145,
+          "base_dsr_p_value": 0.9999993001067582,
+          "conservative_dsr_p_value": 0.9999999999991305,
+          "pf_adjusted": 0.7689840615506851,
+          "sharpe_adjusted": -0.11610434293847173,
+          "is_descriptive": true,
+          "effective_k": 3450
+        },
+        {
+          "regime": "choppy_bull",
+          "bucket_kind": "sub_regime",
+          "tier": "TIER_D_REJECT",
+          "n_trades": 97,
+          "base_dsr_p_value": 0.999998498953882,
+          "conservative_dsr_p_value": 0.9999999999452867,
+          "pf_adjusted": 0.5820586022619609,
+          "sharpe_adjusted": -0.24147038607134397,
+          "is_descriptive": true,
+          "effective_k": 3450
+        },
+        {
+          "regime": "ranging",
+          "bucket_kind": "sub_regime",
+          "tier": "TIER_D_REJECT",
+          "n_trades": 46,
+          "base_dsr_p_value": 0.8970536925942818,
+          "conservative_dsr_p_value": 0.9980291285121257,
+          "pf_adjusted": 1.2175956671393666,
+          "sharpe_adjusted": 0.08585085419090435,
+          "is_descriptive": true,
+          "effective_k": 3450
+        },
+        {
+          "regime": "trending_bear",
+          "bucket_kind": "sub_regime",
+          "tier": "TIER_D_REJECT",
+          "n_trades": 66,
+          "base_dsr_p_value": 0.9972248709527676,
+          "conservative_dsr_p_value": 0.999995427767201,
+          "pf_adjusted": 0.8792297151077193,
+          "sharpe_adjusted": -0.056913502083086036,
+          "is_descriptive": true,
+          "effective_k": 3450
+        },
+        {
+          "regime": "choppy_bear",
+          "bucket_kind": "sub_regime",
+          "tier": "TIER_D_REJECT",
+          "n_trades": 33,
+          "base_dsr_p_value": 0.9804898139605369,
+          "conservative_dsr_p_value": 0.9993123136147664,
+          "pf_adjusted": 0.8070572455272786,
+          "sharpe_adjusted": -0.09181896147373132,
+          "is_descriptive": true,
+          "effective_k": 3450
+        }
+      ]
+    },
+    "VBB": {
+      "pooled_tier": "TIER_D_REJECT",
+      "pooled_dsr_p_value": 0.9999999999988677,
+      "pooled_n": 153,
+      "per_regime": [
+        {
+          "regime": "bull",
+          "bucket_kind": "coarse",
+          "tier": "TIER_D_REJECT",
+          "n_trades": 89,
+          "base_dsr_p_value": 0.9999763799099504,
+          "conservative_dsr_p_value": 0.9999999948136471,
+          "pf_adjusted": 0.6935176729600756,
+          "sharpe_adjusted": -0.16090477463834071,
+          "is_descriptive": false,
+          "effective_k": 3450
+        },
+        {
+          "regime": "bear",
+          "bucket_kind": "coarse",
+          "tier": "TIER_D_REJECT",
+          "n_trades": 40,
+          "base_dsr_p_value": 0.9788073434975161,
+          "conservative_dsr_p_value": 0.9995271702417727,
+          "pf_adjusted": 0.9327618478941454,
+          "sharpe_adjusted": -0.03019072472307834,
+          "is_descriptive": false,
+          "effective_k": 3450
+        },
+        {
+          "regime": "chop",
+          "bucket_kind": "coarse",
+          "tier": "TIER_D_REJECT",
+          "n_trades": 22,
+          "base_dsr_p_value": 0.9931270294497747,
+          "conservative_dsr_p_value": 0.999235515235444,
+          "pf_adjusted": 0.4424545974464608,
+          "sharpe_adjusted": -0.36477368854408976,
+          "is_descriptive": false,
+          "effective_k": 3450
+        },
+        {
+          "regime": "high_vol",
+          "bucket_kind": "sub_regime",
+          "tier": "INSUFFICIENT_DATA",
+          "n_trades": 5,
+          "base_dsr_p_value": 0.7203821452299428,
+          "conservative_dsr_p_value": 0.8310560645299845,
+          "pf_adjusted": 1.0769370074796942,
+          "sharpe_adjusted": 0.03204374561909132,
+          "is_descriptive": true,
+          "effective_k": 3450
+        },
+        {
+          "regime": "trending_bull",
+          "bucket_kind": "sub_regime",
+          "tier": "TIER_D_REJECT",
+          "n_trades": 47,
+          "base_dsr_p_value": 0.9998863236749613,
+          "conservative_dsr_p_value": 0.9999976511893107,
+          "pf_adjusted": 0.38807766422528656,
+          "sharpe_adjusted": -0.43886676524383034,
+          "is_descriptive": true,
+          "effective_k": 3450
+        },
+        {
+          "regime": "choppy_bull",
+          "bucket_kind": "sub_regime",
+          "tier": "TIER_D_REJECT",
+          "n_trades": 42,
+          "base_dsr_p_value": 0.9357352927487437,
+          "conservative_dsr_p_value": 0.997634971430774,
+          "pf_adjusted": 1.2049929807403619,
+          "sharpe_adjusted": 0.07837429644545668,
+          "is_descriptive": true,
+          "effective_k": 3450
+        },
+        {
+          "regime": "ranging",
+          "bucket_kind": "sub_regime",
+          "tier": "TIER_D_REJECT",
+          "n_trades": 17,
+          "base_dsr_p_value": 0.9939552948414565,
+          "conservative_dsr_p_value": 0.9987198117955969,
+          "pf_adjusted": 0.233323753271933,
+          "sharpe_adjusted": -0.6854296868395336,
+          "is_descriptive": true,
+          "effective_k": 3450
+        },
+        {
+          "regime": "trending_bear",
+          "bucket_kind": "sub_regime",
+          "tier": "TIER_D_REJECT",
+          "n_trades": 22,
+          "base_dsr_p_value": 0.972232246047767,
+          "conservative_dsr_p_value": 0.9966636786594083,
+          "pf_adjusted": 0.6900063157176208,
+          "sharpe_adjusted": -0.15687650770449138,
+          "is_descriptive": true,
+          "effective_k": 3450
+        },
+        {
+          "regime": "choppy_bear",
+          "bucket_kind": "sub_regime",
+          "tier": "TIER_D_REJECT",
+          "n_trades": 18,
+          "base_dsr_p_value": 0.736092996992534,
+          "conservative_dsr_p_value": 0.942686524907594,
+          "pf_adjusted": 1.3750697062719235,
+          "sharpe_adjusted": 0.13955804129330238,
+          "is_descriptive": true,
+          "effective_k": 3450
+        }
+      ]
+    },
+    "SRC": {
+      "pooled_tier": "TIER_D_REJECT",
+      "pooled_dsr_p_value": 0.9999999999190987,
+      "pooled_n": 132,
+      "per_regime": [
+        {
+          "regime": "bull",
+          "bucket_kind": "coarse",
+          "tier": "TIER_D_REJECT",
+          "n_trades": 70,
+          "base_dsr_p_value": 0.9999293324072929,
+          "conservative_dsr_p_value": 0.9999998766542233,
+          "pf_adjusted": 0.6192294517470672,
+          "sharpe_adjusted": -0.2086887188844525,
+          "is_descriptive": false,
+          "effective_k": 3450
+        },
+        {
+          "regime": "bear",
+          "bucket_kind": "coarse",
+          "tier": "TIER_D_REJECT",
+          "n_trades": 39,
+          "base_dsr_p_value": 0.9940814117623263,
+          "conservative_dsr_p_value": 0.9998226295554767,
+          "pf_adjusted": 0.7277465743491366,
+          "sharpe_adjusted": -0.13425764954583755,
+          "is_descriptive": false,
+          "effective_k": 3450
+        },
+        {
+          "regime": "chop",
+          "bucket_kind": "coarse",
+          "tier": "TIER_D_REJECT",
+          "n_trades": 22,
+          "base_dsr_p_value": 0.7801329593548123,
+          "conservative_dsr_p_value": 0.9565099648915483,
+          "pf_adjusted": 1.3749896600921587,
+          "sharpe_adjusted": 0.1411839888341923,
+          "is_descriptive": false,
+          "effective_k": 3450
+        },
+        {
+          "regime": "high_vol",
+          "bucket_kind": "sub_regime",
+          "tier": "INSUFFICIENT_DATA",
+          "n_trades": 9,
+          "base_dsr_p_value": 0.7201091794574754,
+          "conservative_dsr_p_value": 0.870653120757614,
+          "pf_adjusted": 1.2970549176307753,
+          "sharpe_adjusted": 0.11531764647532766,
+          "is_descriptive": true,
+          "effective_k": 3450
+        },
+        {
+          "regime": "trending_bull",
+          "bucket_kind": "sub_regime",
+          "tier": "TIER_D_REJECT",
+          "n_trades": 38,
+          "base_dsr_p_value": 0.9995553190141,
+          "conservative_dsr_p_value": 0.9999791187102868,
+          "pf_adjusted": 0.3655943978957056,
+          "sharpe_adjusted": -0.4560079918680101,
+          "is_descriptive": true,
+          "effective_k": 3450
+        },
+        {
+          "regime": "choppy_bull",
+          "bucket_kind": "sub_regime",
+          "tier": "TIER_D_REJECT",
+          "n_trades": 32,
+          "base_dsr_p_value": 0.9486546605121023,
+          "conservative_dsr_p_value": 0.9967728731815091,
+          "pf_adjusted": 1.0643781991882315,
+          "sharpe_adjusted": 0.025969618520672914,
+          "is_descriptive": true,
+          "effective_k": 3450
+        },
+        {
+          "regime": "ranging",
+          "bucket_kind": "sub_regime",
+          "tier": "TIER_D_REJECT",
+          "n_trades": 13,
+          "base_dsr_p_value": 0.6692778645276733,
+          "conservative_dsr_p_value": 0.8822421154634311,
+          "pf_adjusted": 1.4664328102671498,
+          "sharpe_adjusted": 0.16859877506622506,
+          "is_descriptive": true,
+          "effective_k": 3450
+        },
+        {
+          "regime": "trending_bear",
+          "bucket_kind": "sub_regime",
+          "tier": "TIER_D_REJECT",
+          "n_trades": 28,
+          "base_dsr_p_value": 0.9662549193515144,
+          "conservative_dsr_p_value": 0.9973425426451268,
+          "pf_adjusted": 0.890433915249339,
+          "sharpe_adjusted": -0.0474119228253119,
+          "is_descriptive": true,
+          "effective_k": 3450
+        },
+        {
+          "regime": "choppy_bear",
+          "bucket_kind": "sub_regime",
+          "tier": "TIER_D_REJECT",
+          "n_trades": 11,
+          "base_dsr_p_value": 0.9642047121216593,
+          "conservative_dsr_p_value": 0.9878320718533533,
+          "pf_adjusted": 0.3847368714379345,
+          "sharpe_adjusted": -0.4462310624884565,
+          "is_descriptive": true,
+          "effective_k": 3450
+        }
+      ]
+    },
+    "ICVP": {
+      "pooled_tier": "TIER_D_REJECT",
+      "pooled_dsr_p_value": 0.9999999999998563,
+      "pooled_n": 149,
+      "per_regime": [
+        {
+          "regime": "bull",
+          "bucket_kind": "coarse",
+          "tier": "TIER_D_REJECT",
+          "n_trades": 85,
+          "base_dsr_p_value": 0.9976912768847176,
+          "conservative_dsr_p_value": 0.9999997871779462,
+          "pf_adjusted": 0.9093691594765118,
+          "sharpe_adjusted": -0.04136441277563123,
+          "is_descriptive": false,
+          "effective_k": 3450
+        },
+        {
+          "regime": "bear",
+          "bucket_kind": "coarse",
+          "tier": "TIER_D_REJECT",
+          "n_trades": 35,
+          "base_dsr_p_value": 0.9950947765993812,
+          "conservative_dsr_p_value": 0.9999874622881757,
+          "pf_adjusted": 0.6448727218907737,
+          "sharpe_adjusted": -0.19241780379475615,
+          "is_descriptive": false,
+          "effective_k": 3450
+        },
+        {
+          "regime": "chop",
+          "bucket_kind": "coarse",
+          "tier": "TIER_D_REJECT",
+          "n_trades": 26,
+          "base_dsr_p_value": 0.9980911636220908,
+          "conservative_dsr_p_value": 0.9999840349101408,
+          "pf_adjusted": 0.5140361333802003,
+          "sharpe_adjusted": -0.2804457203980679,
+          "is_descriptive": false,
+          "effective_k": 3450
+        },
+        {
+          "regime": "trending_bull",
+          "bucket_kind": "sub_regime",
+          "tier": "TIER_D_REJECT",
+          "n_trades": 47,
+          "base_dsr_p_value": 0.9910798781500616,
+          "conservative_dsr_p_value": 0.999960861820341,
+          "pf_adjusted": 0.8480512160138426,
+          "sharpe_adjusted": -0.07206478437976634,
+          "is_descriptive": true,
+          "effective_k": 3450
+        },
+        {
+          "regime": "high_vol",
+          "bucket_kind": "sub_regime",
+          "tier": "TIER_D_REJECT",
+          "n_trades": 15,
+          "base_dsr_p_value": 0.9941751468191903,
+          "conservative_dsr_p_value": 0.9995641997441448,
+          "pf_adjusted": 0.41868966937771435,
+          "sharpe_adjusted": -0.38208159273046666,
+          "is_descriptive": true,
+          "effective_k": 3450
+        },
+        {
+          "regime": "choppy_bull",
+          "bucket_kind": "sub_regime",
+          "tier": "TIER_D_REJECT",
+          "n_trades": 38,
+          "base_dsr_p_value": 0.9370413871986605,
+          "conservative_dsr_p_value": 0.9989383365427065,
+          "pf_adjusted": 1.0062034112335854,
+          "sharpe_adjusted": 0.002655560128277962,
+          "is_descriptive": true,
+          "effective_k": 3450
+        },
+        {
+          "regime": "trending_bear",
+          "bucket_kind": "sub_regime",
+          "tier": "TIER_D_REJECT",
+          "n_trades": 18,
+          "base_dsr_p_value": 0.8534872046211712,
+          "conservative_dsr_p_value": 0.9852069141317186,
+          "pf_adjusted": 0.962119817367135,
+          "sharpe_adjusted": -0.01682626868701002,
+          "is_descriptive": true,
+          "effective_k": 3450
+        },
+        {
+          "regime": "choppy_bear",
+          "bucket_kind": "sub_regime",
+          "tier": "TIER_D_REJECT",
+          "n_trades": 17,
+          "base_dsr_p_value": 0.9950542421880948,
+          "conservative_dsr_p_value": 0.9998672594151298,
+          "pf_adjusted": 0.4006014994745495,
+          "sharpe_adjusted": -0.39323443001050273,
+          "is_descriptive": true,
+          "effective_k": 3450
+        },
+        {
+          "regime": "ranging",
+          "bucket_kind": "sub_regime",
+          "tier": "TIER_D_REJECT",
+          "n_trades": 11,
+          "base_dsr_p_value": 0.8291885848887345,
+          "conservative_dsr_p_value": 0.9725667967645142,
+          "pf_adjusted": 0.8299712476714756,
+          "sharpe_adjusted": -0.0769162673490088,
+          "is_descriptive": true,
+          "effective_k": 3450
+        }
+      ]
+    }
+  }
+}

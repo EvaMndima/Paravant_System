@@ -73,11 +73,19 @@ def test_pooled_plus_per_regime_buckets() -> None:
     analysis = _coverage(tagged)
     assert analysis.pooled_result.n_trades_analyzed == 55
     assert analysis.coverage_run.is_screen_only is True
-    by_regime = {c.regime: c for c in analysis.coverage_run.per_regime}
-    assert set(by_regime) == {"bull", "bear", "chop"}
-    assert by_regime["bull"].n_trades == 25
-    assert by_regime["bear"].n_trades == 25
-    assert by_regime["chop"].n_trades == 5
+    coarse = {c.regime: c for c in analysis.coverage_run.per_regime
+              if c.bucket_kind == "coarse"}
+    assert set(coarse) == {"bull", "bear", "chop"}
+    assert coarse["bull"].n_trades == 25
+    assert coarse["bear"].n_trades == 25
+    assert coarse["chop"].n_trades == 5
+    # Fine SubRegime cells are also produced (diagnostic, never gating).
+    fine = [c for c in analysis.coverage_run.per_regime
+            if c.bucket_kind == "sub_regime"]
+    assert fine
+    assert all(c.is_descriptive for c in fine)
+    fine_regimes = {c.regime for c in fine}
+    assert {"trending_bull", "choppy_bear", "ranging"} <= fine_regimes
 
 
 def test_thin_bucket_is_descriptive_not_gating() -> None:
@@ -128,12 +136,16 @@ def test_render_matrix_and_json() -> None:
     assert "TEST" in md
     assert "Coverage Gaps" in md
     assert "CHOP" in md  # chop column header present even with no chop trades
+    assert "Fine SubRegime Breakdown" in md  # diagnostic fine table present
 
     payload = rdsr.render_coverage_json(analyses, "2026-06-06", "v0_unverified")
     assert payload["is_screen_only"] is True
     assert "TEST" in payload["strategies"]
-    regimes = {c["regime"] for c in payload["strategies"]["TEST"]["per_regime"]}
-    assert regimes == {"bull", "bear"}
+    cells = payload["strategies"]["TEST"]["per_regime"]
+    coarse_regimes = {c["regime"] for c in cells if c["bucket_kind"] == "coarse"}
+    assert coarse_regimes == {"bull", "bear"}
+    fine_regimes = {c["regime"] for c in cells if c["bucket_kind"] == "sub_regime"}
+    assert fine_regimes == {"trending_bull", "choppy_bear"}
 
 
 def test_market_for_label_bear_strategies_use_futures() -> None:

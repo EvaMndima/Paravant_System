@@ -67,6 +67,7 @@ class BacktestEngine:
         series: OHLCVSeries,
         config: BacktestConfig | None = None,
         thresholds: ValidationThresholds | None = None,
+        lookback_window: int | None = None,
     ) -> BacktestResult:
         """Run a full backtest simulation.
 
@@ -78,6 +79,19 @@ class BacktestEngine:
             series: Historical OHLCV data for the target symbol/timeframe.
             config: Backtest configuration. Uses defaults if None.
             thresholds: Validation thresholds. Uses defaults if None.
+            lookback_window: PERFORMANCE option. If None (default), each bar's
+                signal is generated from the FULL history up to that bar — the
+                original behavior, unchanged. If set, only the trailing
+                ``max(lookback_window, min_bars)`` bars are passed to the
+                generator, collapsing the per-bar indicator recomputation from
+                O(i) to O(window) and the whole loop from O(n^2) to O(n).
+                SAFE ONLY for strategies whose indicators are bounded-lookback or
+                exponentially-converging (EMA/MACD/RSI/ADX/BB/Ichimoku); strategies
+                with inception-cumulative indicators (VPT running sum, Heikin-Ashi
+                recursion) MUST use None. Equivalence with the full-history result
+                is verified per strategy by
+                ``tests/unit/backtest/test_window_equivalence.py``.
+                Decision: DEC-2026-06-04-015.
 
         Returns:
             Complete BacktestResult with metrics and validation status.
@@ -130,6 +144,18 @@ class BacktestEngine:
         # --- 4. Main simulation loop ---
         # Iterate from warmup bar to second-to-last bar
         # Signal at bar[i] -> fill at bar[i+1]
+        #
+        # Performance: when lookback_window is set, pass only a bounded TRAILING
+        # window to the generator instead of the full 0..i history, so each step
+        # recomputes indicators over O(window) bars rather than O(i) -- collapsing
+        # the loop from O(n^2) to O(n). lookback_window=None preserves the exact
+        # original full-history behavior. The window is clamped to at least
+        # min_bars so the generator always has its required warmup. Equivalence is
+        # verified per strategy in tests/unit/backtest/test_window_equivalence.py
+        # (Decision: DEC-2026-06-04-015).
+        effective_window = (
+            None if lookback_window is None else max(lookback_window, min_bars)
+        )
         try:
             for i in range(min_bars - 1, len(series) - 1):
                 # Check stop-loss / take-profit on current bar before signals
@@ -139,8 +165,11 @@ class BacktestEngine:
                     config=config,
                 )
 
-                # Slice series up to and including bar[i] — no lookahead
-                visible_series = series.slice(0, i + 1)
+                # Slice series up to and including bar[i] — no lookahead. With a
+                # window, start from i+1-window (still no lookahead; only older
+                # bars beyond the converged indicator horizon are dropped).
+                start = 0 if effective_window is None else max(0, i + 1 - effective_window)
+                visible_series = series.slice(start, i + 1)
 
                 # Generate signal using only visible data
                 signal = generator.generate(
