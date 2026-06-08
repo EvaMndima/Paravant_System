@@ -1,8 +1,15 @@
-# Session Bootstrap Prompt — Research v0.5 Implementation
+# Session Bootstrap Prompt — Start the Forward Hypothesis Loop (Research v0.5 -> live use)
 
-**Purpose**: Paste this prompt into a fresh Claude Code session to begin implementation of the Research Layer v0.5 (specifically: retrospective_dsr.py + supporting modules + show_strategy.py CLI).
+**Purpose**: Paste the block below into a fresh Claude Code session. The research
+INFRASTRUCTURE is built, tested, and proven on real data. This session does NOT
+build more infrastructure — it USES the pipeline to source, formalize, and test
+NEW strategy hypotheses. That is where progress comes from now.
 
-**Context**: This prompt was written 2026-06-04 by a previous session that ratified Research Layer PRD v2.0 and filed DEC-2026-06-04-001 through DEC-2026-06-04-012. The previous session also wrote the implementation spec at `docs/research/RETROSPECTIVE_DSR_SPEC.md`. The current session's job is to BUILD what that spec describes.
+**Written 2026-06-08**, replacing the two earlier build-phase prompts (now
+deleted). State: the audit of the 5 KEEP strategies is complete — they are
+decayed bear/choppy-regime strategies, none currently DSR-validated. The pipeline
+(regime-conditional backtest DSR) is on branch `feat/research-retrospective-dsr`,
+97 tests green, NOT yet merged.
 
 ---
 
@@ -10,186 +17,179 @@
 
 ---
 
-I'm continuing work on PARAVANT, a personal autonomous crypto trading system. In a previous session we ratified the Research Layer PRD v2.0 and filed 12 decisions. Your job in this session is to BUILD the first artifacts of that layer.
+I'm continuing PARAVANT, a personal autonomous crypto trading system. The research
+layer's audit phase is FULLY CLOSED: the 5 existing KEEP strategies were screened
+with regime-conditional backtest DSR and found to be decayed bear/choppy-regime
+strategies (real edges at promotion that faded as the market turned bull; none
+passes the DSR p<0.3 floor). MACD_PB is RETIRED (regime-shift decay, DEC-017), and
+all 7 retirees now have structured, pattern-tagged post-mortems (the graveyard is a
+live library). The methodology is PROVEN — it caught MACD_PB's fragility that
+PF-based promotion missed, and BTF (the known-bad control, N=997) returned Tier D
+in every regime.
 
-## What you're building
-
-**IMPORTANT — the hardest part is already built and verified.** The DSR math
-module (`research/validation/deflated_sharpe.py`) and its 29-test suite
-(`tests/research/test_deflated_sharpe.py`) were written and verified on
-2026-06-05 (all passing, math validated from first principles to 1e-12). DO NOT
-rewrite them. Build on top of them.
-
-Two related artifacts to complete:
-
-1. **`scripts/retrospective_dsr.py`** — applies the (already-built) Deflated Sharpe Ratio + a conservative cost model retroactively to existing 5 KEEP strategies (MACD_PB, BTP, VBB, SRC, ICVP) and 6 RETIRED strategies (BTF, CMF, RSI_BB, HATP, VRB, VPT). PRIMARY output: updates to strategy biography YAMLs at `research/biographies/<strategy_id>.yaml`. Markdown reports are DERIVED views, not canonical storage. Pools each strategy's trades across symbols into ONE DSR (not per-symbol). Reports DSR at multiple K values.
-
-2. **`scripts/show_strategy.py`** — strategy card CLI that pretty-prints a biography YAML to the terminal. Read-only. Helps the operator review strategies without opening YAML files manually. **Build this AFTER the DSR run produces biographies worth viewing** (it has nothing to render until then).
-
-These are Phase R0.5 priority deliverables per the PRD.
+Your job this session is NOT to build more tooling. It is to START THE FORWARD
+HYPOTHESIS LOOP: source -> check-the-graveyard -> formalize -> register -> screen
+new strategy ideas through the pipeline that already exists. Resist building new
+infrastructure; if a tested hypothesis genuinely needs a new tool, add it then, not
+before.
 
 ## Required reading (in this order)
 
-1. **`docs/research/RETROSPECTIVE_DSR_SPEC.md`** — the full implementation spec (v2, revised 2026-06-05 after external review). Read every section. Sections 4 (DSR module — BUILT), 5 (cost model — realized slippage + single-pad conservatism), 5.5 (pooled not per-symbol DSR), 6 (DB-derived K + multi-K sweep), 9-10 (remaining build order + execution gate), 14 (show_strategy CLI) are most important. The header "Build status" block lists what is DONE vs REMAINING.
-2. **`docs/research/RESEARCH_LAYER_PRD.md`** — context for the architecture. Focus on Sections 5, 6.1, 8, 9, 10, 13.4, and Appendix A (strategy biography schema).
-3. **`.claude/CLAUDE.md`** — project rules. Especially: zero-tech-debt standards (Section 3), venv activation requirement (Section 2), structured logging (Section 11), decision consistency (Section 1).
-4. **`.claude/rules/decision-consistency.md`** — dual-file sync rule. ANY decision entries you create must go in BOTH `.claude/DECISIONS.md` AND `.agent/DECISIONS.md` (verify with `diff`).
-5. **`.claude/DECISIONS.md`** lines 2495-3050 approximately — read DEC-2026-06-04-001 through DEC-2026-06-04-012 to understand the architectural decisions you must honor.
+1. `docs/research/RESEARCH_LAYER_PRD.md` — Sections 8 (methodology), 9 (Tier
+   gate), 10 (lifecycle), Appendix B (hypothesis ledger schema).
+2. `docs/research/RETROSPECTIVE_DSR_SPEC.md` — the frozen spec + the regime-DSR
+   guards (Section 6.x and the DEC-2026-06-04-014 guards).
+3. `.claude/CLAUDE.md` and `.claude/rules/decision-consistency.md` — project
+   rules + dual-file DECISIONS sync.
+4. `.claude/DECISIONS.md` — read DEC-2026-06-04-008 (Tier/floor), -009 (opt-in),
+   -011 (post-mortem), -012 (provability), -013/-014/-015/-016/-017 (the audit
+   findings, regime-DSR, MACD_PB retirement). Check the footer for the next DEC ID.
+5. The 5 KEEP biographies in `research/biographies/active/` and the 7 retiree
+   post-mortems in `research/biographies/retired/` — so you understand what already
+   failed and why (decay vs the NEVER_VALIDATED subtypes), and so you can pattern-
+   match new hypotheses against known failure modes.
 
-## Current state of the system
+## Current state
 
-- Paper trading is currently DOWN due to Railway geo-block (DEC-2026-06-01-003) — does NOT block this work; retrospective DSR uses existing trade logs from before the outage.
-- Live trading kill switch is OFF (`LIVE_TRADING_ENABLED=false`). Do NOT enable it.
-- Working capital: $20 paper, $100 minimum for live (per DEC-2026-05-31-003).
-- 5 KEEP strategies live in `STRATEGY_CONFIG` (find it in the codebase): MACD_PB, BTP, VBB, SRC, ICVP. 6 RETIRED in 2026-05-27 to 2026-05-28 triage: BTF, CMF, RSI_BB, HATP, VRB, VPT. ICVP has `observe_only: True` flag.
-- `research/` directory PARTIALLY exists: `research/__init__.py`, `research/validation/__init__.py`, `research/validation/deflated_sharpe.py` (BUILT + VERIFIED), and `requirements-research.txt` are done. You create the REMAINING subdirs (`research/backtest/`, `research/promotion/`, `research/biographies/`, `research/hypotheses/`, `research/catalog/`) per PRD Section 5.1.
-- `tests/research/__init__.py` + `tests/research/test_deflated_sharpe.py` exist (29 passing). Add more test files alongside.
-- Decisions DEC-2026-06-04-001 through DEC-2026-06-04-012 are FILED. Do not duplicate them.
+- ALL prior research work is MERGED TO MASTER (7 commits through `34e6db8`),
+  tests green (102 research + 3 equivalence + 130 backtest). The local master is
+  NOT pushed to origin — ask the operator whether to push. Work on master or a
+  fresh feature branch.
+- Live kill switch OFF (`LIVE_TRADING_ENABLED=false`). Do NOT enable it. Nothing
+  is deployed; no live capital at risk.
+- Paper trading is DOWN (Railway geo-block — operator action to restore).
+  Backtest-based research does not need it.
+- `Tier.INSUFFICIENT_DATA` now exists: N=0/thin no longer masquerades as
+  TIER_D_REJECT. Cost model is still v0_unverified (conservative screen; verify
+  against real fills only when paper data returns).
+- Pipeline ready: `research/validation/deflated_sharpe.py` (verified DSR),
+  `research/backtest/cost_model.py` (incremental-pad), `research/promotion/
+  classifier.py` (Tier A/B/C/D + INSUFFICIENT_DATA), `scripts/regime_dsr.py`
+  (regime-conditional backtest DSR screen), `research/hypotheses/ledger.yaml`,
+  `scripts/generate_post_mortem.py` + the `PostMortem` model. The screen evaluates
+  a registered strategy in minutes (cached) / ~tens of minutes (uncached).
 
-## Architectural rules you MUST follow
+## HOW THE EVAL ACTUALLY WORKS (the one piece of enabling glue — read this)
 
-These are non-negotiable per the PRD and project rules:
+`scripts/regime_dsr.py` screens strategies REGISTERED in
+`scripts/backtest_rolling.py` (`STRATEGY_PARAMS`, `STRATEGY_SYMBOLS`, and
+`STRATEGY_UNIVERSE`), selected with `--strategy <id>`. It evaluates the EXISTING
+registered set; a brand-new hypothesis is NOT screenable until it is registered
+there with a working generator. So to test a new idea you (a) write its generator,
+(b) register its params/symbols/status, then (c) run
+`python -m scripts.regime_dsr --strategy <new_id>`. There is NO separate
+`eval_research_strategy.py` to build — regime_dsr IS the eval. Do NOT build a
+parallel eval tool.
 
-1. **One-way dependency**: `src/` does NOT import from `research/`. `research/` imports from `src/` freely. Violations are bugs to fix immediately.
+FIRST SMALL TASK (resolve before sourcing): decide the registration path for new
+research generators. Either (pragmatic) register them in `backtest_rolling`'s
+config the way existing strategies are, OR (cleaner, per the PRD one-way
+dependency) extend regime_dsr to also load generators from `research/generators/`.
+Pick one, document it in a one-line decision, and keep it consistent. This is the
+only glue the forward loop needs.
 
-2. **Biography YAML is canonical**: DSR results, tier classification, cost-adjusted metrics live in `research/biographies/<strategy_id>.yaml`. Markdown reports are DERIVED — never write canonical data ONLY to markdown.
+## The research priority: REGIME-DIRECTED hypotheses for the UNCOVERED regime
 
-3. **DSR p<0.3 is the non-negotiable statistical floor** (DEC-2026-06-04-008). A strategy with DSR p≥0.3 cannot classify as Tier A or B. No override path exists. The DSR module (`research/validation/deflated_sharpe.py`) is BUILT — use it, do not reimplement. `dsr_p_value` (LOW = good) is the gating field.
+The audit's central finding shapes what to test:
 
-3a. **Pooled DSR, not per-symbol** (Spec 5.5): pool each strategy's cost-adjusted, quarantine-filtered per-trade returns across ALL its symbols into ONE chronological series, call `deflated_sharpe_ratio` ONCE. Per-symbol PF/Sharpe may appear in reports as DESCRIPTIVE only, never gating. DSR is not weight-averageable.
+- All 5 existing strategies are bear/choppy-regime strategies. **TRENDING_BULL is
+  uncovered** AND the market has turned bull. So a validated bull/trend strategy
+  fills the gap AND matches the current regime — highest value.
+- The decay lesson: do NOT promote on PF alone. The DSR p<0.3 floor is the gate.
+  MACD_PB's promotion-era edge (PF 1.97, N=8) had DSR p=0.569 — real but
+  not-yet-proven — and it decayed. Require DSR validation, and bias toward
+  strategies that generate ENOUGH TRADES to be testable (thin N was the trap).
 
-3b. **Multi-K sweep + conservative gating K** (Spec 6): report DSR at K in {115, 500, 2000} plus a DB-derived estimate. The GATING verdict uses the highest defensible (most conservative) K. If the tier flips across the K range, set `verdict_is_fragile: true` and cap at Tier C. Derive K from recorded parameter-combination counts (e.g. MACD_PB opt_001 = 96 combos), NOT a hardcoded guess. Store K and its derivation in the biography.
+## The loop (per hypothesis)
 
-3c. **Realized slippage + single-pad conservatism** (Spec 5): compute slippage empirically from signal_price vs fill_price where available; only apply the 2x pad to components that remain ESTIMATED. Do NOT stack 95th-percentile spread AND 2x on the same quantity. Print per-symbol round-trip cost so the operator can sanity-check it. Charge entry-leg cost on entry notional, exit-leg cost on exit notional (Spec 5.5-pre).
+1. **SOURCE.** Read a credible source (Quantpedia, Robot Wealth, arXiv q-fin, CSS
+   Analytics — see `docs/research/READING_QUEUE.md` if present, or PRD Appendix E
+   for the source tiers). Target trend-following / bull-regime ideas first.
+2. **CHECK THE GRAVEYARD (new — do this before investing in an idea).** The 7
+   retiree post-mortems are pattern-tagged with their failure modes
+   (NEVER_VALIDATED subtypes: thin-sample overfit, regime misattribution,
+   classic-TA-without-edge, trade-count-isn't-edge, insufficient breadth,
+   cost-blindness; plus MACD_PB's REGIME_SHIFT decay). Before formalizing a
+   hypothesis, scan `research/biographies/retired/` for a matching pattern. If your
+   idea is "RSI mean-reversion" and RSI_BB died of classic-TA-without-edge, you need
+   a reason yours is different — or skip it. The graveyard exists so you do not
+   re-pay for a known-dead pattern.
+3. **FORMALIZE (pre-registration).** Write the hypothesis into
+   `research/hypotheses/ledger.yaml` BEFORE backtesting, with expected PF, Sharpe,
+   N/year, regime target, and expected fail modes (PRD Appendix B). If results
+   dramatically EXCEED the pre-registration, that is a red flag (overfit/leakage),
+   not a win.
+4. **IMPLEMENT + REGISTER.** Write the generator in `research/generators/<name>.py`
+   (reuse `src/core/strategy/` indicators; never touch `src/` production code), then
+   register it on the chosen eval path (see "HOW THE EVAL ACTUALLY WORKS").
+5. **SCREEN.** Run `python -m scripts.regime_dsr --strategy <id>` to get pooled +
+   per-regime DSR with honest K. Write the verdict to the strategy's biography
+   (canonical YAML).
+6. **VERDICT + DECISION.** If it clears DSR p<0.3 in a regime with adequate N,
+   it's a paper-trading candidate (when Railway paper is restored). File the
+   verdict; if it's a KEEP candidate, file a DEC entry (dual-file). Most ideas will
+   fail — that is the funnel working. Log failures in the ledger AND, for an
+   instructive failure, in the graveyard so they are not re-tested.
 
-3d. **Execution gate** (Spec 10.1): `retrospective_dsr.py` MUST run the DSR test suite at the top of `main()` and refuse to proceed on real data if it fails. A miscalibrated instrument is worse than none.
+## The non-negotiable guards (DEC-2026-06-04-014, -008)
 
-3e. **Sweep variance_sr like K + base-vs-conservative reporting** (Spec 6.4, 6.5): `variance_sr` is as decisive as K and is estimated from a biased 11-strategy sample — sweep it unconditionally. Report every strategy at a BASE case (measured costs, point-estimate K + variance_sr) AND a CONSERVATIVE case (padded costs, high K + variance_sr). GATE on conservative, SHOW base. `fragility = base_tier != conservative_tier`; a real-but-fragile strategy (Tier A base, Tier D conservative) is flagged for more data, NOT retired.
+- **Screen, not deployment gate.** Backtest edge degrades live; a DSR pass means
+  "worth paper-trading", not "deploy". Paper/live remains the real gate.
+- **DSR p<0.3 is the floor.** No override path. p>=0.3 cannot be Tier A/B.
+- **Honest K** = param-combos x symbols x timeframes x regime-buckets. Regime-
+  shopping (test 8 regimes, keep the best) needs the regime-bucket penalty.
+- **Causal regime tagging** (no future bars in the regime label).
+- **Coarse buckets where N is thin**; per-bucket results below min-N are
+  descriptive, not gating.
 
-3f. **Operational guards** (Spec 9.1): idempotent biography writes (key appends on `run_id`, skip if present — a crash at strategy 7/11 must be safely re-runnable); recompute MaxDD on the pooled cost-adjusted series (`max_dd_pct_pooled_adjusted`), NOT the legacy backtest figure — the hard floor gates on the recomputed value.
+## Parallel operator tracks (NOT this session's work; surface, don't block on them)
 
-4. **PARA-02 quarantine filter MUST be applied**: corrupt force-close trades excluded from analysis per DEC-2026-05-31-002. Reuse `_is_corrupt_force_close` from `scripts/validation_report.py` if possible (single source of truth).
+- **Push master to origin** — the 7 research commits are local-only. Operator's
+  call; offer it.
+- **Restore paper trading** (Railway geo-block, operator action). Once back, the
+  ONE existing watchlist candidate is **VBB** (its choppy_bear/choppy_bull edge is
+  the only one that persists weakly into the present) — paper-validate it IN-REGIME
+  via the router, never unconditionally. This is separate from sourcing new
+  hypotheses; do not let it gate the research loop.
+- **Cost-model verification** — verify the v0 cost model against real fills only
+  after paper data returns. Until then, every verdict is the conservative screen.
 
-5. **Dual-file DECISIONS sync**: if your work results in any new DEC entry (e.g., a tier change), file IDENTICALLY in both `.claude/DECISIONS.md` AND `.agent/DECISIONS.md`. Verify with `diff`. Next available ID is DEC-2026-06-04-013.
+(The earlier "merge the branch" and "ratify MACD_PB" decisions are DONE — merged to
+master, MACD_PB retired with post-mortem in DEC-2026-06-04-017.)
 
-6. **Zero-tech-debt code quality** (project rule):
-   - Full type hints (100% coverage)
-   - Google-style docstrings on all public functions/classes
-   - Timezone-aware datetimes (`datetime.now(timezone.utc)`, never `datetime.utcnow()`)
-   - Lambda for mutable defaults (never `default={}` or `default=[]`)
-   - Structured logging via `src/utils/logging.get_logger()` (never f-strings in log messages)
-   - No emojis or unicode characters in code generation
+## Rules you MUST follow
 
-7. **Venv activation**: activate `.venv\Scripts\activate` (Windows) before running any Python. `requirements-research.txt` is DONE (scipy is optional — the DSR core is pure-stdlib by design). `pip install -r requirements-research.txt` if you need scipy for the optional test cross-check or later phases.
-
-8. **Tests required before marking complete**:
-   - ~~DSR formula validated~~ DONE (29 tests passing, `tests/research/test_deflated_sharpe.py`)
-   - Cost model unit tests on synthetic trades, including measured-vs-estimated pad split + hand-checked DOGE round-trip (Spec 5.3)
-   - Effective-K test: DB-derived K includes parameter combinations; multi-K sweep monotonic
-   - PARA-02 quarantine confirmed by test
-   - Integration test confirms pooled (not per-symbol) DSR
-   - show_strategy.py renders all 11 biographies without error
-   - At least 80% coverage on new code
-
-## Implementation order (suggested)
-
-The spec lists 8 sub-tasks totaling 12-16 hours for retrospective_dsr.py + 4-6 hours for show_strategy.py. Recommended sequencing:
-
-**Day 1** (foundation — note DSR module + requirements-research.txt already DONE):
-1. Create REMAINING `research/` subdirs (`backtest/`, `promotion/`, `biographies/{active,retired}/`, `hypotheses/`, `catalog/`) per PRD Section 5.1
-2. Create `research/biographies/schema.py` (Pydantic models for biography structure — Appendix A of PRD)
-3. Database schema reconnaissance: read `src/data/models/` to confirm the trade-log table structure; CRITICALLY confirm whether `signal_price` and `fill_price` (or equivalents) exist — they are needed for realized slippage (Spec 5.1). Write a small probe script to read trade logs.
-4. Verify the DSR module is intact: `python -m pytest tests/research/test_deflated_sharpe.py -q` (should show 29 passed, 1 skipped)
-
-**Day 2** (math + cost model):
-5. Build `research/backtest/cost_model.py` — per-symbol cost model with v0_unverified defaults
-6. Build `research/validation/deflated_sharpe.py` — DSR formula from spec Section 4
-7. Build `research/validation/effective_k.py` — K counting per spec Section 6
-8. Unit tests for all of above
-
-**Day 3** (orchestration + reports):
-9. Build `scripts/retrospective_dsr.py` — main script, loops through 11 strategies
-10. Write to biography YAMLs (PRIMARY output) per spec Section 3
-11. Generate derived markdown reports per spec Section 3.1
-12. Generate portfolio summary per spec Section 3.2
-13. Run on all 11 strategies and check results
-
-**Day 4** (companion tool + polish):
-14. Build `scripts/show_strategy.py` — CLI per spec Section 14
-15. Polish, integration tests, documentation
-16. Git commit (per project commit standards — Conventional Commits)
-
-## Honest expectations (from the spec)
-
-- **1-3 of 5 KEEP strategies likely drop to Tier B or C** under DSR with honest cost model. This is GOOD information — don't try to "save" strategies by relaxing thresholds.
-- **Most RETIRED strategies likely validated** by DSR (p>0.5 confirms our retirement decisions were correct).
-- **At least one surprise possible** — a RETIRED strategy that surfaces with DSR p<0.3 warrants re-examination.
-- **Cost model v0 is INTENTIONALLY conservative** (2x multiplier). Strategies surviving v0 are more likely to be real edge. Strategies failing v0 are unlikely to recover under calibrated v1.
-
-## What you must NOT do
-
-- Do NOT enable live trading (`LIVE_TRADING_ENABLED` stays OFF — DEC-2026-05-27-001)
-- Do NOT modify production code in `src/core/strategy/generators/` (research code goes in `research/`)
-- Do NOT modify trade log data in Neon database (read-only access; quarantine is a read-time filter)
-- Do NOT skip the venv activation
-- Do NOT skip writing tests
-- Do NOT skip the dual-file DECISIONS sync if filing any decision
-- Do NOT add features beyond the spec (no scope creep — PRD Section 15.1 explicitly warns against tool fetishism)
-- Do NOT use any of the deferred V1 packages (Glassnode, CryptoQuant — these are deferred to capital ≥ $25k per DEC-2026-06-04-005)
-- Do NOT touch the Railway region (separate operator action)
-- Do NOT skip pre-implementation reading (the spec is detailed; reading it carefully saves implementation time)
+- One-way dependency: `src/` never imports `research/`.
+- Biography YAML canonical; markdown/JSON derived.
+- Dual-file DECISIONS sync (`.claude/` AND `.agent/`, verify `diff` empty).
+- Zero-tech-debt: full type hints, Google docstrings, timezone-aware datetimes,
+  structured logging, no emojis/unicode in code. Tests for new code (>=80%).
+- Do NOT enable live trading. Do NOT modify Neon data. Do NOT touch Railway region.
+- Do NOT build new infrastructure unless a tested hypothesis demonstrably needs it.
 
 ## How to start
 
-Begin by:
-
-1. Reading the required documents listed above (in order)
-2. Confirming you understand the spec by stating in plain English: "I am about to build retrospective_dsr.py which will compute DSR + conservative costs for 11 strategies, writing PRIMARY output to research/biographies/*.yaml. The strategy-card CLI show_strategy.py reads those biographies for terminal display."
-3. Running the database schema reconnaissance (Day 1, step 4) to confirm table/field names before writing the cost model module
-4. Asking the operator (Eva) any clarifying questions BEFORE writing significant code
-5. Using TodoWrite to track progress across the implementation
-
-## Acceptance criteria (when this session is done)
-
-- [ ] `research/` directory tree exists per PRD Section 5.1
-- [ ] `requirements-research.txt` created and installed
-- [ ] Database schema confirmed — `paper_trades` table structure documented in the spec if it differs from assumptions
-- [ ] `research/backtest/cost_model.py` works with unit tests passing
-- [ ] `research/validation/deflated_sharpe.py` works, validated against Bailey-LdP examples
-- [ ] `research/validation/effective_k.py` works with proper K counting
-- [ ] `research/biographies/schema.py` defines biography structure (Pydantic models)
-- [ ] `scripts/retrospective_dsr.py` runs successfully on all 11 strategies
-- [ ] 11 biography YAMLs created with full classification + DSR + cost-adjusted metrics
-- [ ] Markdown reports generated for all 11 strategies
-- [ ] Portfolio summary report generated with headline findings
-- [ ] `scripts/show_strategy.py` renders all 11 biographies cleanly
-- [ ] Test coverage ≥ 80% on new code
-- [ ] PARA-02 quarantine verified applied (zero corrupt trades in analysis)
-- [ ] Any tier changes from KEEP strategies filed as DEC entries in BOTH `.claude/DECISIONS.md` AND `.agent/DECISIONS.md` (dual-file sync verified)
-- [ ] Findings summarized for operator (Eva) review
-- [ ] Git commit per Conventional Commits standard
-
-## After this session completes
-
-The retrospective DSR results will inform:
-- Whether 5 KEEP strategies remain at full capital, demote to Tier B at 50% slice, or halt/retire
-- Whether the cost model assumptions need calibration (Phase R0.5 Week 2-3 work)
-- Direction for Phase R1 (statistical rigor polish)
-
-The operator (Eva) reviews findings and ratifies any tier changes. The Railway region change happens in parallel (separate operator action) so paper trading can resume.
-
----
+1. Read the required docs + the 5 KEEP regime-DSR verdicts + the 7 retiree
+   post-mortems (so the graveyard is in your head before you source).
+2. Resolve the FIRST SMALL TASK: the registration path for new generators (see
+   "HOW THE EVAL ACTUALLY WORKS"). One short decision, then never reopen it.
+3. State the regime gap you're targeting (TRENDING_BULL) and the first 1-3
+   hypotheses you'll source.
+4. Use TodoWrite. Source -> check-graveyard -> formalize (pre-register) ->
+   implement+register -> screen -> verdict. One hypothesis at a time; let the
+   funnel work. Most will fail — that is success, not failure.
 
 ## END COPY
 
 ---
 
-**Notes for Eva (the operator) on using this prompt**:
-
-- Open a new Claude Code session in the project directory
-- Paste the prompt content (everything between "COPY EVERYTHING BELOW THIS LINE" and "END COPY")
-- The new session will read the spec, ask any clarifying questions, then start building
-- You should be available for questions during database schema reconnaissance (Day 1)
-- Estimated total implementation time: 2-4 focused days, depending on database schema surprises and how much help the new session needs
-
-**This file is the snapshot of context for the next session — keep it for reference but the prompt itself is what gets pasted into the new conversation.**
+**Note for Eva**: This is the pivot from building to using, and the audit is fully
+closed (merged to master, MACD_PB retired, graveyard populated). The pipeline is
+proven; the bottleneck now is GOOD IDEAS, not tooling. The fastest path to a
+deployable strategy is to push trend/bull hypotheses through the gate and let most
+fail honestly until one survives. Two things the new session must know that aren't
+obvious: (1) a new hypothesis must be REGISTERED before regime_dsr can screen it —
+that one small glue step is the only "build" left; (2) the graveyard is now a live
+library — check it before testing, so you don't re-pay for a known-dead pattern.
+When Railway paper is restored, VBB is the one existing watchlist candidate to
+paper-validate in-regime.
