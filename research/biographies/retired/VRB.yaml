@@ -85,10 +85,12 @@ statistical_validation_history:
   classification_reasoning: Gating (conservative) DSR p=1.000, MaxDD=0.00%, N=0. Base
     tier TIER_D_REJECT; conservative tier TIER_D_REJECT.
   pbo_score: null
+regime_coverage: []
 decision_log:
 - 'PENDING-DEC: Retrospective DSR reclassified VRB from None to TIER_D_REJECT (run
   retrospective_dsr_run_20260605). File DEC entry in BOTH .claude/DECISIONS.md and
   .agent/DECISIONS.md after operator review.'
+- 'DEC-2026-05-28-002: RETIRED -- post-mortem filed (primary_cause: NEVER_VALIDATED).'
 hypothesis_history: []
 parameter_history: []
 optimization_history: []
@@ -98,4 +100,56 @@ live_deployment_history: []
 decay_events: []
 reoptimization_history: []
 correlation_with_portfolio: {}
-post_mortem: null
+post_mortem:
+  strategy_id: VRB
+  retirement_date: '2026-05-28'
+  retirement_decision: DEC-2026-05-28-002
+  decision_maker: operator
+  lifecycle_summary:
+    proposed_date: null
+    first_live_deployment: null
+    retirement_date: '2026-05-28'
+    total_lifespan_days: null
+    total_versions: null
+    total_optimization_attempts: 0
+    total_reoptimization_attempts: 0
+    peak_classification: volatility_regime_breakout (BTC-only)
+    final_classification: RETIRED -- NEVER_VALIDATED
+    cumulative_live_pnl_pct: null
+    cumulative_live_trades: 0
+    final_live_pf: null
+  primary_cause: NEVER_VALIDATED
+  causal_analysis: VRB was BTC-only with a single window per regime, so no robust
+    verdict was possible (DEC-2026-05-28-002). Without cross-symbol breadth or multiple
+    windows, any apparent edge could not be distinguished from a single lucky path.
+    Retired for insufficient evidence rather than a proven negative.
+  contributing_factors:
+  - Single symbol (BTC) -- no cross-symbol corroboration.
+  - Single window per regime -- no rolling-window stability evidence.
+  lessons:
+  - lesson_id: LESS-2026-05-005
+    category: INSUFFICIENT_BREADTH
+    description: A single-symbol, single-window result cannot be validated -- there
+      is no breadth to distinguish edge from a lucky path. Require multiple symbols
+      and rolling windows before any verdict, positive or negative.
+    pattern_tags:
+    - single-symbol
+    - single-window
+    - insufficient-breadth
+    applies_to_future_hypotheses_in:
+    - all
+  pattern_tags:
+  - volatility-breakout
+  - btc-only
+  - single-window
+  - insufficient-breadth
+  - retired-never-validated
+  similar_active_strategies: []
+  searchable_terms:
+  - VRB
+  - volatility regime breakout
+  - BTC only
+  - single window no verdict
+  feeds_back_to:
+  - No promotion or retirement verdict from a single-symbol single-window backtest;
+    require breadth (LESS-2026-05-005).

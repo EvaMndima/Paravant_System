@@ -236,9 +236,291 @@ def _macd_pb_post_mortem() -> PostMortem:
     )
 
 
+def _btf_post_mortem() -> PostMortem:
+    """BTF (bear_trend_follower) -- the canonical thin-sample overfit cautionary tale.
+
+    DEC-2026-05-27-007: promoted on Q1 100% WR / Sharpe 2.4-3.6; May 90-day
+    backtest PF 0.76 and live paper PF 0.75 (N=25) confirmed it within 1%. This
+    session's regime-DSR control re-ran BTF over full history (futures, N=997)
+    and found Tier D in EVERY regime (bull/bear/chop) -- no edge anywhere.
+    """
+    return PostMortem(
+        strategy_id="BTF",
+        retirement_date="2026-05-27",
+        retirement_decision="DEC-2026-05-27-007",
+        decision_maker="operator",
+        lifecycle_summary=LifecycleSummary(
+            retirement_date="2026-05-27",
+            peak_classification="Q1 backtest 100% WR (sample-overfit)",
+            final_classification="RETIRED -- NEVER_VALIDATED",
+            cumulative_live_trades=25,  # live paper 2026-05-17..27
+            final_live_pf=0.75,
+        ),
+        primary_cause=PrimaryCause.NEVER_VALIDATED,
+        causal_analysis=(
+            "BTF was promoted on Q1 2026 backtests claiming 100% win rate and "
+            "Sharpe 2.4-3.6 -- numbers that were sample-overfit to a specific "
+            "market structure (steep monotonic descents). When May 2026 turned "
+            "choppy-bear with relief bounces, the regime BTF was built to exploit "
+            "was absent: the May 90-day backtest showed basket PF 0.76 across 90 "
+            "trades, and live paper confirmed PF 0.75 across 25 trades (within 1% "
+            "of backtest). Per-symbol May PFs ranged 0.46-1.10; the best (AVAX "
+            "1.10, SOL 1.02) were statistically indistinguishable from noise at "
+            "N=16. This session's regime-conditional DSR control (full history, "
+            "futures, N=997) independently confirmed Tier D in bull, bear, AND "
+            "chop -- BTF has no edge in any regime. The apparent Q1 edge never "
+            "existed out of sample; it was the canonical thin-sample + "
+            "cost-blind overfit."
+        ),
+        contributing_factors=[
+            "Thin-sample overfit: Q1 100% WR on a narrow market structure.",
+            "Regime-structure dependence: needed steep monotonic descents, absent in choppy-bear.",
+            "Promoted before rolling-window validation (DEC-2026-05-27-005) and the "
+            "DSR/N>=30 gate existed -- both of which it would have failed.",
+        ],
+        lessons=[
+            Lesson(
+                lesson_id="LESS-2026-05-001",
+                category="THIN_SAMPLE_OVERFIT",
+                description=(
+                    "A Q1 100%-WR / very-high-Sharpe result on a narrow market "
+                    "structure is the #1 overfit trap. Rolling-window validation "
+                    "across regimes + a DSR floor catch it; single-window backtests "
+                    "do not. BTF is the canonical case the research layer was built "
+                    "to prevent."
+                ),
+                pattern_tags=["thin-sample", "high-wr-overfit", "single-window", "regime-structure-dependent"],
+                applies_to_future_hypotheses_in=["all"],
+            ),
+        ],
+        pattern_tags=[
+            "trend-follower", "bear-strategy", "short-side", "thin-sample-overfit",
+            "retired-never-validated", "cost-blind", "canonical-cautionary-tale",
+        ],
+        similar_active_strategies=[],  # no active strategy shares BTF's short-trend design
+        searchable_terms=[
+            "BTF", "bear trend follower", "Q1 100% WR overfit", "PF 0.75 live",
+            "thin sample", "2026 canonical cautionary tale",
+        ],
+        feeds_back_to=[
+            "Any hypothesis citing a single-window high-WR backtest must be "
+            "rolling-window + DSR validated before promotion (LESS-2026-05-001).",
+            "BTF is the calibration control for the regime-DSR instrument: if it "
+            "ever scores deployable, the instrument is broken.",
+        ],
+    )
+
+
+def _no_edge_post_mortem(
+    *,
+    strategy_id: str,
+    template_desc: str,
+    causal: str,
+    factors: list[str],
+    lesson_id: str,
+    lesson_category: str,
+    lesson_desc: str,
+    lesson_tags: list[str],
+    pattern_tags: list[str],
+    searchable: list[str],
+    feeds_back: list[str],
+) -> PostMortem:
+    """Build a NEVER_VALIDATED post-mortem for a triage-retired strategy.
+
+    Shared shape for the 2026-05-28 spot-wins triage retirees (DEC-2026-05-28-002):
+    strategies that never showed a validatable edge in any regime.
+    """
+    return PostMortem(
+        strategy_id=strategy_id,
+        retirement_date="2026-05-28",
+        retirement_decision="DEC-2026-05-28-002",
+        decision_maker="operator",
+        lifecycle_summary=LifecycleSummary(
+            retirement_date="2026-05-28",
+            peak_classification=template_desc,
+            final_classification="RETIRED -- NEVER_VALIDATED",
+            cumulative_live_trades=0,  # never live (kill switch OFF)
+        ),
+        primary_cause=PrimaryCause.NEVER_VALIDATED,
+        causal_analysis=causal,
+        contributing_factors=factors,
+        lessons=[
+            Lesson(
+                lesson_id=lesson_id, category=lesson_category, description=lesson_desc,
+                pattern_tags=lesson_tags, applies_to_future_hypotheses_in=["all"],
+            ),
+        ],
+        pattern_tags=pattern_tags,
+        similar_active_strategies=[],
+        searchable_terms=searchable,
+        feeds_back_to=feeds_back,
+    )
+
+
+def _cmf_post_mortem() -> PostMortem:
+    """CMF (cascading_momentum_filter) -- regime misattribution, no validated edge."""
+    return _no_edge_post_mortem(
+        strategy_id="CMF",
+        template_desc="cascading_momentum_filter (short-side momentum)",
+        causal=(
+            "CMF was POOR in all three bear/chop regimes it was designed for "
+            "(DEC-2026-05-28-002 spot/futures rolling backtest). Its apparent "
+            "trending_bull 'edge' was wrong-direction noise -- a misattribution, "
+            "not a real signal -- and it depends on shorts, which had no validated "
+            "edge even with shorts enabled and funding modeled. No regime in which "
+            "it reliably worked."
+        ),
+        factors=[
+            "Design intent (bear/chop momentum) failed in every bear/chop regime.",
+            "Trending_bull 'edge' was wrong-direction noise (regime misattribution).",
+            "Short-dependent with no validated short edge (DEC-2026-05-28-001).",
+        ],
+        lesson_id="LESS-2026-05-002",
+        lesson_category="REGIME_MISATTRIBUTION",
+        lesson_desc=(
+            "An apparent edge in a regime the strategy was NOT designed for is "
+            "usually wrong-direction noise, not a discovery. Verify the edge is in "
+            "the hypothesized regime before re-tagging a strategy to its accidental "
+            "best regime."
+        ),
+        lesson_tags=["regime-misattribution", "wrong-direction-noise", "short-side"],
+        pattern_tags=["momentum", "short-side", "bear-strategy", "regime-misattribution", "retired-never-validated"],
+        searchable=["CMF", "cascading momentum filter", "regime misattribution", "wrong direction"],
+        feeds_back=["Re-tagging a strategy to its accidental best regime requires confirming the edge is real there, not noise (LESS-2026-05-002)."],
+    )
+
+
+def _rsi_bb_post_mortem() -> PostMortem:
+    """RSI_BB (rsi_bb_mean_reversion) -- worst PF in portfolio; classic pattern, no crypto edge."""
+    return _no_edge_post_mortem(
+        strategy_id="RSI_BB",
+        template_desc="rsi_bb_mean_reversion (classic TA mean reversion)",
+        causal=(
+            "RSI_BB had the worst performance in the portfolio: PF 0.06-0.41 across "
+            "all four regimes in both spot and futures modes (DEC-2026-05-28-002). "
+            "A textbook RSI + Bollinger-Band mean-reversion pattern simply did not "
+            "carry edge on these crypto symbols/timeframe -- it was actively "
+            "losing, not merely break-even."
+        ),
+        factors=[
+            "Classic TA mean-reversion pattern with no crypto edge at this timeframe.",
+            "Worst PF in the portfolio (0.06-0.41) -- consistent across regimes and modes.",
+        ],
+        lesson_id="LESS-2026-05-003",
+        lesson_category="PATTERN_WITHOUT_EDGE",
+        lesson_desc=(
+            "A well-known TA pattern (RSI+BB mean reversion) being popular is not "
+            "evidence it has edge. Crypto mean-reversion at 1H/4H needs its own "
+            "validation; textbook patterns frequently carry zero or negative edge."
+        ),
+        lesson_tags=["mean-reversion", "classic-ta", "no-edge"],
+        pattern_tags=["mean-reversion", "rsi", "bollinger-bands", "no-edge", "retired-never-validated"],
+        searchable=["RSI_BB", "rsi bollinger mean reversion", "worst PF", "classic TA no edge"],
+        feeds_back=["Textbook TA patterns get the same DSR validation as novel ones; popularity is not edge (LESS-2026-05-003)."],
+    )
+
+
+def _hatp_post_mortem() -> PostMortem:
+    """HATP (heikin_ashi_trend_pulse) -- 231 trades, poor all regimes; Q1 claim didn't reproduce."""
+    return _no_edge_post_mortem(
+        strategy_id="HATP",
+        template_desc="heikin_ashi_trend_pulse (Q1 backtest PF 1.40-1.70)",
+        causal=(
+            "HATP was promoted on a Q1 3-round backtest claiming PF 1.40-1.70, but "
+            "the rolling-window backtest could not reproduce it: POOR in all four "
+            "regimes across 231 trades (DEC-2026-05-28-002). The high trade count "
+            "rules out a thin-sample fluke -- HATP simply has no edge; the Q1 "
+            "result was overfit, the same pattern as BTF."
+        ),
+        factors=[
+            "Q1 multi-round backtest (PF 1.40-1.70) did not reproduce out of sample.",
+            "231 trades, POOR in all 4 regimes -- not thin-sample, just no edge.",
+            "Heikin-Ashi recursion + pulse entries fit Q1 noise.",
+        ],
+        lesson_id="LESS-2026-05-004",
+        lesson_category="TRADE_COUNT_IS_NOT_EDGE",
+        lesson_desc=(
+            "A high trade count (here 231) does NOT imply edge -- a strategy can "
+            "trade frequently and still be net-negative across every regime. "
+            "Volume of trades is not evidence; per-trade expectancy after costs is."
+        ),
+        lesson_tags=["high-trade-count", "overfit", "heikin-ashi", "no-edge"],
+        pattern_tags=["heikin-ashi", "trend-pulse", "high-frequency", "overfit", "retired-never-validated"],
+        searchable=["HATP", "heikin ashi trend pulse", "231 trades no edge", "Q1 did not reproduce"],
+        feeds_back=["High trade count must not be mistaken for validation; require per-trade DSR after costs (LESS-2026-05-004)."],
+    )
+
+
+def _vrb_post_mortem() -> PostMortem:
+    """VRB (volatility_regime_breakout) -- BTC-only single-window, no robust verdict."""
+    return _no_edge_post_mortem(
+        strategy_id="VRB",
+        template_desc="volatility_regime_breakout (BTC-only)",
+        causal=(
+            "VRB was BTC-only with a single window per regime, so no robust verdict "
+            "was possible (DEC-2026-05-28-002). Without cross-symbol breadth or "
+            "multiple windows, any apparent edge could not be distinguished from a "
+            "single lucky path. Retired for insufficient evidence rather than a "
+            "proven negative."
+        ),
+        factors=[
+            "Single symbol (BTC) -- no cross-symbol corroboration.",
+            "Single window per regime -- no rolling-window stability evidence.",
+        ],
+        lesson_id="LESS-2026-05-005",
+        lesson_category="INSUFFICIENT_BREADTH",
+        lesson_desc=(
+            "A single-symbol, single-window result cannot be validated -- there is "
+            "no breadth to distinguish edge from a lucky path. Require multiple "
+            "symbols and rolling windows before any verdict, positive or negative."
+        ),
+        lesson_tags=["single-symbol", "single-window", "insufficient-breadth"],
+        pattern_tags=["volatility-breakout", "btc-only", "single-window", "insufficient-breadth", "retired-never-validated"],
+        searchable=["VRB", "volatility regime breakout", "BTC only", "single window no verdict"],
+        feeds_back=["No promotion or retirement verdict from a single-symbol single-window backtest; require breadth (LESS-2026-05-005)."],
+    )
+
+
+def _vpt_post_mortem() -> PostMortem:
+    """VPT (vpt_momentum) -- PF 1.00 break-even gross; a loss after slippage."""
+    return _no_edge_post_mortem(
+        strategy_id="VPT",
+        template_desc="vpt_momentum (BTC-only, break-even)",
+        causal=(
+            "VPT was break-even gross (PF 1.00 overall, BTC-only) and a net loss "
+            "after realistic slippage (DEC-2026-05-28-002). A strategy that only "
+            "breaks even before costs is a guaranteed loser after them -- the cost "
+            "model is decisive, not a rounding detail."
+        ),
+        factors=[
+            "PF 1.00 gross -- no margin to absorb costs.",
+            "Net-negative after slippage; cost-blindness would have hidden this.",
+            "BTC-only -- no breadth.",
+        ],
+        lesson_id="LESS-2026-05-006",
+        lesson_category="COST_BLINDNESS",
+        lesson_desc=(
+            "Break-even gross PF (1.00) is a LOSS after costs. Cost modeling is "
+            "decisive: a strategy must clear costs with margin, not merely break "
+            "even before them. This is why honest per-symbol cost modeling is a "
+            "first-class research primitive."
+        ),
+        lesson_tags=["break-even", "cost-blindness", "slippage"],
+        pattern_tags=["vpt", "volume-momentum", "btc-only", "break-even", "cost-blind", "retired-never-validated"],
+        searchable=["VPT", "vpt momentum", "PF 1.00 break-even", "loses after slippage"],
+        feeds_back=["Break-even gross PF is a net loss; require margin over modeled costs before promotion (LESS-2026-05-006)."],
+    )
+
+
 # Registry of authored post-mortems (manual at v0.5; PRD Section 6.5).
 POST_MORTEMS: dict[str, Callable[[], PostMortem]] = {
     "MACD_PB": _macd_pb_post_mortem,
+    "BTF": _btf_post_mortem,
+    "CMF": _cmf_post_mortem,
+    "RSI_BB": _rsi_bb_post_mortem,
+    "HATP": _hatp_post_mortem,
+    "VRB": _vrb_post_mortem,
+    "VPT": _vpt_post_mortem,
 }
 
 

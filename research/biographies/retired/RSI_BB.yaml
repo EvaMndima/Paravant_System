@@ -97,10 +97,12 @@ statistical_validation_history:
   classification_reasoning: Gating (conservative) DSR p=1.000, MaxDD=0.38%, N=3. Base
     tier TIER_D_REJECT; conservative tier TIER_D_REJECT.
   pbo_score: null
+regime_coverage: []
 decision_log:
 - 'PENDING-DEC: Retrospective DSR reclassified RSI_BB from None to TIER_D_REJECT (run
   retrospective_dsr_run_20260605). File DEC entry in BOTH .claude/DECISIONS.md and
   .agent/DECISIONS.md after operator review.'
+- 'DEC-2026-05-28-002: RETIRED -- post-mortem filed (primary_cause: NEVER_VALIDATED).'
 hypothesis_history: []
 parameter_history: []
 optimization_history: []
@@ -110,4 +112,56 @@ live_deployment_history: []
 decay_events: []
 reoptimization_history: []
 correlation_with_portfolio: {}
-post_mortem: null
+post_mortem:
+  strategy_id: RSI_BB
+  retirement_date: '2026-05-28'
+  retirement_decision: DEC-2026-05-28-002
+  decision_maker: operator
+  lifecycle_summary:
+    proposed_date: null
+    first_live_deployment: null
+    retirement_date: '2026-05-28'
+    total_lifespan_days: null
+    total_versions: null
+    total_optimization_attempts: 0
+    total_reoptimization_attempts: 0
+    peak_classification: rsi_bb_mean_reversion (classic TA mean reversion)
+    final_classification: RETIRED -- NEVER_VALIDATED
+    cumulative_live_pnl_pct: null
+    cumulative_live_trades: 0
+    final_live_pf: null
+  primary_cause: NEVER_VALIDATED
+  causal_analysis: 'RSI_BB had the worst performance in the portfolio: PF 0.06-0.41
+    across all four regimes in both spot and futures modes (DEC-2026-05-28-002). A
+    textbook RSI + Bollinger-Band mean-reversion pattern simply did not carry edge
+    on these crypto symbols/timeframe -- it was actively losing, not merely break-even.'
+  contributing_factors:
+  - Classic TA mean-reversion pattern with no crypto edge at this timeframe.
+  - Worst PF in the portfolio (0.06-0.41) -- consistent across regimes and modes.
+  lessons:
+  - lesson_id: LESS-2026-05-003
+    category: PATTERN_WITHOUT_EDGE
+    description: A well-known TA pattern (RSI+BB mean reversion) being popular is
+      not evidence it has edge. Crypto mean-reversion at 1H/4H needs its own validation;
+      textbook patterns frequently carry zero or negative edge.
+    pattern_tags:
+    - mean-reversion
+    - classic-ta
+    - no-edge
+    applies_to_future_hypotheses_in:
+    - all
+  pattern_tags:
+  - mean-reversion
+  - rsi
+  - bollinger-bands
+  - no-edge
+  - retired-never-validated
+  similar_active_strategies: []
+  searchable_terms:
+  - RSI_BB
+  - rsi bollinger mean reversion
+  - worst PF
+  - classic TA no edge
+  feeds_back_to:
+  - Textbook TA patterns get the same DSR validation as novel ones; popularity is
+    not edge (LESS-2026-05-003).

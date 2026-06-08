@@ -85,10 +85,12 @@ statistical_validation_history:
   classification_reasoning: Gating (conservative) DSR p=1.000, MaxDD=0.00%, N=0. Base
     tier TIER_D_REJECT; conservative tier TIER_D_REJECT.
   pbo_score: null
+regime_coverage: []
 decision_log:
 - 'PENDING-DEC: Retrospective DSR reclassified VPT from None to TIER_D_REJECT (run
   retrospective_dsr_run_20260605). File DEC entry in BOTH .claude/DECISIONS.md and
   .agent/DECISIONS.md after operator review.'
+- 'DEC-2026-05-28-002: RETIRED -- post-mortem filed (primary_cause: NEVER_VALIDATED).'
 hypothesis_history: []
 parameter_history: []
 optimization_history: []
@@ -98,4 +100,59 @@ live_deployment_history: []
 decay_events: []
 reoptimization_history: []
 correlation_with_portfolio: {}
-post_mortem: null
+post_mortem:
+  strategy_id: VPT
+  retirement_date: '2026-05-28'
+  retirement_decision: DEC-2026-05-28-002
+  decision_maker: operator
+  lifecycle_summary:
+    proposed_date: null
+    first_live_deployment: null
+    retirement_date: '2026-05-28'
+    total_lifespan_days: null
+    total_versions: null
+    total_optimization_attempts: 0
+    total_reoptimization_attempts: 0
+    peak_classification: vpt_momentum (BTC-only, break-even)
+    final_classification: RETIRED -- NEVER_VALIDATED
+    cumulative_live_pnl_pct: null
+    cumulative_live_trades: 0
+    final_live_pf: null
+  primary_cause: NEVER_VALIDATED
+  causal_analysis: VPT was break-even gross (PF 1.00 overall, BTC-only) and a net
+    loss after realistic slippage (DEC-2026-05-28-002). A strategy that only breaks
+    even before costs is a guaranteed loser after them -- the cost model is decisive,
+    not a rounding detail.
+  contributing_factors:
+  - PF 1.00 gross -- no margin to absorb costs.
+  - Net-negative after slippage; cost-blindness would have hidden this.
+  - BTC-only -- no breadth.
+  lessons:
+  - lesson_id: LESS-2026-05-006
+    category: COST_BLINDNESS
+    description: 'Break-even gross PF (1.00) is a LOSS after costs. Cost modeling
+      is decisive: a strategy must clear costs with margin, not merely break even
+      before them. This is why honest per-symbol cost modeling is a first-class research
+      primitive.'
+    pattern_tags:
+    - break-even
+    - cost-blindness
+    - slippage
+    applies_to_future_hypotheses_in:
+    - all
+  pattern_tags:
+  - vpt
+  - volume-momentum
+  - btc-only
+  - break-even
+  - cost-blind
+  - retired-never-validated
+  similar_active_strategies: []
+  searchable_terms:
+  - VPT
+  - vpt momentum
+  - PF 1.00 break-even
+  - loses after slippage
+  feeds_back_to:
+  - Break-even gross PF is a net loss; require margin over modeled costs before promotion
+    (LESS-2026-05-006).

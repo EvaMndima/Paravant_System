@@ -103,10 +103,12 @@ statistical_validation_history:
   classification_reasoning: Gating (conservative) DSR p=1.000, MaxDD=4.93%, N=4. Base
     tier TIER_D_REJECT; conservative tier TIER_D_REJECT.
   pbo_score: null
+regime_coverage: []
 decision_log:
 - 'PENDING-DEC: Retrospective DSR reclassified CMF from None to TIER_D_REJECT (run
   retrospective_dsr_run_20260605). File DEC entry in BOTH .claude/DECISIONS.md and
   .agent/DECISIONS.md after operator review.'
+- 'DEC-2026-05-28-002: RETIRED -- post-mortem filed (primary_cause: NEVER_VALIDATED).'
 hypothesis_history: []
 parameter_history: []
 optimization_history: []
@@ -116,4 +118,58 @@ live_deployment_history: []
 decay_events: []
 reoptimization_history: []
 correlation_with_portfolio: {}
-post_mortem: null
+post_mortem:
+  strategy_id: CMF
+  retirement_date: '2026-05-28'
+  retirement_decision: DEC-2026-05-28-002
+  decision_maker: operator
+  lifecycle_summary:
+    proposed_date: null
+    first_live_deployment: null
+    retirement_date: '2026-05-28'
+    total_lifespan_days: null
+    total_versions: null
+    total_optimization_attempts: 0
+    total_reoptimization_attempts: 0
+    peak_classification: cascading_momentum_filter (short-side momentum)
+    final_classification: RETIRED -- NEVER_VALIDATED
+    cumulative_live_pnl_pct: null
+    cumulative_live_trades: 0
+    final_live_pf: null
+  primary_cause: NEVER_VALIDATED
+  causal_analysis: CMF was POOR in all three bear/chop regimes it was designed for
+    (DEC-2026-05-28-002 spot/futures rolling backtest). Its apparent trending_bull
+    'edge' was wrong-direction noise -- a misattribution, not a real signal -- and
+    it depends on shorts, which had no validated edge even with shorts enabled and
+    funding modeled. No regime in which it reliably worked.
+  contributing_factors:
+  - Design intent (bear/chop momentum) failed in every bear/chop regime.
+  - Trending_bull 'edge' was wrong-direction noise (regime misattribution).
+  - Short-dependent with no validated short edge (DEC-2026-05-28-001).
+  lessons:
+  - lesson_id: LESS-2026-05-002
+    category: REGIME_MISATTRIBUTION
+    description: An apparent edge in a regime the strategy was NOT designed for is
+      usually wrong-direction noise, not a discovery. Verify the edge is in the hypothesized
+      regime before re-tagging a strategy to its accidental best regime.
+    pattern_tags:
+    - regime-misattribution
+    - wrong-direction-noise
+    - short-side
+    applies_to_future_hypotheses_in:
+    - all
+  pattern_tags:
+  - momentum
+  - short-side
+  - bear-strategy
+  - regime-misattribution
+  - retired-never-validated
+  similar_active_strategies: []
+  searchable_terms:
+  - CMF
+  - cascading momentum filter
+  - regime misattribution
+  - wrong direction
+  feeds_back_to:
+  - Re-tagging a strategy to its accidental best regime requires confirming the edge
+    is real there, not noise (LESS-2026-05-002).

@@ -162,6 +162,7 @@ decision_log:
 - 'PENDING-DEC: Retrospective DSR reclassified BTF from None to TIER_D_REJECT (run
   retrospective_dsr_run_20260605). File DEC entry in BOTH .claude/DECISIONS.md and
   .agent/DECISIONS.md after operator review.'
+- 'DEC-2026-05-27-007: RETIRED -- post-mortem filed (primary_cause: NEVER_VALIDATED).'
 hypothesis_history: []
 parameter_history: []
 optimization_history: []
@@ -171,4 +172,73 @@ live_deployment_history: []
 decay_events: []
 reoptimization_history: []
 correlation_with_portfolio: {}
-post_mortem: null
+post_mortem:
+  strategy_id: BTF
+  retirement_date: '2026-05-27'
+  retirement_decision: DEC-2026-05-27-007
+  decision_maker: operator
+  lifecycle_summary:
+    proposed_date: null
+    first_live_deployment: null
+    retirement_date: '2026-05-27'
+    total_lifespan_days: null
+    total_versions: null
+    total_optimization_attempts: 0
+    total_reoptimization_attempts: 0
+    peak_classification: Q1 backtest 100% WR (sample-overfit)
+    final_classification: RETIRED -- NEVER_VALIDATED
+    cumulative_live_pnl_pct: null
+    cumulative_live_trades: 25
+    final_live_pf: 0.75
+  primary_cause: NEVER_VALIDATED
+  causal_analysis: 'BTF was promoted on Q1 2026 backtests claiming 100% win rate and
+    Sharpe 2.4-3.6 -- numbers that were sample-overfit to a specific market structure
+    (steep monotonic descents). When May 2026 turned choppy-bear with relief bounces,
+    the regime BTF was built to exploit was absent: the May 90-day backtest showed
+    basket PF 0.76 across 90 trades, and live paper confirmed PF 0.75 across 25 trades
+    (within 1% of backtest). Per-symbol May PFs ranged 0.46-1.10; the best (AVAX 1.10,
+    SOL 1.02) were statistically indistinguishable from noise at N=16. This session''s
+    regime-conditional DSR control (full history, futures, N=997) independently confirmed
+    Tier D in bull, bear, AND chop -- BTF has no edge in any regime. The apparent
+    Q1 edge never existed out of sample; it was the canonical thin-sample + cost-blind
+    overfit.'
+  contributing_factors:
+  - 'Thin-sample overfit: Q1 100% WR on a narrow market structure.'
+  - 'Regime-structure dependence: needed steep monotonic descents, absent in choppy-bear.'
+  - Promoted before rolling-window validation (DEC-2026-05-27-005) and the DSR/N>=30
+    gate existed -- both of which it would have failed.
+  lessons:
+  - lesson_id: LESS-2026-05-001
+    category: THIN_SAMPLE_OVERFIT
+    description: 'A Q1 100%-WR / very-high-Sharpe result on a narrow market structure
+      is the #1 overfit trap. Rolling-window validation across regimes + a DSR floor
+      catch it; single-window backtests do not. BTF is the canonical case the research
+      layer was built to prevent.'
+    pattern_tags:
+    - thin-sample
+    - high-wr-overfit
+    - single-window
+    - regime-structure-dependent
+    applies_to_future_hypotheses_in:
+    - all
+  pattern_tags:
+  - trend-follower
+  - bear-strategy
+  - short-side
+  - thin-sample-overfit
+  - retired-never-validated
+  - cost-blind
+  - canonical-cautionary-tale
+  similar_active_strategies: []
+  searchable_terms:
+  - BTF
+  - bear trend follower
+  - Q1 100% WR overfit
+  - PF 0.75 live
+  - thin sample
+  - 2026 canonical cautionary tale
+  feeds_back_to:
+  - Any hypothesis citing a single-window high-WR backtest must be rolling-window
+    + DSR validated before promotion (LESS-2026-05-001).
+  - 'BTF is the calibration control for the regime-DSR instrument: if it ever scores
+    deployable, the instrument is broken.'

@@ -85,10 +85,12 @@ statistical_validation_history:
   classification_reasoning: Gating (conservative) DSR p=1.000, MaxDD=0.00%, N=0. Base
     tier TIER_D_REJECT; conservative tier TIER_D_REJECT.
   pbo_score: null
+regime_coverage: []
 decision_log:
 - 'PENDING-DEC: Retrospective DSR reclassified HATP from None to TIER_D_REJECT (run
   retrospective_dsr_run_20260605). File DEC entry in BOTH .claude/DECISIONS.md and
   .agent/DECISIONS.md after operator review.'
+- 'DEC-2026-05-28-002: RETIRED -- post-mortem filed (primary_cause: NEVER_VALIDATED).'
 hypothesis_history: []
 parameter_history: []
 optimization_history: []
@@ -98,4 +100,59 @@ live_deployment_history: []
 decay_events: []
 reoptimization_history: []
 correlation_with_portfolio: {}
-post_mortem: null
+post_mortem:
+  strategy_id: HATP
+  retirement_date: '2026-05-28'
+  retirement_decision: DEC-2026-05-28-002
+  decision_maker: operator
+  lifecycle_summary:
+    proposed_date: null
+    first_live_deployment: null
+    retirement_date: '2026-05-28'
+    total_lifespan_days: null
+    total_versions: null
+    total_optimization_attempts: 0
+    total_reoptimization_attempts: 0
+    peak_classification: heikin_ashi_trend_pulse (Q1 backtest PF 1.40-1.70)
+    final_classification: RETIRED -- NEVER_VALIDATED
+    cumulative_live_pnl_pct: null
+    cumulative_live_trades: 0
+    final_live_pf: null
+  primary_cause: NEVER_VALIDATED
+  causal_analysis: 'HATP was promoted on a Q1 3-round backtest claiming PF 1.40-1.70,
+    but the rolling-window backtest could not reproduce it: POOR in all four regimes
+    across 231 trades (DEC-2026-05-28-002). The high trade count rules out a thin-sample
+    fluke -- HATP simply has no edge; the Q1 result was overfit, the same pattern
+    as BTF.'
+  contributing_factors:
+  - Q1 multi-round backtest (PF 1.40-1.70) did not reproduce out of sample.
+  - 231 trades, POOR in all 4 regimes -- not thin-sample, just no edge.
+  - Heikin-Ashi recursion + pulse entries fit Q1 noise.
+  lessons:
+  - lesson_id: LESS-2026-05-004
+    category: TRADE_COUNT_IS_NOT_EDGE
+    description: A high trade count (here 231) does NOT imply edge -- a strategy can
+      trade frequently and still be net-negative across every regime. Volume of trades
+      is not evidence; per-trade expectancy after costs is.
+    pattern_tags:
+    - high-trade-count
+    - overfit
+    - heikin-ashi
+    - no-edge
+    applies_to_future_hypotheses_in:
+    - all
+  pattern_tags:
+  - heikin-ashi
+  - trend-pulse
+  - high-frequency
+  - overfit
+  - retired-never-validated
+  similar_active_strategies: []
+  searchable_terms:
+  - HATP
+  - heikin ashi trend pulse
+  - 231 trades no edge
+  - Q1 did not reproduce
+  feeds_back_to:
+  - High trade count must not be mistaken for validation; require per-trade DSR after
+    costs (LESS-2026-05-004).
