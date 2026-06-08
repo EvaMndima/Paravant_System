@@ -655,6 +655,16 @@ adjusted_pf_threshold = base_pf_threshold * (1 + 0.05 * ln(K))
 
 **This is removed.** It was not Bonferroni-equivalent and the 0.05 coefficient was arbitrary. DSR already incorporates selection bias correctly via effective K. Carrying both was redundant; keeping only DSR is correct.
 
+### 8.10 Validation Methodology Principles (scope of the backtest gate)
+
+**Added 2026-06-08 — DEC-2026-06-04-020.** These bound how far backtest analysis may go before real capital:
+
+- **DSR does NOT replace forward validation.** DSR is the gate before PAPER, not before CAPITAL. The backtest-to-live gap is irreducible: a backtest describes the past; only forward (paper -> micro-live) data sees present-tense edge and decay. The MACD_PB decay (regime-conditional edge that faded as the regime turned) is the evidence — deploying it from a passing backtest DSR would have committed capital to an already-decaying edge. Compress forward validation via **regime-aware deployment** (the router activates a strategy only in its live regime, so "decayed in the current regime" cannot deploy), **micro-live** ($50-100 real-but-tiny capital for faster real forward data), and **higher-frequency sourcing** — never by skipping it.
+- **Optimization discipline.** Parameter optimization (especially entries/exits — the largest overfit surface) is permitted ONLY: walk-forward (§8.4); every combination counted in effective K (§8.5 — optimization RAISES the bar, never lowers it); robust ZONES over point optima; gated by PBO (§8.8). Keep entry/exit knobs minimal and mechanism-driven.
+- **Realism vs tuning.** Calibrating the cost/execution model to reality is NOT overfitting — it is the highest-leverage backtest work for live profitability (most backtest->live degradation is cost-blindness, not strategy weakness; see §8.2). Tuning strategy parameters to fit backtest performance IS overfitting. Realism diagnostics (MAE/MFE, cost sensitivity, holding-period, trade concurrency) are pre-DSR-safe ONLY when descriptive; they fold into the §8.0 Stage 2 structural profile and must never be used to select/tune on performance.
+- **Multiple methods: complementary, pre-registered, ALL-required.** DSR (selection bias), Monte-Carlo trade-order/bootstrap (path + tail risk, roadmap R5), walk-forward (OOS), PBO (overfit probability), and regime-conditioning each test a DIFFERENT failure mode and are additive. A strategy must pass the pre-registered set in full; deploying on ANY-method-pass is multiple-testing across methods (deploying noise) and is forbidden. Resist redundant method-sprawl.
+- **Pre-creation benchmark = the §8.0 Stage 1 reasoning scorecard.** It is the sufficient "should we even test/create this" filter; no separate benchmark is needed.
+
 ---
 
 ## 9. Hybrid Promotion Model

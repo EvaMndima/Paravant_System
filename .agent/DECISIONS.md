@@ -2895,11 +2895,37 @@ parameters:
 
 ---
 
+### DEC-2026-06-04-020: Validation Methodology Principles — DSR Does Not Replace Forward Validation; Optimization / Monte-Carlo / Diagnostics Discipline
+
+- **Decision:** Five validation-methodology principles, established to bound how far backtest analysis can go before real capital:
+  1. **DSR (backtest) does NOT replace paper/live forward validation.** DSR is the gate before PAPER, not before CAPITAL. The backtest-to-live gap is IRREDUCIBLE: a backtest describes the past; only forward data sees present-tense edge and decay. Forward validation (paper -> micro-live) remains the gate before real money. Compress it via regime-aware deployment (router activates a strategy only in its live regime), micro-live ($50-100 real-but-tiny capital for real forward data faster), and higher-frequency sourcing — NOT by skipping it.
+  2. **Optimization discipline.** Parameter optimization (especially entries/exits — the largest overfit surface) is permitted ONLY: walk-forward (optimize on train, evaluate on untouched OOS window); every parameter combination counted in effective K (optimization RAISES the bar, never lowers it); robust ZONES preferred over point optima; gated by PBO. Entries/exits kept minimal and mechanism-driven.
+  3. **Realism vs tuning (the line).** Calibrating the cost/execution model to reality is NOT overfitting (encouraged — it is the highest-leverage backtest work for live profitability, since most backtest->live degradation is cost-blindness, not strategy weakness). Tuning strategy parameters to fit backtest performance IS overfitting (disciplined per #2). Realism diagnostics (MAE/MFE, cost sensitivity, holding-period, trade concurrency) are pre-DSR-safe ONLY when descriptive — never used to select/tune on performance (the DEC-2026-06-04-018 no-performance-peek line extends to optimization).
+  4. **Multiple methods must be complementary, pre-registered, and ALL-required.** Methods that test DIFFERENT failure modes add value: DSR (selection bias), Monte-Carlo trade-order/bootstrap (path dependence + tail risk), walk-forward (out-of-sample), PBO (overfit probability), regime-conditioning. Monte-Carlo is adopted as a planned COMPLEMENT (roadmap R5) that a strategy must ALSO pass — never an alternative. Deploying on ANY-method-pass is multiple-testing across methods (deploying noise) and is forbidden; the method set is pre-registered and all-required. Resist redundant method-sprawl.
+  5. **Pre-creation benchmark = the §8.0 Stage 1 reasoning scorecard (DEC-2026-06-04-018).** That gate is the sufficient "should we even test/create this" filter; no separate pre-creation benchmark is needed.
+- **Context:** Operator asked whether to collect more backtest data, optimize entries/exits before DSR, add Monte-Carlo and more hypothesis-testing methods, and ultimately make DSR the final gate before execution (motivated by MACD_PB having decayed by deployment time). The shared premise — that backtest sophistication can replace forward validation — needed challenging because real capital is at stake.
+- **Rationale:**
+  - **The MACD_PB lesson argues AGAINST compressing out forward validation, not for it.** MACD_PB decayed because its edge was regime-conditional and the regime turned — a market event, not a process delay. Skipping paper and deploying from a passing backtest DSR would have committed real capital to an already-decaying edge. Forward validation is the only present-tense decay detector; removing it re-exposes exactly the failure it prevents.
+  - **Optimization counted honestly raises the bar.** Walk-forward + K-counting means optimization cannot manufacture a pass; it only reveals whether a robust zone exists. Entries/exits are the highest-degree-of-freedom surface, so they are kept minimal and mechanism-driven.
+  - **Complementary-and-all-required prevents method-level p-hacking.** Any-pass across N methods is an N-fold multiple-testing inflation.
+- **Alternatives Considered:**
+  - **Make DSR the final gate before capital (skip/replace paper):** REJECTED — removes the only present-tense decay detector; MACD_PB is the counter-evidence.
+  - **Optimize entries/exits to maximize backtest performance, then test:** REJECTED — textbook overfitting; only walk-forward + K-counted + robust-zone optimization permitted.
+  - **Deploy on any-method-pass / add methods post-hoc to rescue a strategy:** REJECTED — multiple-testing across methods; pre-register the set and require all.
+  - **Build MC / optimization-harness / realism-diagnostics tooling now:** DEFERRED — premature before the manual forward loop reveals which is the real bottleneck; these are principles recorded now, tooling built when a tested hypothesis needs it.
+- **Status:** ACTIVE
+- **Date Decided:** 2026-06-08
+- **Implemented By:** `docs/research/RESEARCH_LAYER_PRD.md` Section 8 (principles documented); no tooling built (deferred by design). Realism diagnostics fold into the DEC-2026-06-04-018 Stage 2 structural profile when built; Monte-Carlo is research roadmap R5.
+- **Affected Files:** `docs/research/RESEARCH_LAYER_PRD.md` (Section 8). Cross-refs the quality gate and lifecycle.
+- **References:** DEC-2026-06-04-018 (pre-DSR quality gate — this extends the methodology), DEC-2026-06-04-008 (DSR floor — the evidence gate this clarifies), DEC-2026-06-04-002 (effective-K), DEC-2026-06-04-016/-017 (MACD_PB decay evidence), DEC-2026-06-04-014 (regime-DSR), DEC-2026-06-04-006 (auto-discovery non-goal). PRD Sections 8.2/8.4/8.8 (cost model / walk-forward / PBO), Section 10 (lifecycle / forward validation), roadmap R5 (Monte-Carlo). Trading PRD three-phase validation + regime router. Operator design dialogue 2026-06-08.
+
+---
+
 **End of Decisions Log**
 
-**Total Decisions:** 95 active, 0 superseded, 5 locked (1 amended); DEC-2026-06-04-013 amended
+**Total Decisions:** 96 active, 0 superseded, 5 locked (1 amended); DEC-2026-06-04-013 amended
 **Last Updated:** 2026-06-08
-**Next Decision ID:** DEC-2026-06-04-020
+**Next Decision ID:** DEC-2026-06-04-021
 
 ## Phase 5 Decisions (Backtesting & Simulation)
 
