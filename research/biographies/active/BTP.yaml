@@ -199,6 +199,82 @@ regime_coverage:
     notes: DESCRIPTIVE fine SubRegime -- diagnostic only, never gating
   notes: Regime-conditional backtest DSR SCREEN (DEC-2026-06-04-014). NOT a deployment
     gate; paper/live validation still required. K x3 regime buckets.
+- run_id: regime_dsr_run_20260528
+  run_date: '2026-05-28'
+  cost_model_version: v0_unverified
+  data_source: regenerated_backtest
+  is_screen_only: true
+  pooled_tier: TIER_D_REJECT
+  pooled_dsr_p_value: 0.9999998224618378
+  per_regime:
+  - regime: bear
+    bucket_kind: coarse
+    n_trades: 62
+    pf_adjusted: 1.2121012616761995
+    sharpe_adjusted: 0.08414762239714438
+    base_dsr_p_value: 0.9958100206858458
+    conservative_dsr_p_value: 0.9999990044532867
+    tier: TIER_D_REJECT
+    is_descriptive: false
+    effective_k: 2300
+    notes: screen-only; not a deployment gate
+  - regime: chop
+    bucket_kind: coarse
+    n_trades: 13
+    pf_adjusted: 1.355131266658527
+    sharpe_adjusted: 0.13961779939529503
+    base_dsr_p_value: 0.8114050162375315
+    conservative_dsr_p_value: 0.9697923893713212
+    tier: TIER_D_REJECT
+    is_descriptive: true
+    effective_k: 2300
+    notes: 'DESCRIPTIVE: N=13 < 20 (or insufficient) -- not gating (guard #4)'
+  - regime: trending_bear
+    bucket_kind: sub_regime
+    n_trades: 41
+    pf_adjusted: 1.1350325822992413
+    sharpe_adjusted: 0.056164891537931486
+    base_dsr_p_value: 0.9890694845025847
+    conservative_dsr_p_value: 0.9999654974226505
+    tier: TIER_D_REJECT
+    is_descriptive: true
+    effective_k: 2300
+    notes: DESCRIPTIVE fine SubRegime -- diagnostic only, never gating
+  - regime: high_vol
+    bucket_kind: sub_regime
+    n_trades: 3
+    pf_adjusted: 999.99
+    sharpe_adjusted: 4.412125312627408
+    base_dsr_p_value: 0.023414132284115152
+    conservative_dsr_p_value: 0.03135695118080262
+    tier: INSUFFICIENT_DATA
+    is_descriptive: true
+    effective_k: 2300
+    notes: DESCRIPTIVE fine SubRegime -- diagnostic only, never gating
+  - regime: choppy_bear
+    bucket_kind: sub_regime
+    n_trades: 21
+    pf_adjusted: 1.4042021029875378
+    sharpe_adjusted: 0.1408325943414105
+    base_dsr_p_value: 0.9037912646292439
+    conservative_dsr_p_value: 0.9948639459930388
+    tier: TIER_D_REJECT
+    is_descriptive: true
+    effective_k: 2300
+    notes: DESCRIPTIVE fine SubRegime -- diagnostic only, never gating
+  - regime: ranging
+    bucket_kind: sub_regime
+    n_trades: 10
+    pf_adjusted: 0.6379099831515884
+    sharpe_adjusted: -0.2057826796159796
+    base_dsr_p_value: 0.9518403605015433
+    conservative_dsr_p_value: 0.9923883368124861
+    tier: TIER_D_REJECT
+    is_descriptive: true
+    effective_k: 2300
+    notes: DESCRIPTIVE fine SubRegime -- diagnostic only, never gating
+  notes: Regime-conditional backtest DSR SCREEN (DEC-2026-06-04-014). NOT a deployment
+    gate; paper/live validation still required. K x2 regime buckets.
 decision_log:
 - 'PENDING-DEC: Retrospective DSR reclassified BTP from None to TIER_D_REJECT (run
   retrospective_dsr_run_20260605). File DEC entry in BOTH .claude/DECISIONS.md and
