@@ -280,6 +280,89 @@ class RegimeCoverageRun(BaseModel):
     notes: str = ""
 
 
+class PrimaryCause(str, Enum):
+    """Primary retirement cause for a post-mortem (PRD Appendix C)."""
+
+    REGIME_SHIFT = "REGIME_SHIFT"
+    PARAMETER_DECAY = "PARAMETER_DECAY"
+    MARKET_STRUCTURE_CHANGE = "MARKET_STRUCTURE_CHANGE"
+    NEVER_VALIDATED = "NEVER_VALIDATED"
+    STATISTICAL_NOISE = "STATISTICAL_NOISE"
+    OPERATIONAL_FAILURE = "OPERATIONAL_FAILURE"
+
+
+class LifecycleSummary(BaseModel):
+    """Cradle-to-grave lifecycle summary in a post-mortem (PRD Appendix C)."""
+
+    model_config = ConfigDict(extra="allow")
+
+    proposed_date: str | None = None
+    first_live_deployment: str | None = None
+    retirement_date: str | None = None
+    total_lifespan_days: int | None = None
+    total_versions: int | None = None
+    total_optimization_attempts: int = 0
+    total_reoptimization_attempts: int = 0
+    peak_classification: str | None = None
+    final_classification: str | None = None
+    cumulative_live_pnl_pct: float | None = None
+    cumulative_live_trades: int = 0
+    final_live_pf: float | None = None
+
+
+class Lesson(BaseModel):
+    """One extracted, pattern-tagged lesson (PRD Appendix C).
+
+    The structured fields are what make the graveyard queryable: future
+    hypotheses are matched against ``pattern_tags`` to surface relevant lessons.
+    """
+
+    model_config = ConfigDict(extra="allow")
+
+    lesson_id: str
+    category: str
+    description: str
+    pattern_tags: list[str] = Field(default_factory=list)
+    applies_to_future_hypotheses_in: list[str] = Field(default_factory=list)
+
+
+class SimilarStrategy(BaseModel):
+    """An active strategy sharing risk factors with the retired one (Appendix C)."""
+
+    model_config = ConfigDict(extra="allow")
+
+    strategy_id: str
+    similarity_score: float
+    shared_risk_factors: list[str] = Field(default_factory=list)
+    recommended_monitoring: str = ""
+
+
+class PostMortem(BaseModel):
+    """Structured post-mortem closing a retired strategy's circle (Appendix C).
+
+    Mandatory for every retired strategy (DEC-2026-06-04-011). Structured (not
+    free text) so the graveyard is a queryable learning library: ``pattern_tags``
+    and ``lessons`` are matched against future hypotheses, and
+    ``similar_active_strategies`` flags current exposure to the same failure.
+    """
+
+    model_config = ConfigDict(extra="allow")
+
+    strategy_id: str
+    retirement_date: str
+    retirement_decision: str
+    decision_maker: str  # operator | system_auto
+    lifecycle_summary: LifecycleSummary
+    primary_cause: PrimaryCause
+    causal_analysis: str
+    contributing_factors: list[str] = Field(default_factory=list)
+    lessons: list[Lesson] = Field(default_factory=list)
+    pattern_tags: list[str] = Field(default_factory=list)
+    similar_active_strategies: list[SimilarStrategy] = Field(default_factory=list)
+    searchable_terms: list[str] = Field(default_factory=list)
+    feeds_back_to: list[str] = Field(default_factory=list)
+
+
 class StrategyBiography(BaseModel):
     """Top-level strategy biography (PRD Appendix A).
 
@@ -317,7 +400,7 @@ class StrategyBiography(BaseModel):
     decay_events: list[Any] = Field(default_factory=list)
     reoptimization_history: list[Any] = Field(default_factory=list)
     correlation_with_portfolio: dict[str, float] = Field(default_factory=dict)
-    post_mortem: Any | None = None
+    post_mortem: PostMortem | None = None
 
     def has_validation_run(self, run_id: str) -> bool:
         """Return True if a validation entry with ``run_id`` already exists.

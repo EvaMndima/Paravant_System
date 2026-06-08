@@ -1,5 +1,5 @@
 strategy_id: MACD_PB
-status: ACTIVE_LIVE
+status: RETIRED
 symbols:
 - DOGEUSDT
 - AVAXUSDT
@@ -279,6 +279,7 @@ decision_log:
   (PF 1.97 in 90d promo-era window, p 0.569) and DECAYED to PF 0.76 over 540d. Cause:
   REGIME_SHIFT/PARAMETER_DECAY, not fabrication. Real-but-fragile (never DSR-validated
   even at promotion).'
+- 'DEC-2026-06-04-017: RETIRED -- post-mortem filed (primary_cause: REGIME_SHIFT).'
 hypothesis_history: []
 parameter_history: []
 optimization_history: []
@@ -288,4 +289,114 @@ live_deployment_history: []
 decay_events: []
 reoptimization_history: []
 correlation_with_portfolio: {}
-post_mortem: null
+post_mortem:
+  strategy_id: MACD_PB
+  retirement_date: '2026-06-08'
+  retirement_decision: DEC-2026-06-04-017
+  decision_maker: operator
+  lifecycle_summary:
+    proposed_date: null
+    first_live_deployment: null
+    retirement_date: '2026-06-08'
+    total_lifespan_days: null
+    total_versions: null
+    total_optimization_attempts: 0
+    total_reoptimization_attempts: 0
+    peak_classification: KEEP (informal, PF-based; never DSR-validated)
+    final_classification: DECAYED
+    cumulative_live_pnl_pct: 0.0
+    cumulative_live_trades: 0
+    final_live_pf: null
+  primary_cause: REGIME_SHIFT
+  causal_analysis: 'MACD_PB (MACD pullback; DOGEUSDT, AVAXUSDT) was promoted to KEEP
+    status in May 2026 on a strong choppy_bear backtest edge (PF 2.33). The regime-conditional
+    DSR screen (DEC-2026-06-04-014) re-evaluated it over two windows. In the ~90-day
+    promotion-era window (ending 2026-05-28) choppy_bear was genuinely positive: PF
+    1.97, Sharpe +0.29 (N=8) -- confirming the edge was REAL at promotion, not fabricated.
+    Over the full 540-day window (ending 2026-06-07) the same choppy_bear cell fell
+    to PF 0.76 (Sharpe -0.12), and MACD_PB showed NO positive cost-adjusted cell in
+    ANY regime (coarse or fine, every base DSR p >= 0.90). The edge DECAYED as the
+    macro regime shifted from the bear/choppy conditions of early 2026 toward bull
+    recovery: MACD_PB is a choppy_bear-fit strategy whose regime departed. Critically,
+    even at promotion the edge was never DSR-validated -- its best-window choppy_bear
+    p was 0.569, above the 0.30 floor (N=8 thin). The strategy was real-but-fragile,
+    and the decay confirmed the fragility the (then-absent) DSR gate would have flagged.
+    Retired because no positive edge remains in any current regime and its single-regime
+    concentration makes it structurally vulnerable to exactly the regime shift that
+    occurred.'
+  contributing_factors:
+  - 'Regime shift: bear/choppy (early 2026) -> bull recovery, removing the choppy_bear
+    conditions the strategy depends on.'
+  - 'Single-regime concentration: edge confined to choppy_bear, with no expression
+    in trending or bull regimes.'
+  - Never DSR-validated at promotion (PF-based gate); best-window DSR p=0.569 was
+    above the 0.30 floor.
+  - 'Thin sample: choppy_bear N=8 at promotion, N=14 over the full window -- wide
+    confidence intervals throughout.'
+  lessons:
+  - lesson_id: LESS-2026-06-001
+    category: REGIME_FIT
+    description: 'Single-SubRegime edges (here choppy_bear) carry concentration risk:
+      when that regime exits, the edge has nowhere to express. Weight multi-regime
+      robustness in promotion, or deploy strictly in-regime via the router.'
+    pattern_tags:
+    - single-regime
+    - choppy-bear-only
+    - regime-dependent
+    applies_to_future_hypotheses_in:
+    - CHOPPY_BEAR
+    - TRENDING_BULL
+  - lesson_id: LESS-2026-06-002
+    category: PROMOTION_RIGOR
+    description: A PF-based promotion deployed an edge with DSR p=0.569 (above the
+      floor) that then decayed. Real-but-fragile edges (positive PF but DSR p above
+      floor) should be paper-validated in-regime, not promoted on PF alone. The DSR
+      gate would have held this back.
+    pattern_tags:
+    - real-but-fragile
+    - dsr-above-floor
+    - pf-only-promotion
+    applies_to_future_hypotheses_in:
+    - all
+  pattern_tags:
+  - macd-based
+  - pullback-entry
+  - choppy-bear
+  - single-regime
+  - regime-dependent
+  - retired-by-decay
+  - real-but-fragile
+  - never-dsr-validated
+  similar_active_strategies:
+  - strategy_id: VBB
+    similarity_score: 0.7
+    shared_risk_factors:
+    - Both depend on the choppy_bear regime
+    - Both promoted in the same early-2026 bear/choppy era
+    recommended_monitoring: VBB choppy_bear edge persists more strongly (PF 1.38 over
+      540d vs MACD_PB 0.76); monitor for the same decay as the bull regime extends
+      -- VBB is the most likely next decay subject.
+  - strategy_id: BTP
+    similarity_score: 0.55
+    shared_risk_factors:
+    - Choppy/bear-era promotion
+    - Edge fades in trending/bull regimes
+    recommended_monitoring: Watch BTP choppy_bear (1.40 promo -> 0.81 full).
+  - strategy_id: SRC
+    similarity_score: 0.45
+    shared_risk_factors:
+    - Regime-dependent edge
+    - Thin per-regime N
+    recommended_monitoring: SRC choppy_bull/ranging only; choppy_bear already weak.
+  searchable_terms:
+  - MACD pullback
+  - choppy bear decay
+  - 2026 regime-shift casualty
+  - real-but-fragile
+  - DOGE AVAX
+  - single-regime concentration
+  feeds_back_to:
+  - Future MACD-based / pullback hypotheses should check this post-mortem.
+  - Future single-regime (choppy_bear) hypotheses inherit the concentration-risk lesson
+    (LESS-2026-06-001).
+  - Promotion process should DSR-gate before KEEP, not PF-only (LESS-2026-06-002).

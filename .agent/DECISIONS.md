@@ -2833,11 +2833,29 @@ parameters:
 
 ---
 
+### DEC-2026-06-04-017: MACD_PB Retirement via Structured Post-Mortem (Regime-Shift Decay) + Post-Mortem Infrastructure Built
+
+- **Decision:** MACD_PB is **RETIRED** (status `ACTIVE_LIVE` -> `RETIRED`; biography moved `active/` -> `retired/`) with a structured **post-mortem** attached (primary_cause: **REGIME_SHIFT**). This ratifies the retirement candidacy flagged in DEC-2026-06-04-016, after the period-dependence test (2026-06-08) confirmed the cause is DECAY, not fabrication. The post-mortem records the full circle: the choppy_bear edge was REAL at promotion (PF 1.97, promo-era 90d window) and DECAYED (PF 0.76 over 540d) as the macro regime shifted bear/choppy -> bull recovery; it was never DSR-validated even at promotion (best-window p=0.569, above the 0.30 floor, N=8 thin); retired for single-regime concentration with no current positive edge in any regime. **No live impact** -- MACD_PB was never deployed (kill switch OFF, paper geo-blocked). **The post-mortem INFRASTRUCTURE (deferred at v0.5 per DEC-2026-06-04-011) is built in this decision**: a structured `PostMortem`/`Lesson`/`SimilarStrategy`/`LifecycleSummary` model + `PrimaryCause` enum (PRD Appendix C), and `scripts/generate_post_mortem.py` (validate + attach + retire + move `active/`->`retired/`, idempotent).
+- **Context:** Operator ratified MACD_PB's retirement on 2026-06-08 and requested the post-mortem be done (building the infrastructure if absent -- it was). MACD_PB was the only KEEP strategy with no positive cost-adjusted cell in any regime over 540d; the period test showed its documented edge was real-but-fragile and decayed.
+- **Rationale:**
+  - **Full-circle closure (DEC-2026-06-04-011).** The retired strategy IS the lesson; structured fields (pattern_tags, lessons, similar_active_strategies) make the graveyard a queryable learning library, not a memorial.
+  - **The lessons feed forward.** LESS-2026-06-001 (single-SubRegime edges carry concentration risk) and LESS-2026-06-002 (real-but-fragile edges with DSR p above the floor should be paper-validated in-regime, not PF-promoted) are pattern-tagged for future hypothesis matching. similar_active_strategies flags VBB (most-similar; choppy_bear edge persists more strongly -- the likely next decay subject).
+  - **Honest cause.** REGIME_SHIFT (not NEVER_VALIDATED): the edge existed; the regime left. The period test is the evidence.
+- **Alternatives Considered:**
+  - **Free-text post-mortem (no model):** rejected -- pattern-tag matching requires structured, validated fields (PRD Appendix C).
+  - **Keep MACD_PB active pending more data:** rejected by operator -- no positive edge remains in any current regime, and its regime has departed.
+- **Status:** ACTIVE
+- **Date Decided:** 2026-06-08
+- **Implemented By:** `research/biographies/schema.py` (`PostMortem`, `Lesson`, `SimilarStrategy`, `LifecycleSummary`, `PrimaryCause`; `post_mortem` field typed), `scripts/generate_post_mortem.py` (mechanism + authored MACD_PB post-mortem + CLI), `research/biographies/retired/MACD_PB.yaml`, `tests/research/test_post_mortem.py`
+- **References:** DEC-2026-06-04-016 (re-examination + decay finding), DEC-2026-06-04-011 (post-mortem closes the circle), DEC-2026-06-04-014 (regime-DSR screen), PRD Appendix C (post-mortem template), period-dependence run `docs/research/regime_dsr/period_promo/`, operator ratification 2026-06-08.
+
+---
+
 **End of Decisions Log**
 
-**Total Decisions:** 92 active, 0 superseded, 5 locked (1 amended); DEC-2026-06-04-013 amended
+**Total Decisions:** 93 active, 0 superseded, 5 locked (1 amended); DEC-2026-06-04-013 amended
 **Last Updated:** 2026-06-08
-**Next Decision ID:** DEC-2026-06-04-017
+**Next Decision ID:** DEC-2026-06-04-018
 
 ## Phase 5 Decisions (Backtesting & Simulation)
 
