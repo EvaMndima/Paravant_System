@@ -2815,11 +2815,29 @@ parameters:
 
 ---
 
+### DEC-2026-06-04-016: MACD_PB Re-Examination — Documented Choppy Edge Did Not Reproduce (Retirement/Post-Mortem Candidate)
+
+- **Decision:** MACD_PB is flagged for **RE-EXAMINATION** and is a **retirement / post-mortem candidate**. Its documented edge -- choppy_bear PF 2.33 (the empirical basis for its KEEP status, project memory 2026-05-28) -- did NOT reproduce under the regime-conditional backtest DSR screen (DEC-2026-06-04-014) over a continuous 540-day spot window ending 2026-06-07: choppy_bear PF fell to **0.76** (net-negative after costs), and MACD_PB shows **NO positive cost-adjusted cell in ANY regime** (bull/bear/chop or any fine SubRegime), with base DSR p-values >= 0.90 everywhere. This is a SCREEN-LEVEL flag (a recommendation, opt-in per DEC-2026-06-04-009), NOT a live demotion: the kill switch is OFF, MACD_PB is not deployed, and its `current_classification` is already `INSUFFICIENT_DATA` (empty paper data, geo-block). No live config changes.
+- **Context:** The regime-conditional DSR screen's first real subjects were the 5 KEEP strategies. Of the five, MACD_PB was the ONLY one with no positive regime cell at all (VBB/SRC/BTP/ICVP each showed >=1 faint positive choppy/ranging cell, though none cleared DSR either). The disappearance of a PF-2.33 edge to PF-0.76 over the full window is the BTF failure mode (time-window selection bias / decay).
+- **Rationale:**
+  - **Non-reproduction across EVERY regime is the strongest single signal in the KEEP cohort.** Other KEEP strategies at least show their documented choppy edge faintly (VBB choppy_bear PF 1.38); MACD_PB shows nothing positive anywhere.
+  - **The cause (decayed-but-once-real vs overfit-from-the-start) is being measured.** A period-dependence run over the ~90-day promotion-era window (ending 2026-05-28) was launched 2026-06-08; if choppy_bear PF > 1 there but < 1 over 540d, the edge DECAYED; if weak even there, the original 2.33 was a cherry-picked slice. The result feeds MACD_PB's eventual post-mortem (DEC-2026-06-04-011, full-circle closure).
+  - **Screen, not gate.** Per DEC-2026-06-04-014 guard #1/#5, this does not retire MACD_PB by itself; it records the evidence and recommends operator-directed re-examination.
+- **Alternatives Considered:**
+  - **Auto-retire MACD_PB now:** rejected -- retirement is operator-ratified (DEC-2026-06-04-009), and the period test may show recoverable (decayed) vs unrecoverable (overfit) edge, which changes the post-mortem framing.
+  - **Take no action:** rejected -- a documented edge vanishing in every regime is exactly the institutional-memory event the biography/post-mortem system exists to capture.
+- **Status:** ACTIVE
+- **Date Decided:** 2026-06-08
+- **Implemented By:** MACD_PB biography `regime_coverage` (run `regime_dsr_run_20260607`) + `decision_log`; `research/hypotheses/ledger.yaml` H-2026-06-001 (`reexamine: [MACD_PB]`); period-dependence run `docs/research/regime_dsr/period_promo/`
+- **References:** DEC-2026-06-04-014 (regime-conditional DSR screen), DEC-2026-06-04-011 (post-mortem closure), DEC-2026-06-04-009 (opt-in/operator ratification), project memory (MACD_PB choppy_bear PF 2.33 promotion basis), operator decision 2026-06-08.
+
+---
+
 **End of Decisions Log**
 
-**Total Decisions:** 91 active, 0 superseded, 5 locked (1 amended); DEC-2026-06-04-013 amended
-**Last Updated:** 2026-06-07
-**Next Decision ID:** DEC-2026-06-04-016
+**Total Decisions:** 92 active, 0 superseded, 5 locked (1 amended); DEC-2026-06-04-013 amended
+**Last Updated:** 2026-06-08
+**Next Decision ID:** DEC-2026-06-04-017
 
 ## Phase 5 Decisions (Backtesting & Simulation)
 

@@ -207,6 +207,9 @@ decision_log:
 - 'PENDING-DEC: Retrospective DSR reclassified MACD_PB from None to TIER_D_REJECT
   (run retrospective_dsr_run_20260605). File DEC entry in BOTH .claude/DECISIONS.md
   and .agent/DECISIONS.md after operator review.'
+- 'DEC-2026-06-04-016: Re-examination -- documented choppy_bear edge (PF 2.33) did
+  not reproduce over 540d (PF 0.76, no positive regime cell). Retirement/post-mortem
+  candidate; period test pending.'
 hypothesis_history: []
 parameter_history: []
 optimization_history: []

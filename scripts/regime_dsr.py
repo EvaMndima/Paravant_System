@@ -283,6 +283,38 @@ async def _fetch_with_retry(
     raise last_exc
 
 
+def _backtest_series_worker(
+    args: tuple[str, dict[str, Any], OHLCVSeries, str, int | None],
+) -> list[dict[str, Any]]:
+    """Backtest ONE pre-fetched series; a multiprocessing worker.
+
+    Top-level with picklable args so ``ProcessPoolExecutor`` (spawn on Windows)
+    can run it. Fetching is done in the PARENT (sequential, rate-safe -- parallel
+    fetches across processes trigger Binance connection resets); only the
+    CPU-bound backtest (99% of runtime) is parallelized here.
+
+    Args:
+        args: ``(template_id, params, series, market, lookback_window)``.
+
+    Returns:
+        Serialized ``TradeRecord`` dicts for that symbol.
+    """
+    template, params, series, market, lookback_window = args
+    engine = BacktestEngine(SignalGeneratorFactory())
+    config = _backtest_config(market)
+    strategy = SimpleNamespace(
+        id=f"regime_dsr_{template}_{series.symbol}",
+        name=f"{template} {series.symbol}",
+        template_id=template,
+        parameters=params,
+    )
+    result = engine.run_backtest(
+        strategy=strategy, series=series, config=config,
+        lookback_window=lookback_window,
+    )
+    return [t.to_dict() for t in result.trade_log]
+
+
 async def regenerate_pooled_trades(
     label: str,
     *,
@@ -291,6 +323,7 @@ async def regenerate_pooled_trades(
     market: str = "spot",
     testnet: bool = False,
     use_cache: bool = True,
+    workers: int = 1,
 ) -> RegeneratedTrades:
     """Re-run the backtest for ``label`` and pool its per-trade series.
 
@@ -339,8 +372,6 @@ async def regenerate_pooled_trades(
 
     client = BinanceClient(testnet=testnet)
     fetcher = MarketDataFetcher(client)
-    engine = BacktestEngine(SignalGeneratorFactory())
-    config = _backtest_config(market)
 
     # 1H needs ~45d warmup; BTC daily regime needs EMA(200) ~ 300d warmup so the
     # earliest trades are tagged from a warmed-up daily classifier.
@@ -352,27 +383,40 @@ async def regenerate_pooled_trades(
         start_date=daily_start, end_date=end_date,
     )
 
-    pooled: list[dict[str, Any]] = []
+    # Fetch all symbol series SEQUENTIALLY (cheap ~8s each; rate-safe). Parallel
+    # fetching across processes is what triggers Binance connection resets.
+    series_list: list[OHLCVSeries] = []
     for symbol in symbols:
-        series = await _fetch_with_retry(
+        series_list.append(await _fetch_with_retry(
             fetcher, symbol=symbol, timeframe="1h",
             start_date=hourly_start, end_date=end_date,
-        )
-        strategy = SimpleNamespace(
-            id=f"regime_dsr_{label}_{symbol}",
-            name=f"{label} {symbol}",
-            template_id=template,
-            parameters=params,
-        )
-        result = engine.run_backtest(
-            strategy=strategy, series=series, config=config, lookback_window=window,
-        )
-        pooled.extend(t.to_dict() for t in result.trade_log)
-        logger.info(
-            "regime_dsr_symbol_backtested",
-            label=label, symbol=symbol, trades=len(result.trade_log),
-            lookback_window=window,
-        )
+        ))
+
+    # Backtest in PARALLEL across CPU cores when workers>1 (per-symbol backtests
+    # are independent and CPU-bound -- the 99% cost); else sequential. This is
+    # CPU parallelism (the right tool), not GPU (DEC-2026-06-04-015).
+    tasks = [(template, params, s, market, window) for s in series_list]
+    pooled: list[dict[str, Any]] = []
+    if workers > 1 and len(tasks) > 1:
+        from concurrent.futures import ProcessPoolExecutor
+
+        with ProcessPoolExecutor(max_workers=min(workers, len(tasks))) as pool:
+            for symbol, trades in zip(symbols, pool.map(_backtest_series_worker, tasks)):
+                pooled.extend(trades)
+                logger.info(
+                    "regime_dsr_symbol_backtested",
+                    label=label, symbol=symbol, trades=len(trades),
+                    lookback_window=window, parallel=True,
+                )
+    else:
+        for symbol, task in zip(symbols, tasks):
+            trades = _backtest_series_worker(task)
+            pooled.extend(trades)
+            logger.info(
+                "regime_dsr_symbol_backtested",
+                label=label, symbol=symbol, trades=len(trades),
+                lookback_window=window, parallel=False,
+            )
 
     regen = RegeneratedTrades(
         label=label, template=template, symbols=symbols,
@@ -729,6 +773,7 @@ async def run_regime_dsr(
     output_dir: Path,
     cost_model: CostModel | None = None,
     use_cache: bool = True,
+    workers: int = 1,
 ) -> dict[str, RegimeAnalysis]:
     """Regenerate, tag, and screen all ``labels``; write biographies + reports.
 
@@ -758,7 +803,7 @@ async def run_regime_dsr(
         logger.info("regime_dsr_market_selected", label=label, market=market)
         regen = await regenerate_pooled_trades(
             label, end_date=end_date, lookback_days=lookback_days, market=market,
-            use_cache=use_cache,
+            use_cache=use_cache, workers=workers,
         )
         # Guard #3: verify the regime labelling is causal on THIS BTC-daily series
         # before trusting any verdict derived from it.
@@ -874,6 +919,10 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
                         help="Skip the DSR math verification pre-flight (NOT recommended).")
     parser.add_argument("--no-cache", action="store_true",
                         help="Ignore the on-disk regeneration cache (force fresh fetch+backtest).")
+    parser.add_argument("--workers", type=int, default=1,
+                        help="CPU processes for parallel per-symbol backtests (default 1 = "
+                             "sequential). Use 4+ on a machine with disk/RAM headroom for a "
+                             "fresh-run speedup; fetching stays sequential (rate-safe).")
     return parser.parse_args(argv)
 
 
@@ -926,6 +975,7 @@ def main(argv: list[str] | None = None) -> int:
             market_override=args.market,
             output_dir=Path(args.output_dir),
             use_cache=not args.no_cache,
+            workers=args.workers,
         )
     )
     logger.info("regime_dsr_complete", labels=labels)
