@@ -2851,11 +2851,36 @@ parameters:
 
 ---
 
+### DEC-2026-06-04-018: Pre-DSR Hypothesis Quality Gate — Reasoning Scorecard + Blind Structural Profile (Discipline Now, Tooling Deferred)
+
+- **Decision:** Adopt a two-stage quality gate UPSTREAM of DSR so that a DSR trial is spent only on theoretically-sound, feasible, non-duplicate hypotheses. **Stage 1 — reasoning scorecard (no data):** hard gates (mechanism stated; falsifiable fail modes; sample-size feasibility; not a known-dead graveyard pattern) plus scored dimensions (mechanism strength, inverse-crowding, crypto-native fit, regime specificity, parameter parsimony, diversity contribution, source credibility). **Stage 2 — blind structural feasibility profile (optional, data but NO performance):** confirm it runs, adequate trade count, holding-period/turnover/per-regime coverage are sane — reporting ONLY structure, NEVER PF/Sharpe/returns. **Stage 3 — DSR (unchanged evidence gate).** Failures are recorded and tagged FUNDAMENTAL (never revisit) vs FIXABLE (diagnosable near-miss = seedbed for new hypotheses); a mechanism x regime coverage map directs sourcing at the unexplored complement. Adopted NOW as a by-hand checklist (`docs/research/HYPOTHESIS_QUALITY_GATE.md`); automated tooling is DEFERRED until the manual rubric proves which dimensions discriminate and that triage (not idea-generation) is the bottleneck.
+- **Context:** With backtesting now fast (regime_dsr in minutes), the temptation is a "numbers game" — push as many ideas as possible through DSR. But DSR deflates by effective K, so mass-volume sourcing RAISES the bar for every survivor (the numbers game eats itself) and a scrape-the-internet pipeline preferentially surfaces the MOST crowded (already-arbitraged) patterns. The operator correctly intuited that a quality filter must sit BEFORE DSR. The resolution: a reasoning gate measures reasoning-quality (knowable without data), reserving the K-inflating evidence gate for serious candidates.
+- **Rationale:**
+  - **Backtest is for CONFIRMATION, not DISCOVERY (Lopez de Prado).** The reasoning gate forces "theory first," keeping research in confirmatory mode (small K, credible survivors) rather than search/data-mining mode (K explosion).
+  - **Reasoning-quality is knowable without performance data;** evidence-quality is not. The gate filters on the former; DSR on the latter.
+  - **Fewer, theory-motivated trials reduce K both mechanically and statistically** (pre-specified selection carries less bias than data-mined selection).
+  - **The graveyard is generative as a NEGATIVE-SPACE MAP, not a generator.** FIXABLE near-misses (right edge/wrong regime label; wrong universe/timeframe; DSR p just over floor with thin N) already cleared the mechanism gate and are the best seedbed for new hypotheses.
+- **Two hard lines (non-negotiable):**
+  1. **No performance peek before DSR.** Any pre-DSR data check is STRUCTURAL only; computing/showing PF/Sharpe/returns pre-DSR irreversibly biases the eventual test. "A light backtest that shows how it did" is an uncorrected backtest — the overfit trap.
+  2. **No algorithmic strategy generation from failures.** Failures steer HUMAN mechanism choice; they never feed a spec-generator. Remixing no-edge strategies yields no-edge strategies — the DEC-2026-06-04-006 auto-discovery non-goal.
+- **Alternatives Considered:**
+  - **Mass internet-scrape + test-everything ("numbers game"):** rejected — inflates K against every survivor, surfaces the most-crowded ideas, and crosses the auto-discovery non-goal.
+  - **A "lite DSR" / performance-lite backtest as the pre-filter:** rejected — there is no valid performance verdict without the K correction; showing performance pre-DSR biases the real test.
+  - **Build the gate as automated tooling now:** rejected (sequencing) — premature optimization of a process never run by hand; adopt the checklist first, automate the proven bottleneck later.
+  - **A failure-driven strategy generator:** rejected — auto-discovery non-goal; produces dressed-up failures.
+- **Status:** ACTIVE
+- **Date Decided:** 2026-06-08
+- **Implemented By:** `docs/research/HYPOTHESIS_QUALITY_GATE.md` (by-hand checklist); folded into the research loop in `docs/research/NEXT_SESSION_PROMPT.md`. No code/tooling built (deferred by design).
+- **Affected Files:** `docs/research/HYPOTHESIS_QUALITY_GATE.md`, `docs/research/NEXT_SESSION_PROMPT.md`, PRD Section 8 (one-line pointer to be added).
+- **References:** DEC-2026-06-04-008 (Tier/DSR floor — the evidence gate this precedes), DEC-2026-06-04-006 (auto-discovery non-goal — the line failures must not cross), DEC-2026-06-04-011 (post-mortem/graveyard), DEC-2026-06-04-014 (regime-DSR guards), DEC-2026-06-04-002 (effective-K / multiple-testing). PRD Sections 8, 9. Operator design dialogue 2026-06-08.
+
+---
+
 **End of Decisions Log**
 
-**Total Decisions:** 93 active, 0 superseded, 5 locked (1 amended); DEC-2026-06-04-013 amended
+**Total Decisions:** 94 active, 0 superseded, 5 locked (1 amended); DEC-2026-06-04-013 amended
 **Last Updated:** 2026-06-08
-**Next Decision ID:** DEC-2026-06-04-018
+**Next Decision ID:** DEC-2026-06-04-019
 
 ## Phase 5 Decisions (Backtesting & Simulation)
 

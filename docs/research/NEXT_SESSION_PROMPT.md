@@ -28,23 +28,30 @@ PF-based promotion missed, and BTF (the known-bad control, N=997) returned Tier 
 in every regime.
 
 Your job this session is NOT to build more tooling. It is to START THE FORWARD
-HYPOTHESIS LOOP: source -> check-the-graveyard -> formalize -> register -> screen
-new strategy ideas through the pipeline that already exists. Resist building new
-infrastructure; if a tested hypothesis genuinely needs a new tool, add it then, not
-before.
+HYPOTHESIS LOOP: source -> quality-gate (reasoning scorecard, no data) ->
+formalize -> register -> screen (DSR) new strategy ideas through the pipeline that
+already exists. The quality gate (DEC-2026-06-04-018,
+`docs/research/HYPOTHESIS_QUALITY_GATE.md`) is a by-hand CHECKLIST that kills weak
+ideas BEFORE they cost a DSR trial — use it, do not build it into tooling yet.
+Resist building new infrastructure; if a tested hypothesis genuinely needs a new
+tool, add it then, not before.
 
 ## Required reading (in this order)
 
 1. `docs/research/RESEARCH_LAYER_PRD.md` — Sections 8 (methodology), 9 (Tier
    gate), 10 (lifecycle), Appendix B (hypothesis ledger schema).
-2. `docs/research/RETROSPECTIVE_DSR_SPEC.md` — the frozen spec + the regime-DSR
+2. `docs/research/HYPOTHESIS_QUALITY_GATE.md` — the pre-DSR quality gate
+   (DEC-2026-06-04-018): reasoning scorecard + blind structural profile +
+   FUNDAMENTAL/FIXABLE failure taxonomy. This is the front-end of the loop.
+3. `docs/research/RETROSPECTIVE_DSR_SPEC.md` — the frozen spec + the regime-DSR
    guards (Section 6.x and the DEC-2026-06-04-014 guards).
-3. `.claude/CLAUDE.md` and `.claude/rules/decision-consistency.md` — project
+4. `.claude/CLAUDE.md` and `.claude/rules/decision-consistency.md` — project
    rules + dual-file DECISIONS sync.
-4. `.claude/DECISIONS.md` — read DEC-2026-06-04-008 (Tier/floor), -009 (opt-in),
-   -011 (post-mortem), -012 (provability), -013/-014/-015/-016/-017 (the audit
-   findings, regime-DSR, MACD_PB retirement). Check the footer for the next DEC ID.
-5. The 5 KEEP biographies in `research/biographies/active/` and the 7 retiree
+5. `.claude/DECISIONS.md` — read DEC-2026-06-04-008 (Tier/floor), -009 (opt-in),
+   -011 (post-mortem), -012 (provability), -018 (the pre-DSR quality gate),
+   -013/-014/-015/-016/-017 (the audit findings, regime-DSR, MACD_PB retirement).
+   Check the footer for the next DEC ID.
+6. The 5 KEEP biographies in `research/biographies/active/` and the 7 retiree
    post-mortems in `research/biographies/retired/` — so you understand what already
    failed and why (decay vs the NEVER_VALIDATED subtypes), and so you can pattern-
    match new hypotheses against known failure modes.
@@ -100,38 +107,49 @@ The audit's central finding shapes what to test:
   not-yet-proven — and it decayed. Require DSR validation, and bias toward
   strategies that generate ENOUGH TRADES to be testable (thin N was the trap).
 
-## The loop (per hypothesis)
+## The loop (per hypothesis) — the QUALITY GATE comes BEFORE DSR
+
+Full gate detail: `docs/research/HYPOTHESIS_QUALITY_GATE.md` (DEC-2026-06-04-018).
+It is a by-hand CHECKLIST — use it, do not build it into tooling yet.
 
 1. **SOURCE.** Read a credible source (Quantpedia, Robot Wealth, arXiv q-fin, CSS
    Analytics — see `docs/research/READING_QUEUE.md` if present, or PRD Appendix E
    for the source tiers). Target trend-following / bull-regime ideas first.
-2. **CHECK THE GRAVEYARD (new — do this before investing in an idea).** The 7
-   retiree post-mortems are pattern-tagged with their failure modes
-   (NEVER_VALIDATED subtypes: thin-sample overfit, regime misattribution,
-   classic-TA-without-edge, trade-count-isn't-edge, insufficient breadth,
-   cost-blindness; plus MACD_PB's REGIME_SHIFT decay). Before formalizing a
-   hypothesis, scan `research/biographies/retired/` for a matching pattern. If your
-   idea is "RSI mean-reversion" and RSI_BB died of classic-TA-without-edge, you need
-   a reason yours is different — or skip it. The graveyard exists so you do not
-   re-pay for a known-dead pattern.
-3. **FORMALIZE (pre-registration).** Write the hypothesis into
-   `research/hypotheses/ledger.yaml` BEFORE backtesting, with expected PF, Sharpe,
-   N/year, regime target, and expected fail modes (PRD Appendix B). If results
-   dramatically EXCEED the pre-registration, that is a red flag (overfit/leakage),
-   not a win.
+2. **STAGE 1 — REASONING SCORECARD (no data; most ideas die here, cheaply, with NO
+   DSR trial spent).** Apply the HARD GATES: mechanism stated (who is on the other
+   side and why they keep losing — "works in the backtest" is not a mechanism);
+   falsifiable fail modes; sample-size feasibility (can it ever reach N>=30 in its
+   regime within the window?); and NOT a known-dead graveyard pattern (scan
+   `research/biographies/retired/` tags — if your "RSI mean-reversion" matches
+   RSI_BB's classic-TA-without-edge, you need a reason it differs, or skip it).
+   Then score the weighted dimensions (mechanism strength, inverse-crowding,
+   crypto-native fit, regime specificity, parsimony, diversity, source). Fail a
+   hard gate or miss the threshold -> REJECT without a DSR trial; record the reason
+   in the graveyard. ANTI-RATIONALIZATION: a slick mechanism story with no data is
+   a YELLOW flag — the mechanism must name the concrete counterparty.
+3. **FORMALIZE (pre-register).** Survivors only: write the hypothesis into
+   `research/hypotheses/ledger.yaml` with expected PF/Sharpe/N-per-year, regime
+   target, and fail modes — BEFORE backtesting (PRD Appendix B). Results that
+   dramatically EXCEED the pre-registration are a red flag (overfit/leakage).
 4. **IMPLEMENT + REGISTER.** Write the generator in `research/generators/<name>.py`
    (reuse `src/core/strategy/` indicators; never touch `src/` production code), then
    register it on the chosen eval path (see "HOW THE EVAL ACTUALLY WORKS").
-5. **SCREEN.** Run `python -m scripts.regime_dsr --strategy <id>` to get pooled +
-   per-regime DSR with honest K. Write the verdict to the strategy's biography
-   (canonical YAML).
-6. **VERDICT + DECISION.** If it clears DSR p<0.3 in a regime with adequate N,
-   it's a paper-trading candidate (when Railway paper is restored). File the
-   verdict; if it's a KEEP candidate, file a DEC entry (dual-file). Most ideas will
-   fail — that is the funnel working. Log failures in the ledger AND, for an
-   instructive failure, in the graveyard so they are not re-tested.
+5. **STAGE 2 — BLIND STRUCTURAL PROFILE (optional; data but NO performance).**
+   Confirm it runs, trade count adequate, holding-period/turnover/per-regime
+   coverage sane. Report STRUCTURE ONLY — NEVER PF/Sharpe/returns. Seeing
+   performance before DSR biases the real test irreversibly.
+6. **STAGE 3 — SCREEN (DSR, the evidence gate).** Run
+   `python -m scripts.regime_dsr --strategy <id>` for pooled + per-regime DSR with
+   honest K. Write the verdict to the biography (canonical YAML).
+7. **VERDICT + DECISION.** Clears DSR p<0.3 in a regime with adequate N ->
+   paper-trading candidate (when Railway paper is restored); file a DEC entry
+   (dual-file) if KEEP. Most ideas fail — that is the funnel working. Tag every
+   failure **FUNDAMENTAL** (no mechanism / decayed -> never revisit) vs **FIXABLE**
+   (right edge wrong regime label, wrong universe/timeframe, or DSR p just over the
+   floor with thin N -> diagnosable near-miss = seedbed for a corrected hypothesis)
+   and log it in the graveyard.
 
-## The non-negotiable guards (DEC-2026-06-04-014, -008)
+## The non-negotiable guards (DEC-2026-06-04-014, -008, -018)
 
 - **Screen, not deployment gate.** Backtest edge degrades live; a DSR pass means
   "worth paper-trading", not "deploy". Paper/live remains the real gate.
@@ -141,6 +159,12 @@ The audit's central finding shapes what to test:
 - **Causal regime tagging** (no future bars in the regime label).
 - **Coarse buckets where N is thin**; per-bucket results below min-N are
   descriptive, not gating.
+- **No performance peek before DSR** (DEC-2026-06-04-018). Pre-DSR data checks are
+  STRUCTURAL only (runs / trade count / coverage); never compute or show
+  PF/Sharpe/returns before DSR — it biases the real test irreversibly.
+- **No failure-driven strategy generator** (DEC-2026-06-04-006/-018). Failures
+  steer HUMAN mechanism choice (negative-space map); they never feed an algorithm
+  that emits new strategy specs.
 
 ## Parallel operator tracks (NOT this session's work; surface, don't block on them)
 
@@ -175,9 +199,11 @@ master, MACD_PB retired with post-mortem in DEC-2026-06-04-017.)
    "HOW THE EVAL ACTUALLY WORKS"). One short decision, then never reopen it.
 3. State the regime gap you're targeting (TRENDING_BULL) and the first 1-3
    hypotheses you'll source.
-4. Use TodoWrite. Source -> check-graveyard -> formalize (pre-register) ->
-   implement+register -> screen -> verdict. One hypothesis at a time; let the
-   funnel work. Most will fail — that is success, not failure.
+4. Use TodoWrite. Source -> Stage 1 reasoning scorecard (hard gates + score) ->
+   formalize (pre-register) -> implement+register -> Stage 2 blind structural
+   profile (optional) -> Stage 3 DSR screen -> verdict (tag FUNDAMENTAL/FIXABLE).
+   One hypothesis at a time; let the funnel work. Most will fail at the scorecard,
+   cheaply — that is success, not failure.
 
 ## END COPY
 
