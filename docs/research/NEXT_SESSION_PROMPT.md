@@ -1,15 +1,16 @@
-# Session Bootstrap Prompt — Start the Forward Hypothesis Loop (Research v0.5 -> live use)
+# Session Bootstrap Prompt — Continue the Forward Hypothesis Loop (Research v0.5 -> live use)
 
 **Purpose**: Paste the block below into a fresh Claude Code session. The research
-INFRASTRUCTURE is built, tested, and proven on real data. This session does NOT
-build more infrastructure — it USES the pipeline to source, formalize, and test
-NEW strategy hypotheses. That is where progress comes from now.
+INFRASTRUCTURE is built, tested, and proven. The forward loop is LIVE and has run
+TWO full iterations. This session does NOT build infrastructure — it CONTINUES
+sourcing, gating, and screening NEW strategy hypotheses. That is where progress
+comes from now.
 
-**Written 2026-06-08**, replacing the two earlier build-phase prompts (now
-deleted). State: the audit of the 5 KEEP strategies is complete — they are
-decayed bear/choppy-regime strategies, none currently DSR-validated. The pipeline
-(regime-conditional backtest DSR) is on branch `feat/research-retrospective-dsr`,
-97 tests green, NOT yet merged.
+**Refreshed 2026-06-09** (supersedes the 2026-06-08 "start the loop" version). The
+loop has now run twice, both producing decisive TIER_D-FUNDAMENTAL rejects with no
+capital risked — the funnel working. All work is on `master` (origin, `7b78007`),
+dual-file DECISIONS in sync (footer 96 / next-021). TRENDING_BULL is now a
+documented HARD GAP (see below).
 
 ---
 
@@ -18,23 +19,33 @@ decayed bear/choppy-regime strategies, none currently DSR-validated. The pipelin
 ---
 
 I'm continuing PARAVANT, a personal autonomous crypto trading system. The research
-layer's audit phase is FULLY CLOSED: the 5 existing KEEP strategies were screened
-with regime-conditional backtest DSR and found to be decayed bear/choppy-regime
-strategies (real edges at promotion that faded as the market turned bull; none
-passes the DSR p<0.3 floor). MACD_PB is RETIRED (regime-shift decay, DEC-017), and
-all 7 retirees now have structured, pattern-tagged post-mortems (the graveyard is a
-live library). The methodology is PROVEN — it caught MACD_PB's fragility that
-PF-based promotion missed, and BTF (the known-bad control, N=997) returned Tier D
-in every regime.
+layer's audit is closed (5 KEEP strategies = decayed bear/choppy edges, MACD_PB
+retired, 7 pattern-tagged post-mortems, methodology proven by the BTF control).
+The forward hypothesis loop is now LIVE and has run TWO iterations:
 
-Your job this session is NOT to build more tooling. It is to START THE FORWARD
-HYPOTHESIS LOOP: source -> quality-gate (reasoning scorecard, no data) ->
-formalize -> register -> screen (DSR) new strategy ideas through the pipeline that
-already exists. The quality gate (DEC-2026-06-04-018,
-`docs/research/HYPOTHESIS_QUALITY_GATE.md`) is a by-hand CHECKLIST that kills weak
-ideas BEFORE they cost a DSR trial — use it, do not build it into tooling yet.
-Resist building new infrastructure; if a tested hypothesis genuinely needs a new
-tool, add it then, not before.
+- **H-2026-06-002** (price breakout-continuation, reused donchian_atr): Stage-1
+  14/21 PASS_MARGINAL -> trending_bull PF 0.59, N=341, DSR p=1.0 -> **TIER_D
+  FUNDAMENTAL**.
+- **H-2026-06-003** (perp-funding-confirmed trend, new crypto-native generator):
+  Stage-1 18/21 PASS -> trending_bull PF 0.53, N=132, DSR p=1.0 -> **TIER_D
+  FUNDAMENTAL**.
+- A third (buy-the-dip pullback) was killed at the Stage-1 hard gate as a duplicate
+  of BTP/MACD_PB — minutes, no DSR trial.
+
+Two findings are now LOAD-BEARING for what you do next (see
+`docs/research/NEGATIVE_SPACE_MAP.md`): (1) **TRENDING_BULL continuation is a HARD
+GAP** — both price-momentum AND derivatives-flow continuation are dead there at
+large N, so the next idea for that cell must be a DIFFERENT MECHANISM CLASS, not
+another continuation variant. (2) **Calibration lesson**: H-003 scored HIGHER at
+Stage 1 (18 vs 14) yet did WORSE — the scorecard measures mechanism QUALITY, not
+edge; a slick crypto-native story is a yellow flag until DSR rules (DEC-018
+anti-rationalization, confirmed on real data).
+
+Your job this session is NOT to build tooling. It is to CONTINUE THE LOOP: source
+-> quality-gate (reasoning scorecard, no data) -> formalize -> register -> screen
+(DSR). The quality gate (DEC-2026-06-04-018,
+`docs/research/HYPOTHESIS_QUALITY_GATE.md`) is a by-hand CHECKLIST. Resist building
+infrastructure; if a tested hypothesis genuinely needs a new tool, add it then.
 
 ## Required reading (in this order)
 
@@ -43,38 +54,44 @@ tool, add it then, not before.
 2. `docs/research/HYPOTHESIS_QUALITY_GATE.md` — the pre-DSR quality gate
    (DEC-2026-06-04-018): reasoning scorecard + blind structural profile +
    FUNDAMENTAL/FIXABLE failure taxonomy. This is the front-end of the loop.
-3. `docs/research/RETROSPECTIVE_DSR_SPEC.md` — the frozen spec + the regime-DSR
+3. `docs/research/NEGATIVE_SPACE_MAP.md` — what's already dead and why (the
+   TRENDING_BULL continuation hard gap + the Stage-1-score-vs-edge calibration
+   table). Read BEFORE sourcing, so you do not re-test a dead cell.
+4. `docs/research/RETROSPECTIVE_DSR_SPEC.md` — the frozen spec + the regime-DSR
    guards (Section 6.x and the DEC-2026-06-04-014 guards).
-4. `.claude/CLAUDE.md` and `.claude/rules/decision-consistency.md` — project
+5. `.claude/CLAUDE.md` and `.claude/rules/decision-consistency.md` — project
    rules + dual-file DECISIONS sync.
-5. `.claude/DECISIONS.md` — read DEC-2026-06-04-008 (Tier/floor), -009 (opt-in),
-   -011 (post-mortem), -012 (provability), -018 (the pre-DSR quality gate),
-   -013/-014/-015/-016/-017 (the audit findings, regime-DSR, MACD_PB retirement).
-   Check the footer for the next DEC ID.
-6. The 5 KEEP biographies in `research/biographies/active/` and the 7 retiree
-   post-mortems in `research/biographies/retired/` — so you understand what already
-   failed and why (decay vs the NEVER_VALIDATED subtypes), and so you can pattern-
-   match new hypotheses against known failure modes.
+6. `.claude/DECISIONS.md` — DEC-2026-06-04-008 (Tier/floor), -009 (opt-in),
+   -011 (post-mortem), -012 (provability), -018 (quality gate), -019 (eval
+   registration path), -020 (validation methodology: DSR != forward validation,
+   optimization/MC/realism discipline), -013..-017 (audit + MACD_PB). Footer for
+   next DEC ID.
+7. The 5 KEEP biographies in `research/biographies/active/`, the 7 retiree
+   post-mortems in `research/biographies/retired/`, and the H-002/H-003 ledger
+   entries + biographies — what already failed and why, for pattern-matching.
 
 ## Current state
 
-- ALL prior research work is MERGED TO MASTER (7 commits through `34e6db8`),
-  tests green (102 research + 3 equivalence + 130 backtest). The local master is
-  NOT pushed to origin — ask the operator whether to push. Work on master or a
-  fresh feature branch.
+- ALL work is on `master`, pushed to origin (`7b78007`). Dual-file DECISIONS in
+  sync (footer 96 / next-021). Work on master or a fresh feature branch.
 - Live kill switch OFF (`LIVE_TRADING_ENABLED=false`). Do NOT enable it. Nothing
   is deployed; no live capital at risk.
 - Paper trading is DOWN (Railway geo-block — operator action to restore).
   Backtest-based research does not need it.
-- `Tier.INSUFFICIENT_DATA` now exists: N=0/thin no longer masquerades as
-  TIER_D_REJECT. Cost model is still v0_unverified (conservative screen; verify
-  against real fills only when paper data returns).
+- `Tier.INSUFFICIENT_DATA` exists (N=0/thin no longer reads as TIER_D_REJECT).
+  Cost model still v0_unverified (conservative screen; verify vs real fills only
+  when paper returns).
 - Pipeline ready: `research/validation/deflated_sharpe.py` (verified DSR),
   `research/backtest/cost_model.py` (incremental-pad), `research/promotion/
   classifier.py` (Tier A/B/C/D + INSUFFICIENT_DATA), `scripts/regime_dsr.py`
   (regime-conditional backtest DSR screen), `research/hypotheses/ledger.yaml`,
-  `scripts/generate_post_mortem.py` + the `PostMortem` model. The screen evaluates
-  a registered strategy in minutes (cached) / ~tens of minutes (uncached).
+  `scripts/generate_post_mortem.py` + `PostMortem` model, and
+  `docs/research/NEGATIVE_SPACE_MAP.md`. Screen runs in minutes (cached) /
+  ~tens of minutes (uncached).
+- **Funding data channel BUILT** (H-003): `research/data/funding_rates.py`
+  (fetch + cache + causal `rate_at`, leakage-guarded by construction) and
+  `research/generators/funding_confirmed_trend.py`. Reuse it for any
+  funding-based hypothesis (e.g. the contrarian seedbed below) — do not rebuild.
 
 ## HOW THE EVAL ACTUALLY WORKS (the one piece of enabling glue — read this)
 
@@ -88,24 +105,36 @@ there with a working generator. So to test a new idea you (a) write its generato
 `eval_research_strategy.py` to build — regime_dsr IS the eval. Do NOT build a
 parallel eval tool.
 
-FIRST SMALL TASK (resolve before sourcing): decide the registration path for new
-research generators. Either (pragmatic) register them in `backtest_rolling`'s
-config the way existing strategies are, OR (cleaner, per the PRD one-way
-dependency) extend regime_dsr to also load generators from `research/generators/`.
-Pick one, document it in a one-line decision, and keep it consistent. This is the
-only glue the forward loop needs.
+REGISTRATION PATH — RESOLVED (DEC-2026-06-04-019, no longer a task): new research
+generators load via the factory's runtime `register_generator()` hook (so `src/`
+is never edited and never imports `research/`); the eval registry feeds the SAME
+regime_dsr screen. Spawn-safety note: `regime_dsr.py`'s parallel workers spawn
+fresh processes and build their own factory, so a NEW research generator must be
+registered INSIDE the worker, not only the parent (see DEC-019). H-002/H-003 are
+already wired this way — copy that pattern.
 
-## The research priority: REGIME-DIRECTED hypotheses for the UNCOVERED regime
+## The research priority: a DIFFERENT MECHANISM CLASS (continuation is dead in trending_bull)
 
-The audit's central finding shapes what to test:
+Two iterations reshaped the priority. Read `NEGATIVE_SPACE_MAP.md` first.
 
-- All 5 existing strategies are bear/choppy-regime strategies. **TRENDING_BULL is
-  uncovered** AND the market has turned bull. So a validated bull/trend strategy
-  fills the gap AND matches the current regime — highest value.
-- The decay lesson: do NOT promote on PF alone. The DSR p<0.3 floor is the gate.
-  MACD_PB's promotion-era edge (PF 1.97, N=8) had DSR p=0.569 — real but
-  not-yet-proven — and it decayed. Require DSR validation, and bias toward
-  strategies that generate ENOUGH TRADES to be testable (thin N was the trap).
+- **TRENDING_BULL continuation is a HARD GAP, not just uncovered.** Price-momentum
+  (H-002) AND derivatives-flow (H-003) continuation both died there at large N
+  (PF 0.59 / 0.53, p=1.0). Do NOT source another continuation variant for that
+  cell — it will fail the same way. The next trending_bull idea must be a
+  DIFFERENT MECHANISM CLASS (e.g. relative-strength/cross-sectional, breadth,
+  basis/term-structure, on-chain accumulation), OR pivot to a DIFFERENT uncovered
+  regime (RANGING, HIGH_VOL).
+- **Highest-readiness next candidate: the funding-at-extremes CONTRARIAN seedbed.**
+  It reuses the funding channel already built, but it is a GENUINELY NEW hypothesis
+  (opposite direction to H-003 — fade over-crowded funding, not follow it; target
+  regime HIGH_VOL / reversal, not trending_bull) so it needs its OWN
+  pre-registration and Stage-1 score. NOTE: a contrarian short edge can be
+  RESEARCHED/backtested (futures research is permitted, DEC-2026-05-28-001), but
+  LIVE shorts remain gated by the spot-only lock until that staged plan unlocks —
+  so a passing contrarian short is a research finding, not a deployable one yet.
+- The decay lesson still binds: DSR p<0.3 is the gate (not PF); bias toward ideas
+  that generate ENOUGH TRADES to be testable; a high Stage-1 score is NOT a
+  predictor of edge (H-003 scored 18 and still failed).
 
 ## The loop (per hypothesis) — the QUALITY GATE comes BEFORE DSR
 
@@ -149,7 +178,7 @@ It is a by-hand CHECKLIST — use it, do not build it into tooling yet.
    floor with thin N -> diagnosable near-miss = seedbed for a corrected hypothesis)
    and log it in the graveyard.
 
-## The non-negotiable guards (DEC-2026-06-04-014, -008, -018)
+## The non-negotiable guards (DEC-2026-06-04-014, -008, -018, -020)
 
 - **Screen, not deployment gate.** Backtest edge degrades live; a DSR pass means
   "worth paper-trading", not "deploy". Paper/live remains the real gate.
@@ -168,8 +197,6 @@ It is a by-hand CHECKLIST — use it, do not build it into tooling yet.
 
 ## Parallel operator tracks (NOT this session's work; surface, don't block on them)
 
-- **Push master to origin** — the 7 research commits are local-only. Operator's
-  call; offer it.
 - **Restore paper trading** (Railway geo-block, operator action). Once back, the
   ONE existing watchlist candidate is **VBB** (its choppy_bear/choppy_bull edge is
   the only one that persists weakly into the present) — paper-validate it IN-REGIME
@@ -178,8 +205,9 @@ It is a by-hand CHECKLIST — use it, do not build it into tooling yet.
 - **Cost-model verification** — verify the v0 cost model against real fills only
   after paper data returns. Until then, every verdict is the conservative screen.
 
-(The earlier "merge the branch" and "ratify MACD_PB" decisions are DONE — merged to
-master, MACD_PB retired with post-mortem in DEC-2026-06-04-017.)
+(Done already: branch merged + pushed to origin; MACD_PB retired w/ post-mortem
+(DEC-017); registration path resolved (DEC-019); validation-methodology principles
+filed (DEC-020). The loop has run twice — H-002/H-003 both TIER_D FUNDAMENTAL.)
 
 ## Rules you MUST follow
 
@@ -193,29 +221,31 @@ master, MACD_PB retired with post-mortem in DEC-2026-06-04-017.)
 
 ## How to start
 
-1. Read the required docs + the 5 KEEP regime-DSR verdicts + the 7 retiree
-   post-mortems (so the graveyard is in your head before you source).
-2. Resolve the FIRST SMALL TASK: the registration path for new generators (see
-   "HOW THE EVAL ACTUALLY WORKS"). One short decision, then never reopen it.
-3. State the regime gap you're targeting (TRENDING_BULL) and the first 1-3
-   hypotheses you'll source.
-4. Use TodoWrite. Source -> Stage 1 reasoning scorecard (hard gates + score) ->
-   formalize (pre-register) -> implement+register -> Stage 2 blind structural
-   profile (optional) -> Stage 3 DSR screen -> verdict (tag FUNDAMENTAL/FIXABLE).
-   One hypothesis at a time; let the funnel work. Most will fail at the scorecard,
-   cheaply — that is success, not failure.
+1. Read the required docs — ESPECIALLY `NEGATIVE_SPACE_MAP.md` + the H-002/H-003
+   ledger entries — so the dead cells and the calibration lesson are in your head
+   before you source.
+2. Pick the target: either a NEW MECHANISM CLASS for trending_bull (NOT another
+   continuation variant), or a DIFFERENT uncovered regime (RANGING / HIGH_VOL).
+   The highest-readiness option is the funding-at-extremes contrarian seedbed
+   (reuses the funding channel; needs its own pre-registration; research-only for
+   live shorts per the spot lock).
+3. Use TodoWrite. Source -> Stage 1 reasoning scorecard (hard gates + score) ->
+   formalize (pre-register) -> implement+register (factory hook, DEC-019) ->
+   Stage 2 blind structural profile (optional) -> Stage 3 DSR screen -> verdict
+   (tag FUNDAMENTAL/FIXABLE; update the negative-space map). One hypothesis at a
+   time; most fail cheaply at the scorecard — that is success, not failure.
 
 ## END COPY
 
 ---
 
-**Note for Eva**: This is the pivot from building to using, and the audit is fully
-closed (merged to master, MACD_PB retired, graveyard populated). The pipeline is
-proven; the bottleneck now is GOOD IDEAS, not tooling. The fastest path to a
-deployable strategy is to push trend/bull hypotheses through the gate and let most
-fail honestly until one survives. Two things the new session must know that aren't
-obvious: (1) a new hypothesis must be REGISTERED before regime_dsr can screen it —
-that one small glue step is the only "build" left; (2) the graveyard is now a live
-library — check it before testing, so you don't re-pay for a known-dead pattern.
-When Railway paper is restored, VBB is the one existing watchlist candidate to
-paper-validate in-regime.
+**Note for Eva**: The loop is live and self-evidently working — two decisive
+rejects, no capital risked, and the quality gate already killing a duplicate at
+Stage 1 for free. The bottleneck now is GOOD, GENUINELY-DIFFERENT IDEAS, not
+tooling. Three things the new session must internalize: (1) trending_bull
+continuation is DEAD (two mechanism classes failed at large N) — the next idea for
+that cell must be a different mechanism class, or aim at another regime; (2) a high
+Stage-1 score does NOT predict edge (H-003 scored 18/21 and still failed) — the
+scorecard rations DSR trials, it does not forecast winners; (3) the graveyard +
+negative-space map are now live libraries — consult them before sourcing. The
+funding channel is built and reusable for the contrarian seedbed.
