@@ -136,6 +136,56 @@ Two iterations reshaped the priority. Read `NEGATIVE_SPACE_MAP.md` first.
   that generate ENOUGH TRADES to be testable; a high Stage-1 score is NOT a
   predictor of edge (H-003 scored 18 and still failed).
 
+## OPERATOR-REQUESTED PRIORITY (2026-06-09): the liquidation-cascade hypothesis
+
+The operator wants to pursue a liquidation strategy and "build the liquidation
+architecture." Do it the DISCIPLINED way — hypothesis-first, data-channel-on-pass
+— exactly as the funding channel was built for H-003. Do NOT build a broad
+"liquidation architecture" speculatively; build the minimal causal data channel a
+gate-passing hypothesis actually needs.
+
+**Why this is a strong candidate:** named counterparty (over-leveraged traders
+force-liquidated at the worst price), targets an UNCOVERED regime (HIGH_VOL /
+reversal — not the dead trending_bull), crypto-native, less crowded than classic
+TA. Mechanism: forced de-leveraging market-sells longs (or market-buys shorts) at
+any price, overshooting fair value; you provide liquidity into the cascade and
+capture the snap-back.
+
+**Direction nuance (decides deployability):**
+- **LONG flush (preferred, deployable):** buy the long-liquidation flush (forced
+  selling drives price below fair value -> buy the dip -> capture reversion).
+  SPOT-executable, so a pass is LIVE-deployable.
+- **SHORT squeeze fade (research-only):** fade a short-squeeze spike. Needs shorts
+  -> gated by the spot-only live lock (DEC-2026-05-28-001); backtest is permitted,
+  live is not until the staged unlock. A pass here is a research finding, not
+  deployable. Prioritize the LONG version for a deployable path.
+
+**The plan (run it through the SAME loop, in order):**
+1. **Pre-register** the hypothesis (expected PF/Sharpe/N-per-year, regime=HIGH_VOL,
+   explicit fail modes) BEFORE building anything.
+2. **Stage-1 scorecard.** Mechanism is strong; be HONEST on two dimensions:
+   (a) **crowding** — liquidation levels are publicly visible (Coinglass maps), so
+   "buy when liquidations happen" is a known game; the mechanism must be MORE
+   specific (e.g. cascade magnitude/velocity threshold, exhaustion signal) than
+   "liquidations occurred"; (b) **feasibility/N** — big cascades are RARE, so
+   reaching N>=30 in HIGH_VOL is the #1 risk; decide up front how (lower the
+   cascade threshold for more/smaller events, or pool across symbols) and accept
+   that below min-N the cell is descriptive, not gating.
+3. **IF it clears Stage 1: build the liquidation DATA CHANNEL** — a Coinglass
+   adapter mirroring `research/data/funding_rates.py`: fetch + cache + a CAUSAL
+   accessor (liquidation data as-known-at-decision-time; leakage-guarded by
+   construction; no revised/future values). FREE Coinglass tier only — paid
+   alt-data is deferred to >=$25k capital (DEC-2026-06-04-005). THIS is the
+   "architecture," and it is justified because a gate-passing hypothesis needs it.
+4. **Implement** the generator in `research/generators/`, register via the factory
+   hook (DEC-019), spawn-safe (register inside the worker).
+5. **Screen** via `python -m scripts.regime_dsr --strategy <id>` (pooled +
+   per-regime, honest K). Verdict -> biography; tag FUNDAMENTAL/FIXABLE; update the
+   negative-space map.
+
+If Stage 1 fails (most likely on crowding or N-feasibility), STOP — no data
+channel, no DSR trial, record the reason. The discipline is what makes this cheap.
+
 ## The loop (per hypothesis) — the QUALITY GATE comes BEFORE DSR
 
 Full gate detail: `docs/research/HYPOTHESIS_QUALITY_GATE.md` (DEC-2026-06-04-018).
