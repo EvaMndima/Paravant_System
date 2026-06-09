@@ -106,7 +106,7 @@
 
 - id: H-2026-06-002
   name: "Bull-regime Donchian breakout-continuation (trend-filtered, multi-symbol)"
-  status: PROPOSED
+  status: TIER_D   # SCREEN verdict 2026-06-08; not a deployment gate
   proposed_date: 2026-06-08
   proposed_by: llm_suggest   # Claude-sourced from trend-following literature; operator approved 2026-06-08
   source: >-
@@ -204,7 +204,40 @@
     - strategy_id: VPT
       relevant_lessons: ["COST_BLINDNESS -> must clear conservative round-trip costs with margin."]
 
-  results: null   # populated post-screen
+  # RESULTS (regime-DSR screen, run_id regime_dsr_run_20260608) ---------------
+  results:
+    classified_tier: TIER_D       # SCREEN (DEC-2026-06-04-014); NOT a deployment gate
+    backtest_date: 2026-06-08
+    run_id: regime_dsr_run_20260608
+    pooled_tier: TIER_D_REJECT
+    pooled_dsr_p_value: 1.0
+    pooled_n: 974                 # bull 580 / bear 233 / chop 161
+    target_regime: trending_bull
+    actual_pf_adjusted: 0.59      # trending_bull cell, cost-adjusted
+    actual_sharpe_adjusted: -0.235
+    actual_n: 341                 # trending_bull -- LARGE sample, not thin-N
+    delta_from_expected_pf: -0.71 # expected 1.30 vs 0.59 (calibration: over-optimistic)
+    dsr_p_value: 1.0              # trending_bull base AND conservative both 1.0
+    pbo_score: null
+    cost_model_verified: false    # v0_unverified (2x conservative)
+    leakage_check: PASSED         # causal regime-tagging self-check held
+    effective_k: 3450
+    failure_tag: FUNDAMENTAL
+    verdict: |
+      REJECT in every regime. PF-adjusted < 1 with negative Sharpe in all coarse
+      buckets AND all fine SubRegimes; the target trending_bull cell is PF 0.59 /
+      Sharpe -0.235 on a LARGE sample (N=341) -- so this is NOT thin-N
+      INSUFFICIENT_DATA, it is a decisive net-negative. The pre-registered
+      crowding + cost fail modes fired exactly: liquid-major 1H breakout-
+      continuation carries no residual edge net of conservative costs (the
+      inverse-crowding dimension scored 1/3 at Stage 1; DSR confirmed it). Mirrors
+      the HATP lesson (high trade count is not edge) + VPT lesson (no margin over
+      costs). FUNDAMENTAL for this form -- do NOT revisit liquid-major 1H
+      price-only breakout-continuation. A DISTINCT seedbed (NOT a revisit): the
+      same mechanism on a less-arbitraged universe (mid-cap alts) or higher
+      timeframe (4H/1D) would be a NEW pre-registered hypothesis requiring a
+      sharper "why alts/HTF differ" mechanism -- logged in
+      docs/research/NEGATIVE_SPACE_MAP.md, not auto-pursued (DEC-2026-06-04-006/018).
   biography_file: research/biographies/active/DONCHIAN_ATR.yaml
 
 - id: H-2026-06-003

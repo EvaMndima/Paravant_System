@@ -1,0 +1,138 @@
+strategy_id: DONCHIAN_ATR
+status: ACTIVE_RESEARCH
+symbols:
+- BTCUSDT
+- ETHUSDT
+- BNBUSDT
+- SOLUSDT
+current_classification: null
+classification_history: []
+statistical_validation_history: []
+regime_coverage:
+- run_id: regime_dsr_run_20260608
+  run_date: '2026-06-08'
+  cost_model_version: v0_unverified
+  data_source: regenerated_backtest
+  is_screen_only: true
+  pooled_tier: TIER_D_REJECT
+  pooled_dsr_p_value: 1.0
+  per_regime:
+  - regime: bull
+    bucket_kind: coarse
+    n_trades: 580
+    pf_adjusted: 0.6239764096335174
+    sharpe_adjusted: -0.2034339929620305
+    base_dsr_p_value: 1.0
+    conservative_dsr_p_value: 1.0
+    tier: TIER_D_REJECT
+    is_descriptive: false
+    effective_k: 3450
+    notes: screen-only; not a deployment gate
+  - regime: bear
+    bucket_kind: coarse
+    n_trades: 233
+    pf_adjusted: 0.36965940263299074
+    sharpe_adjusted: -0.46557745273174095
+    base_dsr_p_value: 1.0
+    conservative_dsr_p_value: 1.0
+    tier: TIER_D_REJECT
+    is_descriptive: false
+    effective_k: 3450
+    notes: screen-only; not a deployment gate
+  - regime: chop
+    bucket_kind: coarse
+    n_trades: 161
+    pf_adjusted: 0.771880656018796
+    sharpe_adjusted: -0.11464597536119361
+    base_dsr_p_value: 0.9999997494416969
+    conservative_dsr_p_value: 0.999999999999988
+    tier: TIER_D_REJECT
+    is_descriptive: false
+    effective_k: 3450
+    notes: screen-only; not a deployment gate
+  - regime: high_vol
+    bucket_kind: sub_regime
+    n_trades: 99
+    pf_adjusted: 0.9029647725173305
+    sharpe_adjusted: -0.04516425636224841
+    base_dsr_p_value: 0.9996705627810729
+    conservative_dsr_p_value: 0.9999999715726773
+    tier: TIER_D_REJECT
+    is_descriptive: true
+    effective_k: 3450
+    notes: DESCRIPTIVE fine SubRegime -- diagnostic only, never gating
+  - regime: trending_bull
+    bucket_kind: sub_regime
+    n_trades: 341
+    pf_adjusted: 0.5895661379999401
+    sharpe_adjusted: -0.23535997337973497
+    base_dsr_p_value: 1.0
+    conservative_dsr_p_value: 1.0
+    tier: TIER_D_REJECT
+    is_descriptive: true
+    effective_k: 3450
+    notes: DESCRIPTIVE fine SubRegime -- diagnostic only, never gating
+  - regime: choppy_bull
+    bucket_kind: sub_regime
+    n_trades: 239
+    pf_adjusted: 0.680478054638938
+    sharpe_adjusted: -0.15811695781086624
+    base_dsr_p_value: 0.9999999999113282
+    conservative_dsr_p_value: 1.0
+    tier: TIER_D_REJECT
+    is_descriptive: true
+    effective_k: 3450
+    notes: DESCRIPTIVE fine SubRegime -- diagnostic only, never gating
+  - regime: choppy_bear
+    bucket_kind: sub_regime
+    n_trades: 97
+    pf_adjusted: 0.41790495060143534
+    sharpe_adjusted: -0.4074974939571883
+    base_dsr_p_value: 0.9999999862270871
+    conservative_dsr_p_value: 0.9999999999999458
+    tier: TIER_D_REJECT
+    is_descriptive: true
+    effective_k: 3450
+    notes: DESCRIPTIVE fine SubRegime -- diagnostic only, never gating
+  - regime: ranging
+    bucket_kind: sub_regime
+    n_trades: 62
+    pf_adjusted: 0.5298259169487637
+    sharpe_adjusted: -0.2984982673605418
+    base_dsr_p_value: 0.9999709720159791
+    conservative_dsr_p_value: 0.9999999916381593
+    tier: TIER_D_REJECT
+    is_descriptive: true
+    effective_k: 3450
+    notes: DESCRIPTIVE fine SubRegime -- diagnostic only, never gating
+  - regime: trending_bear
+    bucket_kind: sub_regime
+    n_trades: 136
+    pf_adjusted: 0.3413985547062136
+    sharpe_adjusted: -0.5041794789566644
+    base_dsr_p_value: 0.9999999999998707
+    conservative_dsr_p_value: 1.0
+    tier: TIER_D_REJECT
+    is_descriptive: true
+    effective_k: 3450
+    notes: DESCRIPTIVE fine SubRegime -- diagnostic only, never gating
+  notes: Regime-conditional backtest DSR SCREEN (DEC-2026-06-04-014). NOT a deployment
+    gate; paper/live validation still required. K x3 regime buckets.
+decision_log:
+- 'H-2026-06-002 regime-DSR screen (regime_dsr_run_20260608): TIER_D in EVERY
+  regime; target trending_bull PF-adj 0.59 / Sharpe -0.235 at N=341 (large
+  sample, NOT thin-N). Tagged FUNDAMENTAL -- liquid-major 1H breakout-continuation
+  carries no net edge after conservative costs (crowded/arbitraged; pre-registered
+  crowding + cost fail modes fired). Recorded in research/hypotheses/ledger.yaml
+  (H-2026-06-002) + docs/research/NEGATIVE_SPACE_MAP.md. SCREEN only -- donchian_atr
+  was never deployed as a research subject; kill switch OFF.'
+hypothesis_history: []
+parameter_history: []
+optimization_history: []
+backtest_history: []
+paper_trading_history: []
+live_deployment_history: []
+decay_events: []
+reoptimization_history: []
+correlation_with_portfolio: {}
+post_mortem: null
