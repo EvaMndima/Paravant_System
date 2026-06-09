@@ -63,6 +63,8 @@ from research.validation.effective_k import (
     regime_conditional_k,
     variance_sr_point_estimate,
 )
+from research.data import funding_rates
+from research.generators import RESEARCH_SPECS, register_research_generators
 from scripts.backtest_rolling import STRATEGY_PARAMS, STRATEGY_SYMBOLS
 from src.brokers.binance.client import BinanceClient
 from src.core.strategy.backtest import BacktestEngine
@@ -141,6 +143,18 @@ _DEFAULT_MARKET_BY_LABEL: dict[str, str] = {
     "VPT": "spot",
     "DONCHIAN_ATR": "spot",  # long-only breakout-continuation; spot deployment mode
 }
+
+# Forward hypothesis loop (DEC-2026-06-04-019): fold research-only generators into
+# the eval registries at RUNTIME. Their generator CLASSES are registered with the
+# factory inside each worker (register_research_generators); their template/params/
+# symbols/market are injected here so the existing regenerate path resolves them
+# exactly like a production template. backtest_rolling.py and src/ are NOT edited on
+# disk -- this is runtime-only and additive (setdefault never clobbers a real entry).
+for _spec in RESEARCH_SPECS.values():
+    RESEARCH_LABEL_TO_TEMPLATE.setdefault(_spec.research_label, _spec.template_id)
+    _DEFAULT_MARKET_BY_LABEL.setdefault(_spec.research_label, _spec.market)
+    STRATEGY_PARAMS.setdefault(_spec.template_id, dict(_spec.params))
+    STRATEGY_SYMBOLS.setdefault(_spec.template_id, list(_spec.symbols))
 
 
 def market_for_label(label: str, override: str | None = None) -> str:
@@ -304,7 +318,11 @@ def _backtest_series_worker(
         Serialized ``TradeRecord`` dicts for that symbol.
     """
     template, params, series, market, lookback_window = args
-    engine = BacktestEngine(SignalGeneratorFactory())
+    # Spawn-safe: each worker builds a fresh factory, so research generators must
+    # be (re)registered here, not only in the parent (DEC-2026-06-04-019).
+    factory = SignalGeneratorFactory()
+    register_research_generators(factory)
+    engine = BacktestEngine(factory)
     config = _backtest_config(market)
     strategy = SimpleNamespace(
         id=f"regime_dsr_{template}_{series.symbol}",
@@ -395,6 +413,16 @@ async def regenerate_pooled_trades(
             fetcher, symbol=symbol, timeframe="1h",
             start_date=hourly_start, end_date=end_date,
         ))
+
+    # Pre-fetch funding for research strategies that need it (parent process,
+    # sequential, truststore active). Workers + generators only load_cached, so
+    # the per-symbol funding cache MUST exist before any worker spawns
+    # (DEC-2026-06-04-019). Only reached on a regen cache MISS (the early return
+    # above already covers cache hits).
+    _spec = RESEARCH_SPECS.get(label)
+    if _spec is not None and _spec.needs_funding:
+        for symbol in symbols:
+            funding_rates.load_or_fetch(symbol, hourly_start, end_date)
 
     # Backtest in PARALLEL across CPU cores when workers>1 (per-symbol backtests
     # are independent and CPU-bound -- the 99% cost); else sequential. This is

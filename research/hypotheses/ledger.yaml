@@ -309,10 +309,12 @@
   registration:
     research_label: FUNDING_TREND
     template_id: funding_confirmed_trend
-    parameters:
+    parameters:    # finalized at implementation 2026-06-09 (pre-screen); matches RESEARCH_SPECS
       trend_ema_period: 100
+      fast_ema_period: 20            # fast-EMA recross trigger (distinct from donchian breakout)
+      slope_lookback: 10            # EMA-rising confirmation window
       funding_positive_threshold: 0.0
-      funding_extreme_cap_pct_per_8h: 0.05
+      funding_extreme_cap_pct_per_8h: 0.05   # -> cap rate 0.0005 (blow-off filter)
       atr_period: 14
       atr_stop_multiplier: 2.0
       risk_reward_ratio: 2.5
