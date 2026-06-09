@@ -242,7 +242,7 @@
 
 - id: H-2026-06-003
   name: "Funding-confirmed trend continuation (perp funding as a bull filter)"
-  status: PROPOSED
+  status: TIER_D   # SCREEN verdict 2026-06-09; not a deployment gate
   proposed_date: 2026-06-08
   proposed_by: llm_suggest   # Claude-sourced (crypto funding-premium); operator approved 2026-06-08
   source: >-
@@ -327,5 +327,41 @@
 
   effective_k_at_proposal: null
   similar_retired_strategies: []   # novel mechanism; no funding-based corpse
-  results: null
+  # RESULTS (regime-DSR screen, run_id regime_dsr_run_20260609) ---------------
+  results:
+    classified_tier: TIER_D       # SCREEN (DEC-2026-06-04-014); NOT a deployment gate
+    backtest_date: 2026-06-09
+    run_id: regime_dsr_run_20260609
+    pooled_tier: TIER_D_REJECT
+    pooled_dsr_p_value: 1.0
+    pooled_n: 440                 # bull 236 / bear 126 / chop 78
+    target_regime: trending_bull
+    actual_pf_adjusted: 0.53      # trending_bull cell, cost-adjusted
+    actual_sharpe_adjusted: -0.292
+    actual_n: 132                 # trending_bull -- LARGE sample, not thin-N
+    delta_from_expected_pf: -0.87 # expected 1.40 vs 0.53 (calibration: over-optimistic)
+    dsr_p_value: 1.0
+    pbo_score: null
+    cost_model_verified: false    # v0_unverified (2x conservative)
+    leakage_check: PASSED         # causal funding lookup + causal regime tagging
+    effective_k: 3450
+    failure_tag: FUNDAMENTAL
+    verdict: |
+      REJECT in every gating regime. Target trending_bull PF-adj 0.53 / Sharpe
+      -0.292 at N=132 (large sample) -- a decisive net-negative, and WORSE than the
+      plain-trend H-2026-06-002 breakout (0.59) in the same regime. The
+      pre-registered fail mode "funding adds no marginal value over a plain trend
+      filter" FIRED: gating a trend-continuation long on positive-not-extreme
+      funding did NOT select a profitable subset. The lone PF>1 cell (ranging
+      N=49 PF 1.23, base DSR p=0.92) is DESCRIPTIVE, thin, far above the 0.30
+      floor, and in the WRONG regime -- the CMF regime-misattribution pattern
+      (apparent edge in an undesigned regime = wrong-regime noise), not a
+      discovery. FUNDAMENTAL for this form (funding as a trend-CONTINUATION
+      confirmer). CALIBRATION NOTE: H-003 scored HIGHER at Stage 1 (18/21 vs
+      H-002's 14/21) yet did WORSE in-regime -- the scorecard measures reasoning
+      quality, not edge (the DEC-2026-06-04-018 anti-rationalization warning,
+      demonstrated). DISTINCT seedbed (NOT a revisit): funding at EXTREMES as a
+      CONTRARIAN/mean-reversion signal (liquidation reversals) is a different
+      mechanism needing its own pre-registration -- logged in
+      docs/research/NEGATIVE_SPACE_MAP.md.
   biography_file: research/biographies/active/FUNDING_TREND.yaml

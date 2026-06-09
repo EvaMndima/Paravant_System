@@ -1,0 +1,139 @@
+strategy_id: FUNDING_TREND
+status: ACTIVE_RESEARCH
+symbols:
+- BTCUSDT
+- ETHUSDT
+- BNBUSDT
+- SOLUSDT
+current_classification: null
+classification_history: []
+statistical_validation_history: []
+regime_coverage:
+- run_id: regime_dsr_run_20260609
+  run_date: '2026-06-09'
+  cost_model_version: v0_unverified
+  data_source: regenerated_backtest
+  is_screen_only: true
+  pooled_tier: TIER_D_REJECT
+  pooled_dsr_p_value: 1.0
+  per_regime:
+  - regime: bull
+    bucket_kind: coarse
+    n_trades: 236
+    pf_adjusted: 0.6571301573761322
+    sharpe_adjusted: -0.1902215672220782
+    base_dsr_p_value: 0.9999999999985998
+    conservative_dsr_p_value: 1.0
+    tier: TIER_D_REJECT
+    is_descriptive: false
+    effective_k: 3450
+    notes: screen-only; not a deployment gate
+  - regime: bear
+    bucket_kind: coarse
+    n_trades: 126
+    pf_adjusted: 0.6544994780018027
+    sharpe_adjusted: -0.19625024093369775
+    base_dsr_p_value: 0.9999997824699227
+    conservative_dsr_p_value: 0.9999999999996387
+    tier: TIER_D_REJECT
+    is_descriptive: false
+    effective_k: 3450
+    notes: screen-only; not a deployment gate
+  - regime: chop
+    bucket_kind: coarse
+    n_trades: 78
+    pf_adjusted: 0.8464739832095766
+    sharpe_adjusted: -0.07152433535903786
+    base_dsr_p_value: 0.999393524332548
+    conservative_dsr_p_value: 0.9999995565811297
+    tier: TIER_D_REJECT
+    is_descriptive: false
+    effective_k: 3450
+    notes: screen-only; not a deployment gate
+  - regime: choppy_bull
+    bucket_kind: sub_regime
+    n_trades: 104
+    pf_adjusted: 0.8775853538636795
+    sharpe_adjusted: -0.05892027009420346
+    base_dsr_p_value: 0.9998488761739437
+    conservative_dsr_p_value: 0.9999999910122808
+    tier: TIER_D_REJECT
+    is_descriptive: true
+    effective_k: 3450
+    notes: DESCRIPTIVE fine SubRegime -- diagnostic only, never gating
+  - regime: high_vol
+    bucket_kind: sub_regime
+    n_trades: 29
+    pf_adjusted: 0.5670882976696628
+    sharpe_adjusted: -0.24764135851310934
+    base_dsr_p_value: 0.9950291967579291
+    conservative_dsr_p_value: 0.9996452598930196
+    tier: TIER_D_REJECT
+    is_descriptive: true
+    effective_k: 3450
+    notes: DESCRIPTIVE fine SubRegime -- diagnostic only, never gating
+  - regime: trending_bull
+    bucket_kind: sub_regime
+    n_trades: 132
+    pf_adjusted: 0.5255534023332317
+    sharpe_adjusted: -0.29217101229600934
+    base_dsr_p_value: 0.9999999968180406
+    conservative_dsr_p_value: 0.9999999999999832
+    tier: TIER_D_REJECT
+    is_descriptive: true
+    effective_k: 3450
+    notes: DESCRIPTIVE fine SubRegime -- diagnostic only, never gating
+  - regime: ranging
+    bucket_kind: sub_regime
+    n_trades: 49
+    pf_adjusted: 1.2277490075099073
+    sharpe_adjusted: 0.09101737425686159
+    base_dsr_p_value: 0.9200077783588141
+    conservative_dsr_p_value: 0.9984883379799765
+    tier: TIER_D_REJECT
+    is_descriptive: true
+    effective_k: 3450
+    notes: DESCRIPTIVE fine SubRegime -- diagnostic only, never gating
+  - regime: choppy_bear
+    bucket_kind: sub_regime
+    n_trades: 37
+    pf_adjusted: 0.8090233854324117
+    sharpe_adjusted: -0.09908161441041656
+    base_dsr_p_value: 0.98819638217798
+    conservative_dsr_p_value: 0.9997878235326152
+    tier: TIER_D_REJECT
+    is_descriptive: true
+    effective_k: 3450
+    notes: DESCRIPTIVE fine SubRegime -- diagnostic only, never gating
+  - regime: trending_bear
+    bucket_kind: sub_regime
+    n_trades: 89
+    pf_adjusted: 0.5986655096222048
+    sharpe_adjusted: -0.23542171119345992
+    base_dsr_p_value: 0.9999959900856159
+    conservative_dsr_p_value: 0.9999999996246722
+    tier: TIER_D_REJECT
+    is_descriptive: true
+    effective_k: 3450
+    notes: DESCRIPTIVE fine SubRegime -- diagnostic only, never gating
+  notes: Regime-conditional backtest DSR SCREEN (DEC-2026-06-04-014). NOT a deployment
+    gate; paper/live validation still required. K x3 regime buckets.
+decision_log:
+- 'H-2026-06-003 regime-DSR screen (regime_dsr_run_20260609): TIER_D in every
+  gating regime; target trending_bull PF-adj 0.53 / Sharpe -0.292 at N=132 (large
+  sample), WORSE than the plain-trend H-002 breakout. Tagged FUNDAMENTAL -- the
+  funding gate added no edge over the (dead) trend vehicle; the pre-registered
+  "funding adds no marginal value" fail mode fired. Lone PF>1 cell (ranging,
+  base p=0.92) is thin wrong-regime noise (CMF pattern), not a discovery.
+  Recorded in research/hypotheses/ledger.yaml (H-2026-06-003) +
+  docs/research/NEGATIVE_SPACE_MAP.md. SCREEN only -- never deployed; kill switch OFF.'
+hypothesis_history: []
+parameter_history: []
+optimization_history: []
+backtest_history: []
+paper_trading_history: []
+live_deployment_history: []
+decay_events: []
+reoptimization_history: []
+correlation_with_portfolio: {}
+post_mortem: null
