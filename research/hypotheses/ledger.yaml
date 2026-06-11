@@ -365,3 +365,1027 @@
       mechanism needing its own pre-registration -- logged in
       docs/research/NEGATIVE_SPACE_MAP.md.
   biography_file: research/biographies/active/FUNDING_TREND.yaml
+
+# ===========================================================================
+# OPERATOR-REQUESTED (2026-06-09): liquidation-cascade hypothesis.
+# Stage-1 quality gate PASSED (17/21) but the build is BLOCKED at the data
+# channel: no FREE causal historical liquidation source exists (Binance public
+# historical liquidation REST is deprecated; Coinglass liquidation-history is
+# paid, $29/mo minimum, no free tier). Building it now would violate
+# DEC-2026-06-04-005 (paid alt-data deferred until working capital >= $25,000;
+# current structure ~$20 paper / $100 live). Operator decision 2026-06-09:
+# DEFER (honor DEC-005) and pivot to the funding-at-extremes contrarian, which
+# observes the SAME counterparty (over-leveraged perps) through the already-
+# built FREE funding channel. Pre-registration is frozen here so a future
+# >=$25k-capital session screens it against a spec committed before any
+# liquidation number was seen (no post-hoc fitting).
+# ===========================================================================
+
+- id: H-2026-06-004
+  name: "Liquidation-cascade reversion (buy the long-liquidation flush)"
+  status: PROPOSED   # Stage-1 PASS; build BLOCKED on paid-data (DEC-2026-06-04-005)
+  proposed_date: 2026-06-09
+  proposed_by: operator   # operator-requested 2026-06-09 ("pursue a liquidation strategy")
+  source: >-
+    Crypto market-microstructure / forced-deleveraging literature
+    (liquidation-cascade studies; Coinglass liquidation-map practitioner
+    research). Sourced for the uncovered HIGH_VOL / reversal regime as a
+    contrarian liquidation-flow mechanism the portfolio entirely lacks.
+
+  # PRE-REGISTRATION ---------------------------------------------------------
+  hypothesis: |
+    In a high-volatility down-move, over-leveraged LONG positions hit
+    maintenance margin and are force-liquidated: the exchange liquidation engine
+    market-sells the position PRICE-INSENSITIVELY (it must close before the
+    trader goes negative, at any price). A cascade occurs when the first wave of
+    forced selling drives price into the next cluster of liquidation prices,
+    triggering more forced sells -- a self-reinforcing waterfall that pushes
+    price BELOW fair value (overshoot). Once the leveraged longs are flushed,
+    forced selling stops and price snaps back toward fair value as opportunistic
+    spot bids step in. A SPOT LONG entered into the flush provides liquidity to
+    the forced sellers and captures the mean-reversion snap-back.
+
+    Counterparty: force-liquidated leveraged longs. Why they persist losing:
+    (a) high leverage is durable retail behaviour on the dominant perp venues;
+    (b) at liquidation they are MECHANICALLY price-insensitive sellers -- the
+    engine dumps at market regardless of fair value, so they systematically sell
+    the bottom. The spot long is the liquidity provider into that forced flush.
+
+    Direction = LONG (buy the long-liquidation flush). SPOT-executable, so a pass
+    would be LIVE-DEPLOYABLE (unlike a short-squeeze fade, which the spot-only
+    live lock DEC-2026-05-28-001 still gates).
+  regime_target: HIGH_VOL   # reversal cell; NOT the dead trending_bull
+  expected_pf: 1.35          # honest prior; results >> this would be a RED FLAG
+  expected_sharpe: 0.80
+  expected_n_per_year: 40    # ONLY reachable by moderate cascade threshold + symbol pooling
+  expected_fail_modes:
+    - "Snap-back < cost: the overshoot is real but too small / too fast to
+       capture on 1H bars net of conservative round-trip costs (VPT pattern)."
+    - "Crowding/front-run: liquidation maps are PUBLIC (Coinglass heatmaps);
+       'buy the flush' is a known game; faster players arbitrage the snap-back
+       -> no residual 1H edge (the H-002/H-003 inverse-crowding failure)."
+    - "Cascade is a REGIME CHANGE not an overshoot: a big flush often marks the
+       START of a sustained down-leg (capitulation continues) -> buying it
+       catches a falling knife -> negative edge."
+    - "Threshold dilution: lowering the cascade threshold to reach N>=30 trades
+       away the 'big overshoot' edge -> small flushes carry no reversion."
+    - "Data leakage: cascade magnitude is only fully known AFTER it completes;
+       must trigger on liquidation data KNOWN at the decision bar (causal only)."
+
+  # QUALITY GATE (DEC-2026-06-04-018, Stage 1 -- by hand 2026-06-09) ----------
+  quality_gate:
+    stage1_hard_gates:
+      mechanism_stated: true          # named price-insensitive forced-seller counterparty
+      falsifiable_fail_modes: true
+      sample_size_feasible: true      # ONLY via moderate threshold + symbol pooling on 1H
+      not_known_dead_pattern: true    # differs from RSI_BB (PATTERN_WITHOUT_EDGE): triggers
+                                      # on an EXOGENOUS structural-flow event with a named
+                                      # counterparty, not a price-only textbook oscillator
+    stage1_scores:   # 0-3 each; pass = mechanism_strength>=2 AND total>=14/21
+      mechanism_strength: 3
+      crowding_inverse: 1             # LOW -- public liquidation maps; the killer dimension
+      crypto_native_fit: 3
+      regime_specificity: 3
+      parameter_parsimony: 2
+      diversity_contribution: 3
+      source_credibility: 2
+      total: 17
+    verdict: PASS   # clears threshold; crowding(1/3) is the yellow flag DSR would adjudicate
+
+  # BLOCKER (why no DSR trial yet) -------------------------------------------
+  blocker:
+    type: DATA_FEASIBILITY
+    detail: >-
+      No FREE causal historical liquidation data channel exists. Binance public
+      historical liquidation REST (/fapi/v1/allForceOrders) is DEPRECATED ("no
+      longer accepts requests"); /fapi/v1/forceOrders is user-private + 90-day
+      capped; the forceOrder websocket is real-time-only + throttled (1 push/s
+      snapshot, not full volume). Coinglass liquidation-history IS adequate
+      (per-symbol long/short, 1h granularity, deep history) but PAID ($29/mo
+      Hobbyist minimum, no free tier).
+    decision: >-
+      DEFER per DEC-2026-06-04-005 (paid alt-data deferred until capital
+      >= $25,000; current ~$100). A price-only proxy is rejected: removing the
+      exogenous liquidation signal leaves plain price action = the already-DEAD
+      H-2026-06-002 breakout. Operator decision 2026-06-09: defer + pivot to the
+      funding-at-extremes contrarian (free funding channel, same counterparty).
+    unblock_when: >-
+      Working capital >= $25,000 (DEC-005 unlocks paid alt-data) OR operator
+      approves a Coinglass key as an explicit DEC-005 exception. THEN: build a
+      Coinglass liquidation channel mirroring research/data/funding_rates.py
+      (fetch + cache + causal liquidations_at(ts) accessor, leakage-guarded),
+      register via RESEARCH_SPECS, and screen against THIS frozen pre-registration.
+  eval_path: "BLOCKED -- pending free causal liquidation data (see blocker)"
+  similar_retired_strategies:
+    - strategy_id: RSI_BB
+      relevant_lessons: ["PATTERN_WITHOUT_EDGE -> differentiated by exogenous
+        liquidation-flow trigger + named counterparty (not a price-only oscillator)."]
+  biography_file: null   # no DSR trial run; biography created only on screen
+
+# ===========================================================================
+# H-2026-06-005: the funding-at-extremes CONTRARIAN -- operator pivot 2026-06-09
+# (chosen over the data-blocked liquidation hypothesis H-2026-06-004). It
+# observes the SAME counterparty (over-leveraged perps) as the liquidation idea
+# through the already-built FREE funding channel (research/data/funding_rates.py).
+# DISTINCT from H-2026-06-003 (the negative-space-map seedbed): opposite
+# direction (FADE not follow), extreme threshold (not below-cap), SHORT not
+# LONG, HIGH_VOL/reversal not trending_bull. Research-only for live (spot lock
+# DEC-2026-05-28-001); a pass is a research finding, not deployable yet.
+# ===========================================================================
+
+- id: H-2026-06-005
+  name: "Funding-at-extremes contrarian (fade extreme positive funding, short)"
+  status: INSUFFICIENT_DATA   # SCREEN 2026-06-09: N=4 pooled, thin-N fail mode fired; FIXABLE
+  proposed_date: 2026-06-09
+  proposed_by: operator   # operator pivot 2026-06-09 (defer liquidation -> funding-contrarian)
+  source: >-
+    NEGATIVE_SPACE_MAP.md FIXABLE seedbed (funding at EXTREMES as a contrarian
+    signal), derived from the H-2026-06-003 result that funding does NOT confirm
+    trend continuation. Crypto perp funding-premium / crowded-positioning
+    reversal literature (carry/positioning studies; CryptoQuant/Glassnode free
+    research). Binance futures funding is free (PRD 11.1).
+
+  # PRE-REGISTRATION ---------------------------------------------------------
+  hypothesis: |
+    In an over-extended bull move, perpetual funding goes EXTREMELY positive:
+    leveraged longs crowd the long side and pay escalating funding to shorts.
+    Extreme positive funding marks an over-leveraged, fragile long side. When
+    price momentum cracks (a fast-EMA cross DOWN while still extended above a
+    longer trend EMA), those over-leveraged longs are force-liquidated -- the
+    liquidation engine market-sells PRICE-INSENSITIVELY -- accelerating a sharp
+    reversal DOWN. A SHORT entered at that crack captures the reversal.
+
+    Counterparty: euphoric over-leveraged longs. Why they persist losing:
+    (a) they pay funding the entire time they are crowded (carry bleed);
+    (b) they are force-liquidated at the worst price (price-insensitive forced
+    selling). Leverage + recency-bias euphoria (FOMO-longing into funding
+    extremes) are durable retail behaviours.
+
+    This is the OPPOSITE usage of funding vs H-2026-06-003: that used positive-
+    but-moderate funding as a trend-CONTINUATION confirmer (LONG, below an
+    extreme cap) and died FUNDAMENTAL. This uses funding ABOVE that extreme cap
+    as a reversal-CONTRARIAN signal (SHORT). If BOTH die, funding carries no
+    exploitable TIMING edge in either direction -- a decisive cell-closing result.
+
+    Direction = SHORT (fade). Backtested in FUTURES research mode (allow_shorts,
+    DEC-2026-05-28-001). LIVE shorts remain gated by the spot-only lock, so a
+    pass is a RESEARCH finding, not deployable yet.
+  regime_target: HIGH_VOL   # reversal cell; uncovered. NB: the per-bar classifier
+                            # may label violent sell-off bars TRENDING_BEAR/CHOPPY_BEAR
+                            # (precedence), so the edge (if any) may surface in a bear
+                            # bucket -- read where trades actually land (CMF lesson).
+  expected_pf: 1.30          # deliberately conservative (H-003 scored 18 too and got 0.53)
+  expected_sharpe: 0.70
+  expected_n_per_year: 30    # pooled across the 4-symbol universe on 1H
+  expected_fail_modes:
+    - "Funding extreme is not a TIMING signal: positive funding can stay extreme
+       while the trend persists -> the short is run over by continued upside
+       before any reversal (mirror of the H-003 failure; if so, funding has no
+       exploitable timing edge in EITHER direction)."
+    - "Reversal trigger fires too late: by the time the fast-EMA cross confirms,
+       the liquidation flush already reverted -> no edge left to capture."
+    - "Thin N: extreme positive funding is infrequent -> high_vol N < 30 ->
+       the target cell is descriptive (INSUFFICIENT_DATA), not gating."
+    - "Regime-label mismatch: high-vol reversal trades classified into bear
+       buckets -> apparent edge in the wrong-regime cell (the CMF pattern)."
+    - "Realism note (CONSERVATIVE): the backtest applies a flat 0.0001/8h funding
+       DRAG to the short, but a real short RECEIVES positive funding -- so a pass
+       is doubly conservative on the funding leg."
+
+  # QUALITY GATE (DEC-2026-06-04-018, Stage 1 -- by hand 2026-06-09) ----------
+  quality_gate:
+    stage1_hard_gates:
+      mechanism_stated: true          # named euphoric over-leveraged-long counterparty
+      falsifiable_fail_modes: true
+      sample_size_feasible: true      # positive extremes cluster in euphoria; pooled 1H
+      not_known_dead_pattern: true    # differs from H-003 (opposite dir/threshold/regime;
+                                      # map-sanctioned seedbed) and RSI_BB (exogenous
+                                      # funding trigger + named counterparty)
+    stage1_scores:   # 0-3 each; pass = mechanism_strength>=2 AND total>=14/21
+      mechanism_strength: 3
+      crowding_inverse: 2             # fading funding is contrarian to the momentum crowd
+      crypto_native_fit: 3
+      regime_specificity: 3
+      parameter_parsimony: 2
+      diversity_contribution: 3       # first contrarian + first short-side + HIGH_VOL
+      source_credibility: 2
+      total: 18
+    verdict: PASS   # NB identical score to H-003 (which died) -- calibration warning stands
+
+  # IMPLEMENTATION + EVAL ROUTING --------------------------------------------
+  implementation_file: research/generators/funding_extreme_contrarian.py   # TO BUILD
+  eval_path: "python -m scripts.regime_dsr --strategy FUNDING_CONTRARIAN --market futures"
+  registration:
+    research_label: FUNDING_CONTRARIAN
+    template_id: funding_extreme_contrarian
+    parameters:
+      trend_ema_period: 100          # still-extended context filter (fade tops, not bottoms)
+      fast_ema_period: 20            # momentum-crack trigger (cross DOWN)
+      funding_extreme_threshold_pct_per_8h: 0.05   # rate 0.0005; STRICTLY ABOVE = extreme
+                                                   # (the cap H-003 treated as blow-off territory)
+      atr_period: 14
+      atr_stop_multiplier: 2.0
+      risk_reward_ratio: 2.0         # reversal: quicker profit than the trend vehicle's 2.5
+    symbols: [BTCUSDT, ETHUSDT, BNBUSDT, SOLUSDT]   # funding cache already exists (H-003)
+    market: futures   # allow_shorts=True + conservative funding drag (DEC-2026-05-28-001)
+    note: >-
+      Generator in research/generators/ (subclasses src SignalGenerator), loaded
+      via factory.register_generator runtime hook (DEC-2026-06-04-019), registered
+      INSIDE spawn workers. Reuses research/data/funding_rates.py (no new data
+      channel). src/ unchanged.
+
+  effective_k_at_proposal: null   # computed by regime_dsr at screen time
+  similar_retired_strategies: []   # H-003 is active-research (TIER_D), not retired;
+                                   # cross-checked above as the distinct opposite-direction prior
+  # RESULTS (regime-DSR screen, run_id regime_dsr_run_20260609) ---------------
+  results:
+    classified_tier: INSUFFICIENT_DATA   # SCREEN (DEC-2026-06-04-014); thin-N, NOT a deployment gate
+    backtest_date: 2026-06-09
+    run_id: regime_dsr_run_20260609
+    market: futures               # allow_shorts + flat conservative funding drag
+    pooled_tier: INSUFFICIENT_DATA
+    pooled_dsr_p_value: 0.61      # meaningless at this N; reported for completeness
+    pooled_n: 4                   # ~1 trade per coarse bucket -- essentially no trades
+    target_regime: high_vol
+    actual_pf_adjusted: null      # N=1 per bucket -> no meaningful PF (999.99/0.0 placeholders)
+    actual_sharpe_adjusted: null
+    actual_n: 1                   # high_vol SubRegime: N=1 -- DESCRIPTIVE, not gating
+    dsr_p_value: 1.0              # high_vol base/conservative both 1.0 at N=1 (not informative)
+    pbo_score: null
+    cost_model_verified: false    # v0_unverified
+    leakage_check: PASSED         # causal funding lookup + causal regime tagging
+    effective_k: 2300
+    failure_tag: FIXABLE          # thin-N feasibility miss; mechanism UNADJUDICATED (not dead)
+    verdict: |
+      INSUFFICIENT_DATA in every bucket. Pooled N=4 across 4 symbols over 540d
+      (bull 1 / chop 1; fine SubRegimes trending_bull 1, high_vol 1) -- the
+      pre-registered THIN-N fail mode fired hard. The mechanism was NEVER
+      adjudicated for edge: there were not enough trades to test it. This is a
+      FEASIBILITY miss (FIXABLE), categorically DIFFERENT from H-002/H-003 which
+      died FUNDAMENTAL at LARGE N (PF 0.59 / 0.53). Diagnosis: the entry requires
+      THREE rare conditions to coincide ON THE SAME BAR -- funding > 0.05%/8h
+      (the thin upper tail that H-003's (0, 0.05%] band deliberately EXCLUDED),
+      AND a fast-EMA cross-down, AND price still above EMA(100). Each is
+      individually plausible; their same-bar intersection is near-empty.
+      CALIBRATION LESSON: the Stage-1 sample_size_feasibility hard gate scored
+      "PASS (conditional)" by reasoning about each condition's MARGINAL
+      frequency; it should have estimated N for the CONJUNCTION (AND) of rare
+      triggers. Refine the feasibility gate accordingly (logged in
+      docs/research/NEGATIVE_SPACE_MAP.md calibration section).
+      FIXABLE SEEDBED (a NEW pre-registration, NOT a refit of this spec -- a
+      results-driven param-loosen would be the multiple-testing trap): decouple
+      the funding-extreme gate from a SAME-BAR EMA cross-down (e.g. enter on
+      funding-extreme + ANY bearish confirmation within a short WINDOW), and/or
+      use a funding PERCENTILE (e.g. top-decile per symbol) instead of an
+      absolute 0.05% cap so "extreme" self-calibrates per symbol, and/or widen
+      the universe for more pooled events. Any such correction needs its own
+      H-id, Stage-1 score, and a trial counted in K. NOT auto-pursued
+      (DEC-2026-06-04-006/-018).
+  biography_file: research/biographies/active/FUNDING_CONTRARIAN.yaml   # auto-written on screen
+  corrected_by: H-2026-06-006   # the fresh pre-registration that fixes the feasibility flaw
+
+# ===========================================================================
+# H-2026-06-006: the CORRECTED funding-contrarian -- the FIXABLE seedbed from
+# H-2026-06-005 formalized as a fresh pre-registration (operator request
+# 2026-06-09). NOT a refit: H-005 died at INSUFFICIENT_DATA (N=4) and was never
+# adjudicated for EDGE, so no edge information leaked; this is the mechanism's
+# FIRST real edge-test. Recorded as operationalization #2 of the funding-
+# contrarian mechanism for multiple-testing honesty (the funding family is 0-for-2:
+# H-003 confirmer FUNDAMENTAL, H-005 contrarian INSUFFICIENT_DATA). Live shorts
+# remain gated (DEC-2026-05-28-001); a pass is a research finding, not deployable.
+# STATUS: pre-registered, Stage-1 PASS; SCREEN pending operator go-ahead (the
+# funding family's 3rd trial -- spend it deliberately).
+# ===========================================================================
+
+- id: H-2026-06-006
+  name: "Funding-extreme contrarian v2 (per-symbol percentile gate + windowed downside-break)"
+  status: TIER_D   # SCREEN verdict 2026-06-09; edge-tested at real N, REJECT. FUNDAMENTAL.
+  proposed_date: 2026-06-09
+  proposed_by: operator   # operator request 2026-06-09 ("continue with the corrected version")
+  source: >-
+    NEGATIVE_SPACE_MAP.md FIXABLE seedbed derived from H-2026-06-005's thin-N
+    feasibility miss. Same crypto perp funding-premium / crowded-positioning
+    reversal basis; corrects the operationalization, not the mechanism.
+
+  # PRE-REGISTRATION ---------------------------------------------------------
+  hypothesis: |
+    SAME mechanism as H-2026-06-005: in an over-extended bull move perpetual
+    funding goes extremely positive (leveraged longs crowd in and pay funding);
+    that marks a fragile, over-leveraged long side; when momentum cracks those
+    longs are force-liquidated (price-insensitive selling) and price reverses
+    sharply down. A SHORT entered at the crack captures the reversal. Counterparty:
+    euphoric over-leveraged longs (pay carry the whole time + liquidated at the
+    worst price).
+
+    CORRECTION (fixes the H-005 N=4 conjunction flaw; the mechanism is unchanged):
+      1. EXTREME = a per-symbol funding PERCENTILE (top decile over a trailing
+         window), NOT an absolute 0.05%/8h cap. Self-calibrates per symbol and, by
+         construction, ~10% of bars clear the funding dimension -- so funding is no
+         longer the rarity bottleneck.
+      2. The reversal trigger is DECOUPLED from the funding print: a downside
+         Donchian break (close < lowest-low of the last breakout_lookback bars)
+         that need NOT coincide with the funding-extreme bar -- it only has to
+         occur while funding is in the extreme percentile band.
+      3. The separate EMA(100) trend filter is DROPPED (parsimony; extreme positive
+         funding already implies an up-phase).
+
+    Direction = SHORT. Backtested in FUTURES research mode (allow_shorts,
+    DEC-2026-05-28-001). LIVE shorts remain gated; a pass is a research finding.
+  regime_target: HIGH_VOL   # reversal cell; same bear-bucket labeling caveat as H-005
+  expected_pf: 1.30          # conservative; the funding family is 0-for-2, so results >> this is a RED FLAG
+  expected_sharpe: 0.70
+  expected_n_per_year: 30    # now plausibly reachable (percentile + window); was the H-005 failure
+  expected_fail_modes:
+    - "DOMINANT (the H-003 lesson reincarnated): the funding-percentile gate adds
+       NO edge over the downside-break trigger alone. If so the strategy collapses
+       to a short-side price-breakout pattern adjacent to the DEAD H-002 breakout /
+       RSI_BB cells -> FUNDAMENTAL for the entire funding-signal family (neither
+       confirm nor fade is exploitable). The screen must show the funding gate does
+       real work, not just ride the price break."
+    - "Residual thin-N: even percentile-gated, funding-extreme periods that contain
+       a downside break may be too few -> high_vol N < 30 (descriptive, not gating)."
+    - "Fade-too-early: top-decile funding persists through continued upside; the
+       short is squeezed before the reversal (funding extreme is not a timing signal)."
+    - "Regime-label mismatch: reversal trades land in bear buckets not high_vol
+       (the CMF wrong-regime-attribution pattern)."
+    - "Realism (CONSERVATIVE): the flat 0.0001/8h funding drag understates that a
+       real short RECEIVES positive funding -> a pass is doubly conservative."
+
+  # QUALITY GATE (DEC-2026-06-04-018, Stage 1 -- by hand 2026-06-09) ----------
+  quality_gate:
+    stage1_hard_gates:
+      mechanism_stated: true
+      falsifiable_fail_modes: true
+      sample_size_feasible: true      # FIX: reasoned about the CONJUNCTION (percentile makes
+                                      # funding common; window relaxes timing) -- the H-005 lesson
+      not_known_dead_pattern: true    # sanctioned FIXABLE correction (no edge leaked from H-005);
+                                      # differentiated from RSI_BB by the exogenous funding gate
+    stage1_scores:   # 0-3 each; pass = mechanism_strength>=2 AND total>=14/21
+      mechanism_strength: 3
+      crowding_inverse: 2
+      crypto_native_fit: 3
+      regime_specificity: 3
+      parameter_parsimony: 2
+      diversity_contribution: 3
+      source_credibility: 2
+      total: 18
+    verdict: PASS   # CAVEAT: funding scored 18 three times (H-003/H-005/H-006); family 0-for-2.
+                    # Earns a trial ONLY because the feasibility fix gives the mechanism its first
+                    # real EDGE test. The dominant fail mode (funding adds nothing) is the H-003 lesson.
+
+  # IMPLEMENTATION + EVAL ROUTING (TO BUILD on go-ahead) ---------------------
+  implementation_file: research/generators/funding_extreme_contrarian_v2.py   # TO BUILD
+  eval_path: "python -m scripts.regime_dsr --strategy FUNDING_CONTRARIAN_V2 --market futures"
+  registration:
+    research_label: FUNDING_CONTRARIAN_V2
+    template_id: funding_extreme_contrarian_v2
+    parameters:    # FROZEN at pre-registration; finalize generator to match exactly
+      funding_percentile_lookback_days: 90    # trailing window for the per-symbol percentile
+      funding_percentile_threshold: 90.0      # top decile = "extreme"
+      breakout_lookback: 20                   # downside Donchian break = momentum-crack trigger
+      atr_period: 14
+      atr_stop_multiplier: 2.0
+      risk_reward_ratio: 2.0
+    symbols: [BTCUSDT, ETHUSDT, BNBUSDT, SOLUSDT]   # funding cache exists; universe-widening is a further N lever
+    market: futures
+    note: >-
+      Reuses research/data/funding_rates.py (the percentile is computed causally
+      generator-side from prints known at-or-before the decision bar -- no new data
+      channel). Loaded via factory.register_generator (DEC-2026-06-04-019),
+      registered INSIDE spawn workers. src/ unchanged.
+
+  effective_k_at_proposal: null
+  multiple_testing_note: >-
+    Operationalization #2 of the funding-contrarian mechanism (H-005 was #1,
+    INSUFFICIENT_DATA -- no edge info leaked). Funding family record before this
+    trial: 0-for-2 (H-003 FUNDAMENTAL, H-005 INSUFFICIENT_DATA). After this trial:
+    0-for-3, family CLOSED.
+  similar_retired_strategies: []
+  # RESULTS (regime-DSR screen, run_id regime_dsr_run_20260609) ---------------
+  results:
+    classified_tier: TIER_D       # SCREEN (DEC-2026-06-04-014); NOT a deployment gate
+    backtest_date: 2026-06-09
+    run_id: regime_dsr_run_20260609
+    market: futures               # allow_shorts + flat conservative funding drag
+    pooled_tier: TIER_D_REJECT
+    pooled_dsr_p_value: 1.0
+    pooled_n: 132                 # bull 64 / bear 26 / chop 42 -- feasibility FIXED (H-005 was 4)
+    target_regime: high_vol
+    actual_pf_adjusted: 0.945     # high_vol cell, cost-adjusted -- net-LOSING (< 1)
+    actual_sharpe_adjusted: -0.026
+    actual_n: 28                  # high_vol -- near-gating (just under 30), still net-negative
+    delta_from_expected_pf: -0.355  # expected 1.30 vs 0.945 (high_vol)
+    dsr_p_value: 0.96             # high_vol base DSR p -- far above the 0.30 floor
+    pbo_score: null
+    cost_model_verified: false    # v0_unverified
+    leakage_check: PASSED         # causal funding percentile + causal regime tagging
+    effective_k: 3450
+    failure_tag: FUNDAMENTAL
+    verdict: |
+      REJECT in every bucket. The CORRECTION WORKED on feasibility: pooled N rose
+      from H-005's 4 to 132 (bull 64 / bear 26 / chop 42), and high_vol reached
+      N=28 -- the per-symbol funding PERCENTILE + windowed downside-break fixed the
+      same-bar conjunction flaw exactly as designed (validating the H-005
+      conjunction-feasibility calibration lesson). But with the mechanism finally
+      EDGE-tested at adequate N, the DOMINANT pre-registered fail mode FIRED: the
+      funding-percentile gate added NO edge. PF-adjusted is < 1 in EVERY coarse and
+      fine bucket (high_vol 0.945, trending_bear 0.956, chop 0.66, bear 0.57,
+      trending_bull 0.38, choppy_bull 0.30, choppy_bear 0.35, ranging 0.11), every
+      Sharpe negative, every DSR p in 0.84-1.0 -- nowhere near the 0.30 floor. The
+      "least bad" cells (high_vol 0.945, trending_bear 0.956) are net-LOSING with
+      DSR p ~0.84-0.96, NOT near-misses -> FUNDAMENTAL, not FIXABLE. This is now an
+      EDGE rejection (contrast H-005's feasibility miss): the mechanism was properly
+      tested and has no edge.
+      CELL-CLOSING RESULT: combined with H-2026-06-003 (funding as a trend
+      CONFIRMER, DEAD FUNDAMENTAL at N=132) and this (funding as a CONTRARIAN fade,
+      DEAD FUNDAMENTAL at N=132), the funding-signal family is 0-for-3 and CLOSED:
+      neither confirming nor fading perp funding is an exploitable timing edge on
+      liquid majors at 1H. No 4th funding trial is warranted. Logged in
+      docs/research/NEGATIVE_SPACE_MAP.md. The over-leveraged-perp counterparty
+      may still be reachable via the DIRECT liquidation lens (H-2026-06-004,
+      data-blocked) -- a different signal, not funding -- when capital unlocks it.
+      CALIBRATION: H-006 scored 18/21 (the THIRD funding hypothesis to score 18);
+      all three failed. The scorecard total is confirmed NOT a predictor of edge.
+  biography_file: research/biographies/active/FUNDING_CONTRARIAN_V2.yaml   # auto-written on screen
+
+# ===========================================================================
+# NEW MECHANISM CLASSES (operator request 2026-06-09): source >=2 hypotheses
+# from mechanism classes NOT yet tried (funding family CLOSED 0-for-3;
+# continuation DEAD; classic-TA-MR DEAD). Both below cleared the Stage-1 gate
+# and are pre-registered here BEFORE any backtest. SCREEN pending operator
+# go-ahead (recommend H-007 first; H-008 lower priority -- crowding 1/3).
+# ===========================================================================
+
+- id: H-2026-06-007
+  name: "Spot-ETF net-flow structural demand (long after large net inflows)"
+  status: TIER_D   # SCREEN verdict 2026-06-10; edge-tested at N=232, REJECT. FUNDAMENTAL.
+  proposed_date: 2026-06-09
+  proposed_by: operator   # operator request 2026-06-09 ("source a different mechanism class")
+  source: >-
+    US spot Bitcoin/Ether ETF creation-redemption mechanics (issuer/AP must buy
+    real spot to back net creations). Daily net-flow data is FREE and historical
+    since the Jan-2024 launch (Farside Investors, https://farside.co.uk/btc/ ;
+    published evening-after-close -> causal at T+1). A NEW mechanism class
+    (institutional spot-flow), distinct from the closed funding family (leverage
+    positioning) and from price continuation.
+
+  # PRE-REGISTRATION ---------------------------------------------------------
+  hypothesis: |
+    A large net-inflow day into the US spot BTC (or ETH) ETFs is followed by
+    positive next-1-3-day spot drift, because (a) ETF creations force the
+    issuer/AP to BUY real spot price-insensitively, and (b) the published flow
+    print diffuses into slow-money positioning with a lag (allocators react after
+    the print). A SPOT LONG entered the day AFTER a large net-inflow print
+    captures the diffusion. Counterparty: liquidity providers selling into the
+    mechanical creation-buying + slow allocators who under-react to the published
+    flow. Persistence: ETF allocation is structural/sticky (advisor/retirement
+    rebalancing over weeks); the flow print is public-but-under-reacted.
+
+    Direction = LONG BTC/ETH spot -> DEPLOYABLE if it passes (no spot-lock issue).
+  regime_target: TRENDING_BULL   # accumulation/bull; secondary coverage of the uncovered bull gap
+  expected_pf: 1.30          # conservative; results >> this is a RED FLAG
+  expected_sharpe: 0.70
+  expected_n_per_year: 30    # daily granularity on BTC+ETH -- N is the main feasibility risk
+  expected_fail_modes:
+    - "DOMINANT -- reverse causality: net inflows FOLLOW green days, so 'long after
+       inflow' collapses to price-continuation, which is DEAD (H-002). The flow
+       signal MUST add edge over a price-momentum baseline (the gate-earns-its-keep
+       test that the funding family failed)."
+    - "Already priced intraday: the flow is efficient by the next session -> no
+       next-day drift."
+    - "Thin N: daily data + large-flow rarity -> N < 30 even pooling BTC+ETH."
+    - "Non-stationary: 2024 launch-hype flow regime != 2026 steady-state -> edge
+       does not persist out of the launch window."
+
+  # QUALITY GATE (DEC-2026-06-04-018, Stage 1 -- by hand 2026-06-09) ----------
+  quality_gate:
+    stage1_hard_gates:
+      mechanism_stated: true
+      falsifiable_fail_modes: true
+      sample_size_feasible: true     # daily BTC+ETH; conditional -- N is the risk
+      not_known_dead_pattern: true   # distinct from funding (spot allocation vs leverage)
+                                     # and from price continuation
+    stage1_scores:   # 0-3 each; pass = mechanism_strength>=2 AND total>=14/21
+      mechanism_strength: 2          # mechanical buying concrete; tradable edge leans on
+                                     # under-reaction + a real reverse-causality risk
+      crowding_inverse: 2
+      crypto_native_fit: 3
+      regime_specificity: 2
+      parameter_parsimony: 2
+      diversity_contribution: 3
+      source_credibility: 2
+      total: 16
+    verdict: PASS
+
+  # IMPLEMENTATION + EVAL ROUTING (TO BUILD on go-ahead) ---------------------
+  implementation_file: research/generators/etf_flow_demand.py   # TO BUILD
+  eval_path: "python -m scripts.regime_dsr --strategy ETF_FLOW --market spot --timeframe 1d"
+  infrastructure_required:
+    - "ETF-flow data channel: a Farside adapter mirroring research/data/funding_rates.py
+       (fetch + cache + a CAUSAL net_flow_at(date) accessor using T+1 publication;
+       leakage-guarded). FREE source (Farside) -- NOT paid alt-data, so DEC-005 does
+       NOT gate it. Build only on go-ahead (DEC-2026-06-04-018: tool when a
+       gate-passing hypothesis needs it)."
+    - "DAILY timeframe backtest path: confirm regime_dsr/backtest_rolling support a
+       1d timeframe + daily regime tagging (the existing screens are 1H). If not,
+       this is a small additive infra cost to verify before screening."
+  registration:
+    research_label: ETF_FLOW
+    template_id: etf_flow_demand
+    parameters:    # FROZEN intent; finalize at implementation
+      flow_lookback_days: 90          # trailing window for the per-asset flow percentile
+      flow_percentile_threshold: 80.0 # large net-inflow = top quintile (daily, looser than 90 for N)
+      holding_days: 3                 # capture the diffusion window
+      atr_period: 14
+      atr_stop_multiplier: 2.5
+    symbols: [BTCUSDT, ETHUSDT]       # only BTC+ETH have US spot ETFs
+    market: spot                      # long-only; deployable
+    note: >-
+      New FREE data channel (Farside), justified by this gate-passing hypothesis.
+      Generator in research/generators/, factory.register_generator hook
+      (DEC-2026-06-04-019), spawn-safe. src/ unchanged.
+  effective_k_at_proposal: null
+  similar_retired_strategies: []   # novel class; no ETF-flow corpse
+  # RESULTS (regime-DSR screen, run_id regime_dsr_run_20260610) ---------------
+  results:
+    classified_tier: TIER_D       # SCREEN (DEC-2026-06-04-014); NOT a deployment gate
+    backtest_date: 2026-06-10
+    run_id: regime_dsr_run_20260610
+    market: spot
+    pooled_tier: TIER_D_REJECT
+    pooled_dsr_p_value: 1.0
+    pooled_n: 232                 # bull 140 / bear 46 / chop 46 -- feasibility GOOD
+    target_regime: trending_bull
+    actual_pf_adjusted: 0.44      # trending_bull cell, cost-adjusted -- net-LOSING
+    actual_sharpe_adjusted: -0.354
+    actual_n: 87                  # trending_bull -- LARGE sample, decisive
+    delta_from_expected_pf: -0.86 # expected 1.30 vs 0.44
+    dsr_p_value: 1.0              # trending_bull base/conservative ~1.0
+    pbo_score: null
+    cost_model_verified: false    # v0_unverified
+    leakage_check: PASSED         # causal T+1 ETF-flow accessor + causal regime tagging
+    effective_k: 3450
+    failure_tag: FUNDAMENTAL
+    verdict: |
+      REJECT in every bucket. Feasibility was GOOD (the daily-flow-as-1H-gate
+      pattern produced N=232 pooled), but the edge is absent: PF-adjusted < 1 in
+      EVERY coarse and fine bucket (target trending_bull 0.44 at N=87, bull 0.48,
+      chop 0.68, bear 0.21, ranging 0.32, trending_bear 0.13; least-bad high_vol
+      0.94 at thin N=17), every Sharpe negative, every DSR p in 0.91-1.0. The
+      DOMINANT pre-registered fail mode FIRED: ETF inflows LAG price (they follow
+      green days), so "long the day after a large inflow" buys moves that already
+      happened -> systematic mean-reversion against the entry. FUNDAMENTAL for this
+      form. NOTE a confounder (honest): the trailing stop is ATR(14 HOURLY)*2.5 --
+      tight relative to the multi-day-drift thesis, so part of the loss is the
+      intraday stop whipsawing out before any daily drift. That makes a daily-
+      scaled-exit variant a DISTINCT FIXABLE seedbed (NOT a refit) -- but PF 0.44
+      in the target regime is too decisive to attribute to the exit alone; the
+      reverse-causality killer is primary. LOW priority. Logged in
+      docs/research/NEGATIVE_SPACE_MAP.md; not auto-pursued (DEC-2026-06-04-006/018).
+  biography_file: research/biographies/active/ETF_FLOW.yaml   # auto-written on screen
+
+- id: H-2026-06-008
+  name: "Cross-sectional relative-strength momentum (rotate into the strongest)"
+  status: TIER_D   # SCREEN verdict 2026-06-10; edge-tested at N=457, REJECT. FUNDAMENTAL (crowding fired).
+  proposed_date: 2026-06-09
+  proposed_by: operator   # operator request 2026-06-09 ("source a different mechanism class")
+  source: >-
+    Cross-sectional crypto momentum literature (Liu & Tsyvinski 2021; the
+    Jegadeesh-Titman relative-strength lineage). The NEGATIVE_SPACE_MAP names
+    relative-strength/cross-sectional as an untried class. Distinct from the DEAD
+    SINGLE-SYMBOL (absolute/time-series) momentum corpses (CMF/BTF/HATP).
+
+  # PRE-REGISTRATION ---------------------------------------------------------
+  hypothesis: |
+    Ranking the universe by trailing relative return, the strongest-relative
+    assets continue to outperform over the next period; rotating capital LONG into
+    the top-ranked captures the continuation. Mechanism: under-reaction to
+    asset-specific information + flow-chasing of relative winners (24/7 retail
+    attention). Counterparty: late rotators and non-rotating index-like holders
+    who under-react to relative performance.
+
+    Direction = LONG the strongest -> spot, deployable.
+  regime_target: TRENDING_BULL   # dispersion/trending regimes; the uncovered bull gap, NEW class
+  expected_pf: 1.25          # conservative; crowded factor -> modest prior
+  expected_sharpe: 0.60
+  expected_n_per_year: 60    # rotation -> ample entries (N is NOT the risk here)
+  expected_fail_modes:
+    - "DOMINANT -- crowding: cross-sectional momentum is the most-arbitraged factor
+       in finance; on liquid majors at 1H it likely carries no residual edge (the
+       H-002 inverse-crowding death)."
+    - "Narrow universe: 4 symbols give weak cross-sectional dispersion; the signal
+       needs a 10-30 alt universe to be meaningful (universe-expansion = infra)."
+    - "Turnover/cost: frequent rotation -> cost-dead net of conservative round-trip
+       (the VPT lesson)."
+
+  # QUALITY GATE (DEC-2026-06-04-018, Stage 1 -- by hand 2026-06-09) ----------
+  quality_gate:
+    stage1_hard_gates:
+      mechanism_stated: true
+      falsifiable_fail_modes: true
+      sample_size_feasible: true     # rotation -> ample N
+      not_known_dead_pattern: true   # RELATIVE cross-sectional, not the DEAD absolute
+                                     # single-symbol momentum (map-named untried class)
+    stage1_scores:   # 0-3 each; pass = mechanism_strength>=2 AND total>=14/21
+      mechanism_strength: 2
+      crowding_inverse: 1            # the loud flag -- most-arbitraged factor in finance
+      crypto_native_fit: 2          # transplanted equity factor; crypto angle = 24/7 attention
+      regime_specificity: 2
+      parameter_parsimony: 2
+      diversity_contribution: 3
+      source_credibility: 3          # peer-reviewed (incl. crypto-specific Liu-Tsyvinski)
+      total: 15
+    verdict: PASS_MARGINAL   # passes, but crowding 1/3 is the H-002 yellow flag; LOWER priority
+
+  # IMPLEMENTATION + EVAL ROUTING (TO BUILD on go-ahead) ---------------------
+  implementation_file: research/generators/cross_sectional_momentum.py   # TO BUILD
+  eval_path: "python -m scripts.regime_dsr --strategy XS_MOMENTUM --market spot"
+  infrastructure_required:
+    - "CROSS-SYMBOL panel: the per-symbol generator interface cannot see other
+       symbols. Needs a precomputed per-bar cross-symbol RANK series (computed in
+       the parent, cached per symbol, read causally in the worker) -- heavier infra
+       than the funding channel. Build only on go-ahead."
+    - "Universe expansion (recommended): cross-sectional dispersion is weak on 4
+       symbols; a 10-30 alt universe (more OHLCV) materially strengthens the test."
+  registration:
+    research_label: XS_MOMENTUM
+    template_id: cross_sectional_momentum
+    parameters:    # FROZEN intent; finalize at implementation
+      rs_lookback_bars: 168           # ~7 days on 1H trailing relative return
+      top_k_fraction: 0.25            # long the top quartile of the ranked universe
+      rebalance_bars: 24              # daily rebalance
+      atr_period: 14
+      atr_stop_multiplier: 2.5
+    symbols: [BTCUSDT, ETHUSDT, BNBUSDT, SOLUSDT]   # NARROW -- widen before screening for a real test
+    market: spot
+    note: >-
+      Requires cross-symbol panel infra (see infrastructure_required). Generator in
+      research/generators/, factory hook (DEC-2026-06-04-019), spawn-safe. src/ unchanged.
+  effective_k_at_proposal: null
+  similar_retired_strategies:
+    - strategy_id: CMF
+      relevant_lessons: ["Single-symbol momentum DEAD -> differentiated by RELATIVE
+        cross-sectional ranking, but the momentum-crowding risk still applies."]
+  # RESULTS (regime-DSR screen, run_id regime_dsr_run_20260610) ---------------
+  results:
+    classified_tier: TIER_D       # SCREEN (DEC-2026-06-04-014); NOT a deployment gate
+    backtest_date: 2026-06-10
+    run_id: regime_dsr_run_20260610
+    market: spot
+    pooled_tier: TIER_D_REJECT
+    pooled_dsr_p_value: 1.0
+    pooled_n: 457                 # bull 226 / bear 136 / chop 95 -- feasibility GOOD
+    target_regime: trending_bull
+    actual_pf_adjusted: 0.88      # trending_bull cell -- least-bad, still net-LOSING
+    actual_sharpe_adjusted: -0.048
+    actual_n: 121                 # trending_bull -- LARGE sample, decisive
+    delta_from_expected_pf: -0.37 # expected 1.25 vs 0.88
+    dsr_p_value: 1.0              # trending_bull base/conservative ~1.0
+    pbo_score: null
+    cost_model_verified: false    # v0_unverified
+    leakage_check: PASSED         # causal cross-symbol rank panel + causal regime tagging
+    effective_k: 3450
+    failure_tag: FUNDAMENTAL
+    verdict: |
+      REJECT in every bucket. The cross-symbol rank-panel infra worked and
+      feasibility was GOOD (N=457 pooled), but the edge is absent: PF-adjusted < 1
+      in EVERY coarse and fine bucket (target trending_bull 0.88 at N=121 is the
+      least-bad, but still net-losing; bull 0.67, bear 0.34, chop 0.31, high_vol
+      0.26, trending_bear 0.30), every Sharpe negative, every DSR p ~1.0. The
+      DOMINANT pre-registered fail mode FIRED: cross-sectional momentum on liquid
+      majors at 1H carries no residual edge -- exactly the crowding=1/3 Stage-1
+      flag (the H-002 inverse-crowding death, in a new vehicle). The trending_bull
+      0.88 is "least wrong" because relative-strength is least-bad in a bull, but
+      p~1.0 makes it no near-miss. FUNDAMENTAL for this form.
+      SECONDARY caveat (honest): top_k_fraction 0.25 on a 4-symbol universe = top
+      1 (only the single strongest held), the weak-dispersion limitation flagged
+      at pre-registration. A 10-30 alt universe is a DISTINCT seedbed (NOT a
+      refit) -- but the crowding result is decisive enough on majors that this is
+      LOW priority (the same crowding likely persists on liquid alts). Logged in
+      docs/research/NEGATIVE_SPACE_MAP.md; not auto-pursued (DEC-2026-06-04-006/018).
+  biography_file: research/biographies/active/XS_MOMENTUM.yaml   # auto-written on screen
+
+# ===========================================================================
+# NON-PUBLIC / LESS-ARBITRAGED ANGLES (operator request 2026-06-10): the six
+# screened trials all died to public-signal CROWDING on liquid majors at 1H, so
+# source only where the signal is NOT publicly visible at decision time, or the
+# venue/universe is friction-limited. Five sourced; THREE cleared Stage 1 and are
+# pre-registered below (frozen, BEFORE any backtest). Two died at Stage 1 (logged
+# in NEGATIVE_SPACE_MAP.md, no H-id): mid-cap alt breakout (score 12/21 -- low-
+# diversity rehash of doubly-dead momentum, likely cost-dead) and stablecoin-
+# supply macro-liquidity (hard-gate fail -- a liquidity tide, no counterparty;
+# H-007-adjacent reverse-causality). SCREEN of survivors pending operator go-ahead.
+# ===========================================================================
+
+- id: H-2026-06-009
+  name: "Hyperliquid liquidation-cascade reversion (buy the long-liquidation flush)"
+  status: PROPOSED   # Stage-1 PASS 18/21; SCREEN BLOCKED 2026-06-10 (data-accessibility, see blocker)
+  proposed_date: 2026-06-10
+  proposed_by: operator   # operator request 2026-06-10 ("non-public/less-arbitraged angle")
+  source: >-
+    The H-2026-06-004 liquidation-cascade thesis via a FREE, less-productized
+    venue lens: Hyperliquid publishes all fills incl. liquidations/ADLs on-chain
+    (official /info endpoint, public/no-auth, paginated by recency) with a free
+    full-history archive (Hydromancer Reservoir S3, requester-pays transfer only).
+    This is the FREE path to the over-leveraged-perp counterparty that H-004
+    cannot reach (Coinglass paid, DEC-005), and it is genuinely LESS PUBLIC than
+    the Coinglass liquidation maps (must parse on-chain fills).
+
+  # PRE-REGISTRATION ---------------------------------------------------------
+  hypothesis: |
+    In a high-volatility down-move, over-leveraged LONGS on Hyperliquid perps are
+    force-liquidated -- the engine market-sells PRICE-INSENSITIVELY, overshooting
+    fair value; once the longs are flushed, price snaps back. A SPOT LONG entered
+    into a large long-liquidation flush provides liquidity to the forced sellers
+    and captures the reversion. Counterparty: force-liquidated leveraged longs
+    (price-insensitive sellers who sell the bottom). Edge lives where the
+    liquidation signal is LESS PUBLIC (HL on-chain) than the arbitraged Coinglass
+    maps. Direction = LONG -> spot-executable, DEPLOYABLE if it passes.
+  regime_target: HIGH_VOL
+  expected_pf: 1.30
+  expected_sharpe: 0.70
+  expected_n_per_year: 40    # via a cascade percentile + window (H-006 conjunction lesson) + pooling
+  expected_fail_modes:
+    - "HL-native bots arbitrage the snap-back intraday -> no residual edge at 1H."
+    - "Cascade is a REGIME CHANGE not an overshoot (capitulation continues) ->
+       buying the flush catches a falling knife."
+    - "Cross-venue decoupling: HL liquidations do not predict the corresponding
+       Binance-spot reversion (venue-idiosyncratic flush)."
+    - "Thin-N if the cascade threshold is set too high (the H-005 lesson -> use a
+       percentile + window, not a same-bar absolute conjunction)."
+    - "HL history is short (~2yr) -> fewer high_vol episodes than the 540d majors window."
+
+  # QUALITY GATE (DEC-2026-06-04-018, Stage 1 -- by hand 2026-06-10) ----------
+  quality_gate:
+    stage1_hard_gates:
+      mechanism_stated: true          # price-insensitive forced-seller counterparty
+      falsifiable_fail_modes: true
+      sample_size_feasible: true      # percentile+window+pool; data free (HL /info + S3)
+      not_known_dead_pattern: true    # H-004 is DATA-BLOCKED (not screened/dead); this is its free path
+    stage1_scores:   # 0-3; pass = mechanism>=2 AND total>=14/21
+      mechanism_strength: 3
+      crowding_inverse: 2             # on-chain parse less-mapped than Coinglass; but HL bots are fast
+      crypto_native_fit: 3
+      regime_specificity: 3
+      parameter_parsimony: 2
+      diversity_contribution: 3       # first liquidation-flow + first DEX venue
+      source_credibility: 2
+      total: 18
+    verdict: PASS   # strongest of the five on mechanism + inverse-crowding; heaviest build
+
+  implementation_file: research/generators/hl_liquidation_reversion.py   # TO BUILD
+  eval_path: "python -m scripts.regime_dsr --strategy HL_LIQ_REVERSION --market spot"
+  infrastructure_required:
+    - "Hyperliquid liquidation data channel (research/data/hl_liquidations.py): fetch
+       + cache + a CAUSAL liquidations_at(ts) accessor. FREE (HL /info recency
+       pagination, or the Hydromancer S3 requester-pays archive for deep history).
+       HEAVIEST build of the three survivors (cross-venue + possibly boto3/S3)."
+    - "Cross-venue mapping HL-liquidations -> Binance-spot symbol (or trade the
+       reversion on HL-listed majors). Verify history depth covers the window."
+  registration:
+    research_label: HL_LIQ_REVERSION
+    template_id: hl_liquidation_reversion
+    parameters:    # FROZEN intent; finalize at implementation
+      liq_lookback_days: 30
+      liq_percentile_threshold: 90.0   # cascade = top-decile long-liquidation bar
+      reversal_confirm_bars: 3
+      atr_period: 14
+      atr_stop_multiplier: 2.5
+    symbols: [BTCUSDT, ETHUSDT, SOLUSDT]   # HL-listed majors; widen on go-ahead
+    market: spot
+  effective_k_at_proposal: null
+  similar_retired_strategies: []
+  # BLOCKER (data-accessibility; verified 2026-06-10 BEFORE building) ---------
+  blocker:
+    type: DATA_ACCESSIBILITY
+    detail: >-
+      A causal 540d market-wide HL liquidation series is NOT buildable from
+      free+accessible sources in this environment. Hyperliquid /info has NO
+      market-wide liquidation request type (verified: the documented `type` list
+      lacks one; probes type=liquidations/recentLiquidations -> 422). Liquidations
+      exist only via the real-time WebSocket (no history) or per-user fills (need
+      the address universe). candleSnapshot is capped at 5000 candles (~208d on
+      1H), so even HL OHLCV is too shallow. The deep-history archive (Hydromancer
+      Reservoir S3) is FREE-of-fee but REQUESTER-PAYS, needing AWS credentials
+      this sandbox does not have.
+    decision: >-
+      DEFER. Do NOT fake it with a price proxy (removing the exogenous liquidation
+      signal = the already-DEAD H-002 price action). Stage-1 PASS (18/21) frozen
+      above; the mechanism is the strongest in the program but the FREE-data lens
+      is inaccessible here.
+    unblock_when: >-
+      (a) operator provides AWS credentials to read the Hydromancer S3 archive
+      (free-of-fee, pay only transfer); OR (b) forward-collect HL liquidations via
+      the WebSocket from now (builds history over time, not screenable today); OR
+      (c) capital >= $25k unlocks a paid market-wide liq source (Coinglass,
+      DEC-2026-06-04-005) -- which also unblocks H-2026-06-004.
+  results: null   # SCREEN blocked (data-accessibility); no DSR trial spent
+  biography_file: null   # no screen run
+
+- id: H-2026-06-010
+  name: "Coinbase premium (US-institutional cross-venue demand)"
+  status: TIER_D   # SCREEN verdict 2026-06-10; edge-tested at N=261, REJECT. FUNDAMENTAL.
+  proposed_date: 2026-06-10
+  proposed_by: operator
+  source: >-
+    The persistent Coinbase-vs-offshore price premium ("Coinbase premium gap"), a
+    documented signal of US-regulated institutional spot demand. Free: computed
+    from Coinbase BTC-USD vs Binance BTC-USDT public candles (both reachable).
+
+  # PRE-REGISTRATION ---------------------------------------------------------
+  hypothesis: |
+    When US institutions accumulate spot BTC on Coinbase (USD on-ramp, KYC), the
+    Coinbase BTC-USD price trades at a PREMIUM to offshore (Binance BTC-USDT). The
+    premium persists because the cross-venue arb is FRICTION-LIMITED (KYC,
+    banking, USD<->USDT conversion, time), so it is NOT instantly closed -- a
+    positive/expanding premium predicts short-term continuation as the global
+    price catches up. A LONG entered on an elevated premium captures the
+    convergence. Counterparty: friction-limited cross-venue arbitrageurs + slow
+    global price. Mechanism = MICROSTRUCTURE FRICTION, distinct from H-007 ETF
+    creation-flow. Direction = LONG spot -> DEPLOYABLE.
+  regime_target: TRENDING_BULL   # accumulation/bull; secondary coverage of the bull gap
+  expected_pf: 1.25
+  expected_sharpe: 0.60
+  expected_n_per_year: 40
+  expected_fail_modes:
+    - "DOMINANT -- reverse causality (the H-007 killer): the premium WIDENS AFTER
+       price rises (US FOMO), so 'long on premium' buys the move that happened."
+    - "The friction arb closes faster than 1H -> the premium carries no 1H edge."
+    - "Premium is a bull-only artifact -> no edge / wrong sign in bear."
+
+  quality_gate:
+    stage1_hard_gates:
+      mechanism_stated: true          # friction-limited cross-venue (NOT ETF flow)
+      falsifiable_fail_modes: true
+      sample_size_feasible: true      # 1H, both prices free -> ample N
+      not_known_dead_pattern: true    # differentiated from H-007 by the friction mechanism
+    stage1_scores:
+      mechanism_strength: 2           # friction real, but reverse-causality risk (H-007-adjacent)
+      crowding_inverse: 2
+      crypto_native_fit: 3
+      regime_specificity: 2
+      parameter_parsimony: 2
+      diversity_contribution: 3       # first cross-venue microstructure
+      source_credibility: 2
+      total: 16
+    verdict: PASS
+
+  implementation_file: research/generators/coinbase_premium.py   # TO BUILD
+  eval_path: "python -m scripts.regime_dsr --strategy COINBASE_PREMIUM --market spot"
+  infrastructure_required:
+    - "Coinbase price channel (research/data/coinbase_prices.py): fetch + cache
+       Coinbase BTC-USD 1H candles (public /products/{id}/candles, 300/req,
+       paginate) + a causal premium_at(ts) = Coinbase/Binance - 1. FREE."
+  registration:
+    research_label: COINBASE_PREMIUM
+    template_id: coinbase_premium
+    parameters:    # FROZEN intent
+      premium_lookback_days: 30
+      premium_percentile_threshold: 80.0   # elevated premium = top quintile
+      atr_period: 14
+      atr_stop_multiplier: 2.5
+    symbols: [BTCUSDT]   # Coinbase premium is a BTC signal (ETH possible later)
+    market: spot
+  effective_k_at_proposal: null
+  similar_retired_strategies:
+    - strategy_id: H-2026-06-007
+      relevant_lessons: ["ETF-flow died on reverse causality (demand lags price);
+        the SAME risk is the dominant pre-registered fail mode here -- the friction
+        mechanism must add edge over a price-momentum baseline."]
+  # RESULTS (regime-DSR screen, run_id regime_dsr_run_20260610) ---------------
+  results:
+    classified_tier: TIER_D       # SCREEN (DEC-2026-06-04-014); NOT a deployment gate
+    backtest_date: 2026-06-10
+    run_id: regime_dsr_run_20260610
+    market: spot
+    pooled_tier: TIER_D_REJECT
+    pooled_dsr_p_value: 1.0
+    pooled_n: 261                 # bull 143 / bear 84 / chop 34
+    target_regime: trending_bull
+    actual_pf_adjusted: 0.35      # trending_bull cell -- net-LOSING
+    actual_sharpe_adjusted: -0.436
+    actual_n: 75                  # trending_bull -- adequate sample
+    delta_from_expected_pf: -0.90 # expected 1.25 vs 0.35
+    dsr_p_value: 1.0
+    pbo_score: null
+    cost_model_verified: false    # v0_unverified
+    leakage_check: PASSED         # causal cross-venue premium (both closes at bar close)
+    effective_k: 3450
+    failure_tag: FUNDAMENTAL
+    verdict: |
+      REJECT in every gating regime. The DOMINANT pre-registered fail mode FIRED
+      (the H-007 reverse-causality killer): an elevated Coinbase premium does NOT
+      predict forward drift -- it widens AFTER price rises, so "long on premium"
+      buys the move that happened. Gating buckets net-losing: bull 0.36, bear
+      0.37, trending_bull 0.35 (N=75). NOTABLE-BUT-NOISE: the high_vol cell is
+      PF 1.06 / Sharpe +0.023 -- the ONLY PF>1 + positive-Sharpe cell in the whole
+      program -- BUT N=23, base DSR p=0.92 (floor 0.30): a thin, descriptive,
+      non-gating fine-SubRegime blip ~92% likely to be selection luck (the H-003
+      lone-PF>1-in-a-thin-cell pattern). Treated as noise per the DSR floor, NOT a
+      discovery. FUNDAMENTAL for this form. The friction-microstructure mechanism
+      did not beat a price baseline -- same outcome as the ETF-flow lens (H-007).
+      Logged in docs/research/NEGATIVE_SPACE_MAP.md.
+  biography_file: research/biographies/active/COINBASE_PREMIUM.yaml   # auto-written on screen
+
+- id: H-2026-06-011
+  name: "BTC-led lead-lag on mid-cap alts (information diffusion, thin-arb universe)"
+  status: TIER_D   # SCREEN verdict 2026-06-10; edge-tested at N=918, REJECT. FUNDAMENTAL.
+  proposed_date: 2026-06-10
+  proposed_by: operator
+  source: >-
+    Cross-asset information diffusion: BTC is the reserve/quote asset and price
+    discovery hub; new information hits BTC first and diffuses to alts. On
+    UNDER-ARBITRAGED mid-cap alts the diffusion lag survives (thin arb capital).
+    Free: Binance alt OHLCV + a BTC reference series. Distinct from H-008
+    (cross-sectional RANK); this is BTC-conditioned DIRECTIONAL diffusion.
+
+  # PRE-REGISTRATION ---------------------------------------------------------
+  hypothesis: |
+    After BTC makes a decisive move (a confirmed momentum thrust), mid-cap alts
+    UNDER-REACT initially then catch up over the next bars. A LONG on a mid-cap
+    alt entered after a confirmed BTC up-move (while the alt has not yet caught
+    up) captures the diffusion. Counterparty: slow alt traders who react to
+    BTC-led moves with a lag; the edge survives ONLY where arb capital is thin
+    (mid-caps, NOT majors -- on majors the lag is already <1H). Direction = LONG
+    spot -> DEPLOYABLE.
+  regime_target: TRENDING_BULL   # directional diffusion is strongest in trends
+  expected_pf: 1.25
+  expected_sharpe: 0.60
+  expected_n_per_year: 60    # many alts x BTC-thrust events
+  expected_fail_modes:
+    - "DOMINANT -- on anything liquid the BTC->alt lag is already arbitraged (<1H)
+       -> the alt just has high BETA to BTC, not a timing ALPHA (lead-lag = beta)."
+    - "Cost/liquidity: mid-cap alt spreads + slippage -> cost-dead (the VPT lesson)."
+    - "Thin-N per alt -> must pool across a mid-cap universe."
+
+  quality_gate:
+    stage1_hard_gates:
+      mechanism_stated: true          # BTC-dominance diffusion + thin-arb-universe counterparty
+      falsifiable_fail_modes: true
+      sample_size_feasible: true      # pool across many mid-cap alts
+      not_known_dead_pattern: true    # cross-asset directional diffusion untried (H-008 was rank)
+    stage1_scores:
+      mechanism_strength: 2
+      crowding_inverse: 2             # thin-arb mid-caps; the inverse-crowding play
+      crypto_native_fit: 3            # BTC-dominance has no equity analogue
+      regime_specificity: 2
+      parameter_parsimony: 2
+      diversity_contribution: 3       # first cross-asset lead-lag
+      source_credibility: 2
+      total: 16
+    verdict: PASS
+
+  implementation_file: research/generators/btc_lead_lag.py   # TO BUILD
+  eval_path: "python -m scripts.regime_dsr --strategy BTC_LEAD_LAG --market spot"
+  infrastructure_required:
+    - "BTC reference-series feed into the per-symbol worker (the generator for an
+       alt must see BTC's recent move). Reuse the cross-symbol pattern from
+       xs_rank.py: parent precomputes a causal BTC-thrust series, caches it, the
+       worker reads btc_thrust_at(ts). Plus a mid-cap alt universe (Binance OHLCV)."
+  registration:
+    research_label: BTC_LEAD_LAG
+    template_id: btc_lead_lag
+    parameters:    # FROZEN intent
+      btc_thrust_lookback_bars: 24    # BTC momentum window (~1 day on 1H)
+      btc_thrust_threshold_pct: 2.0   # a "decisive" BTC up-move
+      alt_lag_window_bars: 6          # enter while the alt has not yet caught up
+      atr_period: 14
+      atr_stop_multiplier: 2.5
+    symbols: [ADAUSDT, AVAXUSDT, LINKUSDT, DOTUSDT, LTCUSDT, ATOMUSDT]   # mid-cap set; widen on go-ahead
+    market: spot
+  effective_k_at_proposal: null
+  similar_retired_strategies: []
+  # RESULTS (regime-DSR screen, run_id regime_dsr_run_20260610) ---------------
+  results:
+    classified_tier: TIER_D       # SCREEN (DEC-2026-06-04-014); NOT a deployment gate
+    backtest_date: 2026-06-10
+    run_id: regime_dsr_run_20260610
+    market: spot
+    pooled_tier: TIER_D_REJECT
+    pooled_dsr_p_value: 1.0
+    pooled_n: 918                 # bull 493 / bear 272 / chop 153 -- feasibility GOOD (6 alts)
+    target_regime: trending_bull
+    actual_pf_adjusted: 0.44      # trending_bull cell -- decisively net-LOSING
+    actual_sharpe_adjusted: -0.315
+    actual_n: 255                 # trending_bull -- LARGE sample
+    delta_from_expected_pf: -0.81 # expected 1.25 vs 0.44
+    dsr_p_value: 1.0
+    pbo_score: null
+    cost_model_verified: false    # v0_unverified
+    leakage_check: PASSED         # causal BTC-thrust reference + causal regime tagging
+    effective_k: 3450
+    failure_tag: FUNDAMENTAL
+    verdict: |
+      REJECT in every bucket, the WORST of the program: PF-adjusted 0.27-0.44
+      everywhere (bull 0.37, bear 0.28, chop 0.36, trending_bull 0.44 at N=255,
+      high_vol 0.40, ranging 0.12), all Sharpe negative, all DSR p ~1.0, at a huge
+      N=918 (6 alts). The diffusion thesis is not just absent but INVERTED: buying
+      a mid-cap alt that LAGS a BTC up-move = buying the relative LOSERS, which
+      keep underperforming (laggards do not catch up -- they lag because they are
+      weak). This is the H-008 cross-sectional-momentum finding confirmed from the
+      other side (the weak stay weak). The pre-registered "lead-lag = beta not
+      alpha" fail mode fired, and worse -- it is negative selection. FUNDAMENTAL.
+      The thin-arb-universe angle did NOT rescue it; on mid-caps the cost drag
+      (wide spreads) compounds the negative selection. Logged in
+      docs/research/NEGATIVE_SPACE_MAP.md; not auto-pursued (DEC-2026-06-04-006/018).
+  biography_file: research/biographies/active/BTC_LEAD_LAG.yaml   # auto-written on screen

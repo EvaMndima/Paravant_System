@@ -63,7 +63,7 @@ from research.validation.effective_k import (
     regime_conditional_k,
     variance_sr_point_estimate,
 )
-from research.data import funding_rates
+from research.data import btc_reference, coinbase_prices, etf_flows, funding_rates, xs_rank
 from research.generators import RESEARCH_SPECS, register_research_generators
 from scripts.backtest_rolling import STRATEGY_PARAMS, STRATEGY_SYMBOLS
 from src.brokers.binance.client import BinanceClient
@@ -423,6 +423,38 @@ async def regenerate_pooled_trades(
     if _spec is not None and _spec.needs_funding:
         for symbol in symbols:
             funding_rates.load_or_fetch(symbol, hourly_start, end_date)
+    # Same pattern for US-spot-ETF net flows (H-2026-06-007): parent pre-fetches
+    # the per-symbol Farside history (full backfill in one request) so workers
+    # only load_cached. Truststore + browser-UA are handled inside the channel's
+    # caller context (the parent injects the OS trust store in main()).
+    if _spec is not None and _spec.needs_etf_flow:
+        for symbol in symbols:
+            etf_flows.load_or_fetch(symbol, end_date)
+    # Coinbase prices (H-2026-06-010): parent pre-fetches per-symbol Coinbase 1H
+    # for the cross-venue premium; workers only load_cached.
+    if _spec is not None and _spec.needs_coinbase:
+        for symbol in symbols:
+            coinbase_prices.load_or_fetch(symbol, hourly_start, end_date)
+    # Cross-symbol rank panel (H-2026-06-008): the parent precomputes the
+    # relative-strength rank from ALL symbols' series (workers are per-symbol and
+    # isolated) and caches it per symbol; workers/generator only load_cached.
+    if _spec is not None and _spec.needs_panel:
+        xs_rank.compute_and_cache(
+            series_list,
+            rs_lookback_bars=int(_spec.params["rs_lookback_bars"]),
+            top_k_fraction=float(_spec.params["top_k_fraction"]),
+        )
+    # BTC reference thrust (H-2026-06-011): the alt workers need BTC's lead. The
+    # parent fetches BTC 1H (the strategy universe is alts -- BTC is not in it)
+    # and caches the causal thrust series; workers/generator only load_cached.
+    if _spec is not None and _spec.needs_btc_ref:
+        btc_1h = await _fetch_with_retry(
+            fetcher, symbol="BTCUSDT", timeframe="1h",
+            start_date=hourly_start, end_date=end_date,
+        )
+        btc_reference.compute_and_cache(
+            btc_1h, lookback_bars=int(_spec.params["btc_thrust_lookback_bars"]),
+        )
 
     # Backtest in PARALLEL across CPU cores when workers>1 (per-symbol backtests
     # are independent and CPU-bound -- the 99% cost); else sequential. This is

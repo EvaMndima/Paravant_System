@@ -1,0 +1,76 @@
+strategy_id: FUNDING_CONTRARIAN
+status: ACTIVE_RESEARCH
+symbols:
+- BTCUSDT
+- ETHUSDT
+- BNBUSDT
+- SOLUSDT
+current_classification: null
+classification_history: []
+statistical_validation_history: []
+regime_coverage:
+- run_id: regime_dsr_run_20260609
+  run_date: '2026-06-09'
+  cost_model_version: v0_unverified
+  data_source: regenerated_backtest
+  is_screen_only: true
+  pooled_tier: INSUFFICIENT_DATA
+  pooled_dsr_p_value: 0.610160573885745
+  per_regime:
+  - regime: bull
+    bucket_kind: coarse
+    n_trades: 1
+    pf_adjusted: 999.99
+    sharpe_adjusted: 0.0
+    base_dsr_p_value: 1.0
+    conservative_dsr_p_value: 1.0
+    tier: INSUFFICIENT_DATA
+    is_descriptive: true
+    effective_k: 2300
+    notes: 'DESCRIPTIVE: N=1 < 20 (or insufficient) -- not gating (guard #4)'
+  - regime: chop
+    bucket_kind: coarse
+    n_trades: 1
+    pf_adjusted: 0.0
+    sharpe_adjusted: 0.0
+    base_dsr_p_value: 1.0
+    conservative_dsr_p_value: 1.0
+    tier: INSUFFICIENT_DATA
+    is_descriptive: true
+    effective_k: 2300
+    notes: 'DESCRIPTIVE: N=1 < 20 (or insufficient) -- not gating (guard #4)'
+  - regime: trending_bull
+    bucket_kind: sub_regime
+    n_trades: 1
+    pf_adjusted: 999.99
+    sharpe_adjusted: 0.0
+    base_dsr_p_value: 1.0
+    conservative_dsr_p_value: 1.0
+    tier: INSUFFICIENT_DATA
+    is_descriptive: true
+    effective_k: 2300
+    notes: DESCRIPTIVE fine SubRegime -- diagnostic only, never gating
+  - regime: high_vol
+    bucket_kind: sub_regime
+    n_trades: 1
+    pf_adjusted: 0.0
+    sharpe_adjusted: 0.0
+    base_dsr_p_value: 1.0
+    conservative_dsr_p_value: 1.0
+    tier: INSUFFICIENT_DATA
+    is_descriptive: true
+    effective_k: 2300
+    notes: DESCRIPTIVE fine SubRegime -- diagnostic only, never gating
+  notes: Regime-conditional backtest DSR SCREEN (DEC-2026-06-04-014). NOT a deployment
+    gate; paper/live validation still required. K x2 regime buckets.
+decision_log: []
+hypothesis_history: []
+parameter_history: []
+optimization_history: []
+backtest_history: []
+paper_trading_history: []
+live_deployment_history: []
+decay_events: []
+reoptimization_history: []
+correlation_with_portfolio: {}
+post_mortem: null

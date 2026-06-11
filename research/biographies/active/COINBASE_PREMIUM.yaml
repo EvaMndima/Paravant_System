@@ -1,0 +1,128 @@
+strategy_id: COINBASE_PREMIUM
+status: ACTIVE_RESEARCH
+symbols:
+- BTCUSDT
+current_classification: null
+classification_history: []
+statistical_validation_history: []
+regime_coverage:
+- run_id: regime_dsr_run_20260610
+  run_date: '2026-06-10'
+  cost_model_version: v0_unverified
+  data_source: regenerated_backtest
+  is_screen_only: true
+  pooled_tier: TIER_D_REJECT
+  pooled_dsr_p_value: 1.0
+  per_regime:
+  - regime: bull
+    bucket_kind: coarse
+    n_trades: 143
+    pf_adjusted: 0.3601467805134088
+    sharpe_adjusted: -0.4114757536874186
+    base_dsr_p_value: 0.9999999997179867
+    conservative_dsr_p_value: 0.9999999999999984
+    tier: TIER_D_REJECT
+    is_descriptive: false
+    effective_k: 3450
+    notes: screen-only; not a deployment gate
+  - regime: bear
+    bucket_kind: coarse
+    n_trades: 84
+    pf_adjusted: 0.37300375430568283
+    sharpe_adjusted: -0.4045841745656049
+    base_dsr_p_value: 0.9999992755974128
+    conservative_dsr_p_value: 0.9999999994329123
+    tier: TIER_D_REJECT
+    is_descriptive: false
+    effective_k: 3450
+    notes: screen-only; not a deployment gate
+  - regime: chop
+    bucket_kind: coarse
+    n_trades: 34
+    pf_adjusted: 0.8994294094797475
+    sharpe_adjusted: -0.03963739579285212
+    base_dsr_p_value: 0.9763465398522608
+    conservative_dsr_p_value: 0.9989016220567422
+    tier: TIER_D_REJECT
+    is_descriptive: false
+    effective_k: 3450
+    notes: screen-only; not a deployment gate
+  - regime: trending_bull
+    bucket_kind: sub_regime
+    n_trades: 75
+    pf_adjusted: 0.34997008931244233
+    sharpe_adjusted: -0.4359806586302356
+    base_dsr_p_value: 0.9999997413226478
+    conservative_dsr_p_value: 0.9999999999737834
+    tier: TIER_D_REJECT
+    is_descriptive: true
+    effective_k: 3450
+    notes: DESCRIPTIVE fine SubRegime -- diagnostic only, never gating
+  - regime: high_vol
+    bucket_kind: sub_regime
+    n_trades: 23
+    pf_adjusted: 1.061371644801596
+    sharpe_adjusted: 0.022762238261562574
+    base_dsr_p_value: 0.9190913067196943
+    conservative_dsr_p_value: 0.9894147260444176
+    tier: TIER_D_REJECT
+    is_descriptive: true
+    effective_k: 3450
+    notes: DESCRIPTIVE fine SubRegime -- diagnostic only, never gating
+  - regime: choppy_bull
+    bucket_kind: sub_regime
+    n_trades: 68
+    pf_adjusted: 0.3703854066517263
+    sharpe_adjusted: -0.38897357450824277
+    base_dsr_p_value: 0.9999705461831754
+    conservative_dsr_p_value: 0.9999997966137517
+    tier: TIER_D_REJECT
+    is_descriptive: true
+    effective_k: 3450
+    notes: DESCRIPTIVE fine SubRegime -- diagnostic only, never gating
+  - regime: choppy_bear
+    bucket_kind: sub_regime
+    n_trades: 29
+    pf_adjusted: 0.5263797922723256
+    sharpe_adjusted: -0.2426996253613699
+    base_dsr_p_value: 0.9905580115118141
+    conservative_dsr_p_value: 0.9991806917316266
+    tier: TIER_D_REJECT
+    is_descriptive: true
+    effective_k: 3450
+    notes: DESCRIPTIVE fine SubRegime -- diagnostic only, never gating
+  - regime: ranging
+    bucket_kind: sub_regime
+    n_trades: 11
+    pf_adjusted: 0.44711935058252245
+    sharpe_adjusted: -0.31124917345997716
+    base_dsr_p_value: 0.9386143895103376
+    conservative_dsr_p_value: 0.9808508639367081
+    tier: TIER_D_REJECT
+    is_descriptive: true
+    effective_k: 3450
+    notes: DESCRIPTIVE fine SubRegime -- diagnostic only, never gating
+  - regime: trending_bear
+    bucket_kind: sub_regime
+    n_trades: 55
+    pf_adjusted: 0.31317112603551117
+    sharpe_adjusted: -0.4934365022989937
+    base_dsr_p_value: 0.9999900160171049
+    conservative_dsr_p_value: 0.9999999336578318
+    tier: TIER_D_REJECT
+    is_descriptive: true
+    effective_k: 3450
+    notes: DESCRIPTIVE fine SubRegime -- diagnostic only, never gating
+  notes: Regime-conditional backtest DSR SCREEN (DEC-2026-06-04-014). NOT a deployment
+    gate; paper/live validation still required. K x3 regime buckets.
+decision_log: []
+hypothesis_history: []
+parameter_history: []
+optimization_history: []
+backtest_history: []
+paper_trading_history: []
+live_deployment_history: []
+decay_events: []
+reoptimization_history: []
+correlation_with_portfolio: {}
+post_mortem: null
