@@ -86,3 +86,5 @@ Thumbs.db
 # Research layer transient artifacts (regenerable; not committed)
 research/.cache/
 docs/research/regime_dsr/_*.log
+# Forward-collected liquidation events (accrues over time; DEC-2026-06-04-021)
+research/data/liquidations/

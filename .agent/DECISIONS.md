@@ -2921,11 +2921,39 @@ parameters:
 
 ---
 
+### DEC-2026-06-04-021: Forward Liquidation Data Channel + Collector (Binance forceOrder, JSONL, causal accessor)
+
+- **Decision:** Build a forward-collecting liquidation data channel for the research layer. A long-running collector subscribes to the FREE, public, no-auth Binance USD-M futures liquidation websocket (`!forceOrder@arr`) and appends every event to a namespaced, append-only JSONL store under `research/data/liquidations/`. A causal as-of accessor `liquidations_in_window(t0, t1, now=...)` exposes the history leak-free, mirroring `research/data/funding_rates.py:FundingSeries.rate_at`. The collector is a DATA process ONLY: it places no orders, imports no execution code, and never touches `LIVE_TRADING_ENABLED` (stays OFF). Deploy target is Railway, GATED on the Railway region geo-block fix (DEC-2026-06-04-003); the code is host-agnostic.
+- **Context:** H-2026-06-004 (Binance/Coinglass liquidation reversion) and H-2026-06-009 (Hyperliquid liquidation reversion) both PASSED the Stage-1 quality gate (17/21 and 18/21) but were blocked ONLY on liquidation-history accessibility, not reasoning. The forward-loop meta-finding (`docs/research/NEGATIVE_SPACE_MAP.md`): every PUBLIC price/flow signal on liquid majors at 1H is arbitraged (10+ trials, 0 promotions, all DSR-rejected); the one genuinely non-public lens (liquidations) hit a DATA wall. H-009's `unblock_when` explicitly lists "forward-collect via the WebSocket from now." Per DEC-2026-06-04-018 (build a tool only when a tested, gate-passing hypothesis demonstrably needs it), a gate-passing hypothesis blocked SOLELY by data justifies building the data channel.
+- **Rationale:**
+  - **Free + public + largest venue:** Binance perps are the largest crypto liquidation venue; the `forceOrder` stream is free and no-auth, the best free liquidation signal and the one reachable path (Coinglass is paid/DEC-005; Hyperliquid deep history is S3 requester-pays needing absent AWS creds).
+  - **Causal by construction:** a forward collector only records past events as they arrive, so lookahead is structurally impossible. The accessor still enforces `trade_time <= now` (defensive symmetry with `rate_at`). The causal timestamp is the forced-trade time (`o.T`), not the push time.
+  - **JSONL over parquet:** stdlib-only (no new dependency; pyarrow is absent from the venv), append/stream-friendly, human-inspectable, consistent with the funding JSON cache. One immutable fragment per flush satisfies the durable requirement (a crash loses <= one flush interval).
+  - **Namespaced + read-only discipline:** writes ONLY to `research/data/liquidations/` (git-ignored); touches NO production / Neon table.
+  - **Side-semantics footgun handled:** stores the raw `order_side` AND a derived `liquidated_side` (a `SELL` order = a LONG was force-sold = the H-004 "long flush"), so the eventual generator cannot invert direction.
+  - **Honest limit (documented, not hidden):** the public `forceOrder` stream is throttled to <= 1 order per symbol per ~1000ms (a representative snapshot, not full tick volume), so per-second notional in an intense same-symbol cascade is UNDERCOUNTED. The windowed/percentile cascade trigger (the H-006 lesson) tolerates a proportional undercount; full-volume history still needs a paid source (DEC-005). `notional` is NOT exact market-wide liquidation volume - stated in the channel docstring and the ledger blockers.
+  - **Reliability:** exponential reconnect backoff that resets only after a healthy session (monotonic clock, so a connect-then-drop flap keeps escalating), bounded in-memory dedup, flush on size / silence / disconnect / shutdown.
+- **Alternatives Considered:**
+  - **Coinglass paid liquidation history:** REJECTED for now - gated by DEC-2026-06-04-005 (>= $25k capital).
+  - **Hyperliquid S3 archive:** REJECTED here - requester-pays, needs AWS creds this env lacks (the H-009 blocker).
+  - **Parquet store:** REJECTED - adds a heavy dependency absent from the venv; JSONL meets the durable-fragment need with stdlib only.
+  - **`research_liquidations` Neon table:** REJECTED - the collector host may lack the Neon connection, and a DB sink risks coupling to production data; local JSONL is fully isolated.
+  - **Price-only liquidation proxy:** REJECTED - removing the exogenous signal leaves plain price action = the already-DEAD H-2026-06-002 breakout (per the H-004/H-009 blocker notes).
+- **Status:** ACTIVE
+- **Date Decided:** 2026-06-11
+- **Implemented By:** `research/data/liquidations.py` (LiquidationEvent + `parse_force_order` + LiquidationStore + causal `liquidations_in_window`), `research/data/liquidation_collector.py` (async WS collector), `scripts/run_liquidation_collector.py` (runner), `tests/research/test_liquidations.py` (31 tests, 96% coverage on both modules), `.gitignore` (store ignored).
+- **Affected Files:** the four above + `.gitignore`. `src/` is UNTOUCHED (one-way dependency, PRD 5.2; verified `src/` imports no `research/`).
+- **Operational note (operator decision 2026-06-11):** The collector must run on an always-on, NON-geo-blocked host (Binance market-data WS is rejected from geo-blocked regions; DEC-2026-06-04-003 root cause). Operator chose Railway, GATED on the Railway region geo-block being fixed. Until then the collector is built-and-ready but NOT accruing; the data clock starts when the region is non-blocked OR the operator runs it on another permitted always-on host. This process never enables live trading.
+- **Expectations:** Liquidation cascades large enough to trade are RARE; reaching testable N (>= 30 in HIGH_VOL) will take WEEKS-to-MONTHS of accrual. The liquidation generator (H-004 / H-009) re-enters the lifecycle at the data/implement step and is screened via `regime_dsr` once N is sufficient (Stage-1 already passed). The LONG flush (buy forced-selling) is spot-deployable; the SHORT squeeze-fade stays research-only (DEC-2026-05-28-001).
+- **References:** DEC-2026-06-04-018 (data-channel-on-pass discipline this invokes), DEC-2026-06-04-005 (paid alt-data deferral this routes around with a free source), DEC-2026-06-04-003 (geo-block root cause / deploy gate), DEC-2026-05-28-001 (spot-only live lock - short fade research-only), DEC-2026-06-04-019 (research generator runtime hook the eventual generator will use). Ledger `H-2026-06-004` / `H-2026-06-009` (the unblocked hypotheses); `docs/research/NEGATIVE_SPACE_MAP.md` (meta-finding). PRD Section 5.2 (one-way dependency), Section 11.1 (free Binance data). Session prompt 2026-06-11 (PROMPT_LIQUIDATION_COLLECTOR).
+
+---
+
 **End of Decisions Log**
 
-**Total Decisions:** 96 active, 0 superseded, 5 locked (1 amended); DEC-2026-06-04-013 amended
-**Last Updated:** 2026-06-08
-**Next Decision ID:** DEC-2026-06-04-021
+**Total Decisions:** 97 active, 0 superseded, 5 locked (1 amended); DEC-2026-06-04-013 amended
+**Last Updated:** 2026-06-11
+**Next Decision ID:** DEC-2026-06-04-022
 
 ## Phase 5 Decisions (Backtesting & Simulation)
 

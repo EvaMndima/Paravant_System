@@ -104,6 +104,20 @@ different signal and remains open for >=$25k capital.
 | H-2026-06-004 liquidation-cascade reversion (buy the long-liquidation flush, HIGH_VOL) | 2026-06-09 | Stage-1 quality gate PASSED (17/21); build BLOCKED at the data channel. No FREE causal historical liquidation source exists (Binance `allForceOrders` deprecated; `forceOrders` 90-day/user-private; websocket real-time-throttled). Coinglass liquidation-history is adequate but PAID ($29/mo, no free tier) -> deferred per DEC-2026-06-04-005 (paid alt-data gated to >=$25k capital). Operator deferred 2026-06-09. Pre-registration frozen in `ledger.yaml`; unblocks at >=$25k capital or an explicit key approval. NOT a price-proxy candidate (removing the exogenous liquidation signal = the already-DEAD H-002 price action). | DEFERRED (paywall) |
 | H-2026-06-009 Hyperliquid liquidation-cascade reversion (long the flush, HIGH_VOL) | 2026-06-10 | Stage-1 PASS (18/21, the strongest of its batch); build BLOCKED on data ACCESSIBILITY (verified before building). HL `/info` has NO market-wide liquidation type (probes -> 422); `candleSnapshot` caps at 5000 bars (~208d); deep history is the Hydromancer S3 requester-pays archive, needing AWS creds this env lacks. FREE-of-fee but inaccessible here. Unblocks via AWS creds for the S3 archive, OR forward-collect via WS, OR >=$25k for a paid source. NOT a price-proxy candidate. | DEFERRED (accessibility) |
 
+**Forward liquidation collector STARTED (DEC-2026-06-04-021, 2026-06-11).** Acting
+on the meta-finding ("edge lives where the data is hardest to get"), the one
+reachable free path is now being collected FORWARD: a Binance `!forceOrder@arr`
+liquidation collector (`research/data/liquidations.py` + `liquidation_collector.py`
++ causal `liquidations_in_window`) appends every delivered event to an append-only
+JSONL store. Two honest limits: it accrues FORWARD only (no backfill -> the H-004 /
+H-009 liquidation screen opens in WEEKS-MONTHS when N>=30 HIGH_VOL accrues, NOT
+today), and the public stream is throttled to <=1 order/symbol/~1000ms (a snapshot,
+not full tick volume; per-second cascade notional is undercounted). Deploy is gated
+on the Railway region geo-block fix (DEC-2026-06-04-003); the data clock starts when
+it runs on a permitted always-on host. This is the FREE Binance path to the
+over-leveraged-perp counterparty that H-004 (Coinglass, paid) and H-009 (HL S3,
+requester-pays) could not reach.
+
 ### Non-public / less-arbitraged batch RESOLVED (2026-06-10)
 
 Sourced against the crowding meta-finding; built + screened where data allowed.

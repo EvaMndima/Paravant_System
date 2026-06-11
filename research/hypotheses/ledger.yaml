@@ -475,7 +475,21 @@
       Coinglass liquidation channel mirroring research/data/funding_rates.py
       (fetch + cache + causal liquidations_at(ts) accessor, leakage-guarded),
       register via RESEARCH_SPECS, and screen against THIS frozen pre-registration.
-  eval_path: "BLOCKED -- pending free causal liquidation data (see blocker)"
+    forward_collection: >-
+      FREE PATH OPENED (DEC-2026-06-04-021, 2026-06-11): a forward Binance
+      liquidation collector now exists (research/data/liquidations.py +
+      liquidation_collector.py + the causal liquidations_in_window accessor),
+      addressing the "no FREE causal source" blocker with two HONEST limits:
+      (1) it accrues FORWARD only (no backfill), so the screen opens when N>=30 in
+      HIGH_VOL accrues (weeks-months), NOT today; (2) the public forceOrder stream
+      is throttled to <=1 order per symbol per ~1000ms (a snapshot, not full tick
+      volume), so per-second notional in an intense same-symbol cascade is
+      UNDERCOUNTED -- the windowed/percentile cascade trigger (H-006 lesson)
+      tolerates a proportional undercount, but full-volume history still needs
+      Coinglass (>=$25k, DEC-005). Deploy gated on the Railway region fix
+      (DEC-2026-06-04-003). When N is sufficient: implement the generator and
+      screen via regime_dsr against THIS frozen pre-registration.
+  eval_path: "BLOCKED on N -- forward-collecting FREE Binance liquidation data (DEC-021); screen opens when N>=30 HIGH_VOL accrues"
   similar_retired_strategies:
     - strategy_id: RSI_BB
       relevant_lessons: ["PATTERN_WITHOUT_EDGE -> differentiated by exogenous
@@ -1179,6 +1193,14 @@
       the WebSocket from now (builds history over time, not screenable today); OR
       (c) capital >= $25k unlocks a paid market-wide liq source (Coinglass,
       DEC-2026-06-04-005) -- which also unblocks H-2026-06-004.
+    forward_collection: >-
+      Unblock option (b) STARTED on the BINANCE venue (DEC-2026-06-04-021,
+      2026-06-11): the forward liquidation collector implements "forward-collect
+      via the WebSocket from now" for Binance perps (the largest venue), NOT
+      Hyperliquid. It accrues forward (no backfill, not screenable today). The
+      HL-specific on-chain lens (this hypothesis's venue) can be added later as a
+      second collector source if the cross-venue thesis warrants it. Same throttle
+      caveat as H-004 (snapshot, not full tick volume). Screen opens when N accrues.
   results: null   # SCREEN blocked (data-accessibility); no DSR trial spent
   biography_file: null   # no screen run
 
