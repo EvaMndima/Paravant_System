@@ -1,0 +1,136 @@
+{
+  "run_date": "2026-06-05",
+  "cost_model_version": "v0_unverified",
+  "strategies": {
+    "MACD_PB": {
+      "tier": "TIER_D_REJECT",
+      "dsr_p_value": 0.9987544784581593,
+      "dsr_p_value_base": 0.9956266687728742,
+      "raw_pf": 0.0,
+      "adjusted_pf": 0.0,
+      "n": 2,
+      "verdict_is_fragile": false,
+      "passes_hard_floor": false,
+      "recommended_action": "retire"
+    },
+    "BTP": {
+      "tier": "TIER_D_REJECT",
+      "dsr_p_value": 1.0,
+      "dsr_p_value_base": 1.0,
+      "raw_pf": 0.0,
+      "adjusted_pf": 0.0,
+      "n": 0,
+      "verdict_is_fragile": false,
+      "passes_hard_floor": false,
+      "recommended_action": "retire"
+    },
+    "VBB": {
+      "tier": "TIER_D_REJECT",
+      "dsr_p_value": 1.0,
+      "dsr_p_value_base": 1.0,
+      "raw_pf": 0.0,
+      "adjusted_pf": 0.0,
+      "n": 0,
+      "verdict_is_fragile": false,
+      "passes_hard_floor": false,
+      "recommended_action": "retire"
+    },
+    "SRC": {
+      "tier": "TIER_D_REJECT",
+      "dsr_p_value": 1.0,
+      "dsr_p_value_base": 1.0,
+      "raw_pf": 0.0,
+      "adjusted_pf": 0.0,
+      "n": 0,
+      "verdict_is_fragile": false,
+      "passes_hard_floor": false,
+      "recommended_action": "retire"
+    },
+    "ICVP": {
+      "tier": "TIER_D_REJECT",
+      "dsr_p_value": 0.9999999999940647,
+      "dsr_p_value_base": 0.9999974117450353,
+      "raw_pf": 0.5447653011303519,
+      "adjusted_pf": 0.3727042918980434,
+      "n": 4,
+      "verdict_is_fragile": false,
+      "passes_hard_floor": false,
+      "recommended_action": "retire"
+    },
+    "BTF": {
+      "tier": "TIER_D_REJECT",
+      "dsr_p_value": 1.0,
+      "dsr_p_value_base": 1.0,
+      "raw_pf": 0.7526143220118725,
+      "adjusted_pf": 0.5437167094152746,
+      "n": 25,
+      "verdict_is_fragile": false,
+      "passes_hard_floor": false,
+      "recommended_action": "retire"
+    },
+    "CMF": {
+      "tier": "TIER_D_REJECT",
+      "dsr_p_value": 0.9999999999431999,
+      "dsr_p_value_base": 0.9999908572605456,
+      "raw_pf": 0.8361660147798041,
+      "adjusted_pf": 0.6680461733483055,
+      "n": 4,
+      "verdict_is_fragile": false,
+      "passes_hard_floor": false,
+      "recommended_action": "retire"
+    },
+    "RSI_BB": {
+      "tier": "TIER_D_REJECT",
+      "dsr_p_value": 0.9999996757924914,
+      "dsr_p_value_base": 0.9983115955608803,
+      "raw_pf": 13.697991435442153,
+      "adjusted_pf": 2.9448436917644747,
+      "n": 3,
+      "verdict_is_fragile": false,
+      "passes_hard_floor": false,
+      "recommended_action": "retire"
+    },
+    "HATP": {
+      "tier": "TIER_D_REJECT",
+      "dsr_p_value": 1.0,
+      "dsr_p_value_base": 1.0,
+      "raw_pf": 0.0,
+      "adjusted_pf": 0.0,
+      "n": 0,
+      "verdict_is_fragile": false,
+      "passes_hard_floor": false,
+      "recommended_action": "retire"
+    },
+    "VRB": {
+      "tier": "TIER_D_REJECT",
+      "dsr_p_value": 1.0,
+      "dsr_p_value_base": 1.0,
+      "raw_pf": 0.0,
+      "adjusted_pf": 0.0,
+      "n": 0,
+      "verdict_is_fragile": false,
+      "passes_hard_floor": false,
+      "recommended_action": "retire"
+    },
+    "VPT": {
+      "tier": "TIER_D_REJECT",
+      "dsr_p_value": 1.0,
+      "dsr_p_value_base": 1.0,
+      "raw_pf": 0.0,
+      "adjusted_pf": 0.0,
+      "n": 0,
+      "verdict_is_fragile": false,
+      "passes_hard_floor": false,
+      "recommended_action": "retire"
+    }
+  },
+  "portfolio_summary": {
+    "keep_surviving_dsr": 0,
+    "keep_tier_a": 0,
+    "keep_tier_b": 0,
+    "keep_tier_c": 0,
+    "keep_tier_d": 5,
+    "retired_validated_by_dsr": 6,
+    "retired_surprises": 0
+  }
+}
