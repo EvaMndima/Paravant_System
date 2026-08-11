@@ -96,3 +96,9 @@ research/data/liquidations/
 # which made a fresh clone produce two empty directories.
 .claude/skills/
 .agent/skills/
+
+# Design source PDFs (21.8 MB). Kept on disk as design references but not
+# tracked -- they are exported artifacts, not source, and the rendered
+# screenshots under docs/design/screenshots/ serve the same purpose at
+# 1/6th the size.
+docs/design/pdf/
