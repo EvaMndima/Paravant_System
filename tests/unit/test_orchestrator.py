@@ -35,6 +35,8 @@ from src.core.orchestrator import (
     StartupChecklist,
     SystemStatus,
 )
+from src.core.strategy.engine import StrategyEngine
+from src.data.models.strategy import Strategy, StrategyStatus, StrategyType
 
 
 # ---------------------------------------------------------------------------
@@ -251,14 +253,23 @@ class TestStartupChecklist:
         system_state.trading_enabled = True
         system_state.kill_switch_active = False
         mocks["data_store"].get_system_state.return_value = system_state
+
+        # Use the real StrategyEngine so the strategy check is exercised
+        # against the real TemplateManager. The previous version of this test
+        # mocked the engine and described the strategy with the field names the
+        # buggy check expected (template=, symbol=, account_id=, params=) --
+        # none of which exist on the Strategy model, and "simple_ma" is not a
+        # real template id. It therefore asserted that a check which could
+        # never pass in production did pass.
+        engine = StrategyEngine(store=mocks["data_store"])
+        mocks["strategy_engine"] = engine
+        template = engine.template_manager.get_template("bb_squeeze_breakout")
         mocks["data_store"].get_active_strategies.return_value = [
             MagicMock(
                 id="STR_001",
                 name="Test",
-                template="simple_ma",
-                symbol="BTCUSDT",
-                account_id="ACC_001",
-                params={},
+                template_id="bb_squeeze_breakout",
+                parameters=template.get_default_parameters(),
             )
         ]
 
@@ -343,6 +354,137 @@ class TestStartupChecklist:
 
         assert check.passed is False
         assert "No active strategies" in check.message
+
+
+# ---------------------------------------------------------------------------
+# Startup Strategy Check — real StrategyEngine
+# ---------------------------------------------------------------------------
+
+
+class TestCheckStrategiesWithRealEngine:
+    """Exercise ``_check_strategies`` against a real StrategyEngine.
+
+    Every other test in this module passes ``MagicMock()`` as the strategy
+    engine, which accepts any call with any arguments. That is why the
+    original defect survived: ``_check_strategies`` called
+    ``create_strategy(name=..., template=..., symbol=..., account_id=...,
+    params=..., status=...)`` when the real signature is
+    ``create_strategy(name, template_id, params=None, symbols=None,
+    description="")``, and the Strategy model has no ``template``,
+    ``symbol``, ``params`` or ``account_id`` attribute at all. Against a mock
+    that call is silently fine; against the real engine it could never pass.
+
+    These tests use the real ``StrategyEngine`` and the real
+    ``TemplateManager`` loaded from ``config/templates/``. The DataStore is
+    still a mock -- it is not what is under test here, and mocking it is what
+    lets ``test_check_does_not_persist_anything`` assert on writes.
+    """
+
+    TEMPLATE_ID = "bb_squeeze_breakout"
+
+    @pytest.fixture
+    def store(self):
+        """Mock DataStore. Writes through it are asserted against."""
+        return MagicMock()
+
+    @pytest.fixture
+    def engine(self, store):
+        """A real StrategyEngine with a real TemplateManager."""
+        return StrategyEngine(store=store)
+
+    @pytest.fixture
+    def mocks(self, engine, store):
+        """Checklist dependencies with a REAL strategy engine."""
+        return {
+            "data_store": store,
+            "market_data": MagicMock(),
+            "strategy_engine": engine,
+            "position_tracker": MagicMock(),
+            "config": {"exchange": "binance", "database_url": "sqlite:///test.db"},
+        }
+
+    def _make_strategy(self, engine, template_id=None, params=None):
+        """Build a real (unsaved) Strategy from a real template."""
+        template_id = template_id or self.TEMPLATE_ID
+        template = engine.template_manager.get_template(self.TEMPLATE_ID)
+        return Strategy(
+            name="Squeeze Test",
+            description=template.description,
+            type=StrategyType(template.type),
+            template_id=template_id,
+            template_version=template.version,
+            parameters=(
+                params if params is not None else template.get_default_parameters()
+            ),
+            symbols=list(template.symbols),
+            status=StrategyStatus.LIVE,
+            status_reason="test fixture",
+            lifecycle=[],
+        )
+
+    def test_valid_strategy_passes(self, mocks, engine, store):
+        """A strategy whose params match its template validates cleanly.
+
+        This is the test that would have failed against the old
+        implementation: the real engine raises on the bogus kwargs.
+        """
+        store.get_active_strategies.return_value = [self._make_strategy(engine)]
+
+        check = StartupChecklist(**mocks)._check_strategies()
+
+        assert check.passed is True, check.message
+        assert check.details["strategy_count"] == 1
+
+    def test_check_does_not_persist_anything(self, mocks, engine, store):
+        """The check must be read-only.
+
+        ``StrategyEngine.create_strategy`` persists via
+        ``DataStore.save_strategy`` and hardcodes ``StrategyStatus.DRAFT``.
+        Using it here -- even with corrected keyword arguments -- would write
+        one duplicate DRAFT row per active strategy on every startup. This
+        asserts the check never writes.
+        """
+        store.get_active_strategies.return_value = [self._make_strategy(engine)]
+
+        check = StartupChecklist(**mocks)._check_strategies()
+
+        assert check.passed is True, check.message
+        store.save_strategy.assert_not_called()
+
+    def test_unknown_template_fails_with_named_template(self, mocks, engine, store):
+        """A strategy pointing at a deleted template fails, and says which."""
+        store.get_active_strategies.return_value = [
+            self._make_strategy(engine, template_id="template_that_does_not_exist")
+        ]
+
+        check = StartupChecklist(**mocks)._check_strategies()
+
+        assert check.passed is False
+        assert "unknown template" in check.message
+        assert check.details["template_id"] == "template_that_does_not_exist"
+
+    def test_parameters_no_longer_valid_fails(self, mocks, engine, store):
+        """Stored params that drifted out of template bounds are caught."""
+        store.get_active_strategies.return_value = [
+            self._make_strategy(engine, params={"bb_period": -5})
+        ]
+
+        check = StartupChecklist(**mocks)._check_strategies()
+
+        assert check.passed is False
+        assert "invalid parameters" in check.message
+        assert any("bb_period" in e for e in check.details["errors"])
+
+    def test_programming_errors_propagate(self, mocks, store):
+        """A TypeError inside the check must surface, not become 'check failed'.
+
+        Reporting programming errors as an ordinary failed check is what hid
+        the original defect for months.
+        """
+        store.get_active_strategies.side_effect = TypeError("bad call")
+
+        with pytest.raises(TypeError, match="bad call"):
+            StartupChecklist(**mocks)._check_strategies()
 
 
 # ---------------------------------------------------------------------------

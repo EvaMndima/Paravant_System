@@ -445,44 +445,44 @@ class StartupChecklist:
             )
 
     def _check_strategies(self) -> CheckResult:
-        """Check all strategies can be loaded and have valid parameters."""
+        """Check all active strategies load and have valid parameters.
+
+        Validates each persisted strategy against its template: the template
+        must still exist, and the strategy's stored parameters must still
+        satisfy that template's specification. Templates can change after a
+        strategy row is written, so this catches drift at startup rather than
+        at first signal.
+
+        This deliberately does NOT call ``StrategyEngine.create_strategy``.
+        That method builds a new Strategy and persists it through
+        ``DataStore.save_strategy``, and it hardcodes ``StrategyStatus.DRAFT``
+        -- it has no ``status`` parameter to opt out. Calling it from a startup
+        check would write one duplicate DRAFT row per active strategy on every
+        boot. Validation here is read-only.
+
+        Programming errors (``TypeError``, ``AttributeError``) propagate rather
+        than being reported as a failed check. The previous implementation
+        called ``create_strategy`` with four keyword arguments that do not
+        exist on its signature (``template``, ``symbol``, ``account_id``,
+        ``status``) and read three attributes the Strategy model does not have.
+        The resulting error was caught by a bare ``except Exception`` and
+        reported as "strategy validation failed", so the check could never pass
+        in any environment with active strategies and nothing said why.
+        Swallowing programming errors is what hid it.
+
+        Returns:
+            CheckResult with ``passed=False`` when there are no active
+            strategies, a referenced template is missing, or stored parameters
+            no longer validate against their template.
+
+        Raises:
+            TypeError: On a programming error inside this check.
+            AttributeError: On a programming error inside this check.
+        """
         try:
             strategies = self._data_store.get_active_strategies()
-
-            if not strategies:
-                return CheckResult(
-                    check_name="strategies",
-                    passed=False,
-                    message="No active strategies found",
-                    details={"strategy_count": 0},
-                )
-
-            # Validate each strategy can be created
-            for strategy in strategies:
-                try:
-                    # Test strategy creation (doesn't persist)
-                    self._strategy_engine.create_strategy(
-                        name=strategy.name,
-                        template=strategy.template,
-                        symbol=strategy.symbol,
-                        account_id=strategy.account_id,
-                        params=strategy.params,
-                        status="testing",  # Don't persist
-                    )
-                except Exception as e:
-                    return CheckResult(
-                        check_name="strategies",
-                        passed=False,
-                        message=f"Strategy {strategy.name} validation failed: {str(e)}",
-                        details={"strategy_id": strategy.id, "error": str(e)},
-                    )
-
-            return CheckResult(
-                check_name="strategies",
-                passed=True,
-                message=f"{len(strategies)} strategies validated successfully",
-                details={"strategy_count": len(strategies)},
-            )
+        except (TypeError, AttributeError):
+            raise
         except Exception as e:
             return CheckResult(
                 check_name="strategies",
@@ -490,6 +490,59 @@ class StartupChecklist:
                 message=f"Strategy check failed: {str(e)}",
                 details={"error": str(e)},
             )
+
+        if not strategies:
+            return CheckResult(
+                check_name="strategies",
+                passed=False,
+                message="No active strategies found",
+                details={"strategy_count": 0},
+            )
+
+        template_manager = self._strategy_engine.template_manager
+
+        for strategy in strategies:
+            # get_template raises ValueError for an unknown id (templates.py).
+            try:
+                template_manager.get_template(strategy.template_id)
+            except ValueError:
+                return CheckResult(
+                    check_name="strategies",
+                    passed=False,
+                    message=(
+                        f"Strategy {strategy.name} references unknown template "
+                        f"'{strategy.template_id}'"
+                    ),
+                    details={
+                        "strategy_id": strategy.id,
+                        "template_id": strategy.template_id,
+                    },
+                )
+
+            errors = template_manager.validate_parameters(
+                strategy.template_id, strategy.parameters
+            )
+            if errors:
+                return CheckResult(
+                    check_name="strategies",
+                    passed=False,
+                    message=(
+                        f"Strategy {strategy.name} has invalid parameters: "
+                        f"{'; '.join(errors)}"
+                    ),
+                    details={
+                        "strategy_id": strategy.id,
+                        "template_id": strategy.template_id,
+                        "errors": errors,
+                    },
+                )
+
+        return CheckResult(
+            check_name="strategies",
+            passed=True,
+            message=f"{len(strategies)} strategies validated successfully",
+            details={"strategy_count": len(strategies)},
+        )
 
 
 # ---------------------------------------------------------------------------
