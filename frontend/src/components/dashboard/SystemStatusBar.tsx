@@ -77,7 +77,7 @@ export const SystemStatusBar: React.FC<SystemStatusBarProps> = ({
   className,
 }) => {
   const [expanded, setExpanded] = useState(defaultExpanded);
-  const [tickTime, setTickTime] = useState(0);
+  const [_tickTime, setTickTime] = useState(0);
 
   // Simulate live tick every 5 seconds for the "just now" feel
   useEffect(() => {

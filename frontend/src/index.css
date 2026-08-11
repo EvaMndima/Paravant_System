@@ -12,7 +12,15 @@
     --accent-dark: 10 40 41;
     --bg-light: 248 245 242;
     --bg-dark: 16 20 19;
+    /* Light mode: card surfaces are light gray, borders are subtle teal */
+    --bg-card-dark: 236 232 228;
+    --bg-border: 15 61 62;
+  }
+
+  /* Dark mode: restore near-black card surfaces and white borders */
+  html.dark {
     --bg-card-dark: 22 25 24;
+    --bg-border: 255 255 255;
   }
 
   /* SAPPHIRE */
@@ -82,4 +90,15 @@
   .glass-panel {
     @apply bg-paper-100/80 dark:bg-obsidian-300/60 backdrop-blur-xl border border-deep-teal-800/10 dark:border-white/10 shadow-lg dark:shadow-2xl;
   }
+
+  /* Light mode: paper tokens are off-white — remap to dark for readability */
+  html:not(.dark) .text-paper-100 { color: rgb(16 20 19); }
+  html:not(.dark) .text-paper-200 { color: rgb(50 55 54); }
+  html:not(.dark) .text-paper-300 { color: rgb(90 95 94); }
+  html:not(.dark) .text-paper-400 { color: rgb(110 115 114); }
+  html:not(.dark) .text-paper-500 { color: rgb(130 135 134); }
+
+  /* Light mode: obsidian card surfaces should be light, not near-black */
+  html:not(.dark) .bg-obsidian-300 { background-color: rgb(236 232 228); }
+  html:not(.dark) .bg-obsidian-400 { background-color: rgb(248 245 242); }
 }

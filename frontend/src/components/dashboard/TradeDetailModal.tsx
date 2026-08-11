@@ -162,7 +162,7 @@ export const TradeDetailModal: React.FC<TradeDetailModalProps> = ({
             {isProfit ? '+' : ''}{formatCurrency(t.netPnl ?? t.pnl ?? 0)}
           </div>
           <div className={cn('text-sm font-mono mt-1 opacity-80', isProfit ? 'text-gain' : 'text-loss')}>
-            {isProfit ? '+' : ''}{formatNumber(t.pnlPct ?? 0, 2)}%
+            {isProfit ? '+' : ''}{formatNumber(t.pnlPct ?? 0)}%
           </div>
           <div className="text-[10px] font-sans text-obsidian-400/40 dark:text-paper-100/40 mt-1">
             After {formatCurrency(t.fees)} fees + {formatCurrency(t.slippage)} slippage

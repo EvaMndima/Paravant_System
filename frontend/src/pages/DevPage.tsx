@@ -6,7 +6,7 @@ import {
 } from 'lucide-react';
 import { useTheme } from '@/contexts/ThemeContext';
 import { useToast } from '@/contexts/ToastContext';
-import { cn, formatCurrency, formatNumber } from '@/lib/utils';
+import { cn, formatCurrency } from '@/lib/utils';
 import { fadeInUp, staggerContainer } from '@/lib/animations';
 import type { AppTheme, ThemeMode } from '@/types';
 
@@ -501,7 +501,7 @@ export default function DevPage() {
         <motion.section variants={fadeInUp} className="glass-panel rounded-2xl p-6">
           <SectionTitle>2.16 DataTable — sortable, skeleton loading</SectionTitle>
           <div className="space-y-6">
-            <DataTable columns={TRADE_COLS} data={SAMPLE_TRADES} onRowClick={(r) => toast({ title: `Selected: ${r.symbol}`, type: 'info' })} />
+            <DataTable columns={TRADE_COLS as unknown as Column<Record<string, unknown>>[]} data={SAMPLE_TRADES as unknown as Record<string, unknown>[]} onRowClick={(r) => toast({ title: `Selected: ${String(r.symbol)}`, type: 'info' })} />
             <div>
               <p className="text-xs font-mono text-obsidian-400/40 dark:text-paper-100/40 mb-3">Loading state:</p>
               <DataTable columns={TRADE_COLS} data={[]} isLoading />

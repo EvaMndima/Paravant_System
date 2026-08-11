@@ -2,13 +2,13 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
-  X, TrendingUp, TrendingDown, Activity, Clock, Zap,
+  X, Activity, Clock, Zap,
   ArrowUpRight, ArrowDownRight, Minus, BarChart2,
 } from 'lucide-react';
 import { GlassCard } from '@/components/ui/GlassCard';
 import { Badge } from '@/components/ui/Badge';
 import { AreaChart } from '@/components/charts/AreaChart';
-import { cn, formatCurrency, formatNumber } from '@/lib/utils';
+import { cn, formatCurrency } from '@/lib/utils';
 import type { StrategyCardProps, StrategyStatus } from './StrategyCard';
 import type { AreaChartData } from '@/components/charts/AreaChart';
 

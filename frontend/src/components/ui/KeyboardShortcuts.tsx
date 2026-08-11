@@ -1,11 +1,10 @@
 import React from 'react';
 import {
-  Command, Search, AlertTriangle, Shield,
+  Command, Search, Shield,
   LayoutDashboard, Bot, Wallet, History,
-  ArrowRight, X
+  X
 } from 'lucide-react';
 import { Modal } from './Modal';
-import { cn } from '@/lib/utils';
 
 interface KeyboardShortcutsProps {
   isOpen: boolean;

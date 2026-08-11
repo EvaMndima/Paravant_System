@@ -179,7 +179,7 @@ function Dev2Content() {
   const {
     isEmergencyOpen, openEmergency, closeEmergency,
     isAlertModalOpen, alertModalSymbol, openAlertModal, closeAlertModal,
-    isPositionDrawerOpen, selectedPosition, openPositionDrawer, closePositionDrawer,
+    isPositionDrawerOpen, openPositionDrawer, closePositionDrawer,
     isExportModalOpen, openExportModal, closeExportModal,
   } = useDashboard();
 
@@ -742,7 +742,7 @@ function Dev2Content() {
                 </p>
               </div>
               <Button
-                variant="outline"
+                variant="secondary"
                 size="sm"
                 className="w-full"
                 onClick={() => setIsStrategyDetailOpen(true)}

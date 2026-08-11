@@ -22,6 +22,7 @@ export default {
         },
         'obsidian': {
           DEFAULT: 'rgb(var(--bg-dark) / <alpha-value>)',
+          200: 'rgb(var(--bg-border) / <alpha-value>)',
           300: 'rgb(var(--bg-card-dark) / <alpha-value>)',
           400: 'rgb(var(--bg-dark) / <alpha-value>)',
         },

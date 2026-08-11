@@ -141,7 +141,7 @@ export const SVGAreaChart: React.FC<SVGAreaChartProps> = ({
 
         {/* Grid lines */}
         {showGrid && (
-          <g className="opacity-10 dark:opacity-[0.18]" stroke="currentColor" strokeWidth="0.2" strokeDasharray="2 2" className="text-deep-teal-800 dark:text-white">
+          <g className="opacity-10 dark:opacity-[0.18] text-deep-teal-800 dark:text-white" stroke="currentColor" strokeWidth="0.2" strokeDasharray="2 2">
             <line x1="0" y1="25" x2="100" y2="25" />
             <line x1="0" y1="50" x2="100" y2="50" />
             <line x1="0" y1="75" x2="100" y2="75" />

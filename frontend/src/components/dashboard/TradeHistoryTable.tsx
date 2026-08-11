@@ -54,7 +54,7 @@ function generateMockTrades(count: number): TradeDetail[] {
       strategy: strategies[i % 5],
       fees: entry * qty * 0.001,
       slippage: entry * qty * 0.0002,
-    } as TradeDetail;
+    } as unknown as TradeDetail;
   });
 }
 
@@ -182,7 +182,7 @@ export const TradeHistoryTable: React.FC<TradeHistoryTableProps> = ({
       align: 'center',
       render: (v) => (
         <Badge
-          variant={v === 'closed' ? 'default' : v === 'open' ? 'success' : 'warning'}
+          variant={v === 'closed' ? 'neutral' : v === 'open' ? 'success' : 'warning'}
           size="sm"
           dot={v === 'open'}
         >
@@ -249,7 +249,7 @@ export const TradeHistoryTable: React.FC<TradeHistoryTableProps> = ({
       {/* Table */}
       <DataTable
         columns={columns}
-        data={paginated as Record<string, unknown>[]}
+        data={paginated as unknown as Record<string, unknown>[]}
         onRowClick={(row) => onRowClick?.(row as unknown as TradeDetail)}
         emptyMessage="No trades match current filters"
         stickyHeader

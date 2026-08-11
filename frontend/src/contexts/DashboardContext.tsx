@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useCallback } from 'react';
+import { createContext, useContext, useState, useCallback } from 'react';
 import type { ReactNode } from 'react';
 
 // --- Types ---
@@ -40,24 +40,28 @@ interface DashboardContextType {
   isExportModalOpen: boolean;
   openExportModal: () => void;
   closeExportModal: () => void;
+
+  // Strategy Viewer (opens StrategyDetailDrawer or BacktestResultsModal)
+  selectedStrategyId: string | null;
+  viewStrategy: (id: string) => void;
+  closeStrategyViewer: () => void;
+
+  // Settings Tab Navigation
+  activeSettingsTab: string;
+  navigateToSettingsTab: (tab: string) => void;
 }
 
 const DashboardContext = createContext<DashboardContextType | null>(null);
 
 export const DashboardProvider = ({ children }: { children: ReactNode }) => {
-  // Emergency Panel state
   const [isEmergencyOpen, setIsEmergencyOpen] = useState(false);
-
-  // Alert Modal state
   const [isAlertModalOpen, setIsAlertModalOpen] = useState(false);
   const [alertModalSymbol, setAlertModalSymbol] = useState('');
-
-  // Position Drawer state
   const [isPositionDrawerOpen, setIsPositionDrawerOpen] = useState(false);
   const [selectedPosition, setSelectedPosition] = useState<DashboardPosition | null>(null);
-
-  // Export Modal state
   const [isExportModalOpen, setIsExportModalOpen] = useState(false);
+  const [selectedStrategyId, setSelectedStrategyId] = useState<string | null>(null);
+  const [activeSettingsTab, setActiveSettingsTab] = useState('profile');
 
   const openEmergency = useCallback(() => setIsEmergencyOpen(true), []);
   const closeEmergency = useCallback(() => setIsEmergencyOpen(false), []);
@@ -74,12 +78,16 @@ export const DashboardProvider = ({ children }: { children: ReactNode }) => {
   }, []);
   const closePositionDrawer = useCallback(() => {
     setIsPositionDrawerOpen(false);
-    // Delay clearing position so exit animation completes
     setTimeout(() => setSelectedPosition(null), 300);
   }, []);
 
   const openExportModal = useCallback(() => setIsExportModalOpen(true), []);
   const closeExportModal = useCallback(() => setIsExportModalOpen(false), []);
+
+  const viewStrategy = useCallback((id: string) => setSelectedStrategyId(id), []);
+  const closeStrategyViewer = useCallback(() => setSelectedStrategyId(null), []);
+
+  const navigateToSettingsTab = useCallback((tab: string) => setActiveSettingsTab(tab), []);
 
   return (
     <DashboardContext.Provider
@@ -98,6 +106,11 @@ export const DashboardProvider = ({ children }: { children: ReactNode }) => {
         isExportModalOpen,
         openExportModal,
         closeExportModal,
+        selectedStrategyId,
+        viewStrategy,
+        closeStrategyViewer,
+        activeSettingsTab,
+        navigateToSettingsTab,
       }}
     >
       {children}

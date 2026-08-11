@@ -197,10 +197,10 @@ export const PositionsTable: React.FC<PositionsTableProps> = ({
           />
         ) : (
           <DataTable
-            columns={columns}
-            data={displayData}
+            columns={columns as unknown as import('@/components/ui/DataTable').Column<Record<string, unknown>>[]}
+            data={displayData as unknown as Record<string, unknown>[]}
             isLoading={isLoading}
-            onRowClick={onPositionClick}
+            onRowClick={onPositionClick as unknown as ((row: Record<string, unknown>) => void) | undefined}
           />
         )}
       </div>

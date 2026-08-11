@@ -3,9 +3,9 @@ import type { ReactNode } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useLocation, useNavigate } from 'react-router-dom';
 import {
-  LayoutDashboard, LineChart, Wallet, ShieldCheck, Cpu,
+  LayoutDashboard, Activity, Wallet, ShieldCheck, Cpu,
   ChevronLeft, ChevronRight, Sun, Moon, LogOut, Menu, X, History, Bot,
-  Bell
+  Bell, BarChart2, Settings
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Avatar } from '@/components/ui/Avatar';
@@ -19,12 +19,14 @@ import { useTheme } from '@/contexts/ThemeContext';
 const NAV_ROUTES: Record<string, string> = {
   'Cockpit': '/',
   'System': '/system',
-  'Agents': '/strategies',
+  'Strategies': '/strategies',
   'Portfolio': '/portfolio',
-  'Markets': '/regime',
+  'Regime': '/regime',
   'Risk': '/risk',
   'Alerts': '/alerts',
   'Trade History': '/trade-history',
+  'Backtests': '/backtests',
+  'Settings': '/settings',
 };
 
 const ROUTE_TO_LABEL: Record<string, string> = Object.fromEntries(
@@ -146,12 +148,14 @@ export const Sidebar: React.FC = () => {
   const navItems = [
     { icon: LayoutDashboard, label: 'Cockpit' },
     { icon: Cpu, label: 'System' },
-    { icon: Bot, label: 'Agents' },
+    { icon: Bot, label: 'Strategies' },
     { icon: Wallet, label: 'Portfolio' },
-    { icon: LineChart, label: 'Markets' },
+    { icon: Activity, label: 'Regime' },
     { icon: ShieldCheck, label: 'Risk' },
     { icon: Bell, label: 'Alerts' },
     { icon: History, label: 'Trade History' },
+    { icon: BarChart2, label: 'Backtests' },
+    { icon: Settings, label: 'Settings' },
   ];
 
   const SidebarContent = ({ isMobile = false }: { isMobile?: boolean }) => {

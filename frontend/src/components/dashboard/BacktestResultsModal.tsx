@@ -10,7 +10,7 @@ import { Badge } from '@/components/ui/Badge';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/Tabs';
 import { SVGAreaChart } from '@/components/charts/SVGAreaChart';
 import { DrawdownChart } from '@/components/dashboard/DrawdownChart';
-import { cn, formatCurrency, formatNumber } from '@/lib/utils';
+import { cn, formatCurrency } from '@/lib/utils';
 import type { AreaChartData } from '@/components/charts/AreaChart';
 import type { DrawdownDataPoint } from '@/components/dashboard/DrawdownChart';
 
