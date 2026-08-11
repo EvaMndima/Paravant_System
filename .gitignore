@@ -88,3 +88,11 @@ research/.cache/
 docs/research/regime_dsr/_*.log
 # Forward-collected liquidation events (accrues over time; DEC-2026-06-04-021)
 research/data/liquidations/
+
+# Local AI-assistant tooling.
+# .claude/skills and .agent/skills are clones of a third-party skills
+# library (sickn33/antigravity-awesome-skills), not part of this project.
+# They were previously tracked as gitlinks with no .gitmodules entry,
+# which made a fresh clone produce two empty directories.
+.claude/skills/
+.agent/skills/
