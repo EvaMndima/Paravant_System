@@ -5,6 +5,9 @@
 **Target Completion:** 12 weeks (40 hrs/week = 480 total hours)  
 **Total Tasks:** 200 tasks across 6 phases (includes PRD gap subtasks)
 
+**Related Roadmaps:**
+- [`research/RESEARCH_LAYER_PRD.md`](research/RESEARCH_LAYER_PRD.md) — **Research Layer build plan** (ratified 2026-06-04). Research v0.5 (weeks 1-4) → R1-R3.5 (months 2-4) → Stop/pivot gate at 2026-12-01. Conditional Phase R4+ in Appendix D. The research layer runs in parallel to the trading-system MVP completion and does NOT advance trading-system scope.
+
 ---
 
 ## 📊 OVERALL PROGRESS DASHBOARD

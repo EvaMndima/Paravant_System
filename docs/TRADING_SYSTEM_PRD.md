@@ -3,9 +3,12 @@
 
 **Document Version:** 1.0  
 **Created:** 2026-02-03  
-**Last Updated:** 2026-02-03  
+**Last Updated:** 2026-06-04 (cross-reference to Research Layer PRD v2.0 added)  
 **Status:** LOCKED FOR DEVELOPMENT  
 **Author:** Nai (System Owner) + Claude (Technical Architect)
+
+**Related PRDs:**
+- [`docs/research/RESEARCH_LAYER_PRD.md`](research/RESEARCH_LAYER_PRD.md) — **Research Layer PRD v2.0** (ratified 2026-06-04, DEC-2026-06-04-001 through DEC-2026-06-04-012). Governs the `research/` module that produces strategies feeding into this trading system. Does NOT advance MVP scope (DEC-2026-06-04-007). Adds Tier A/B/C/D classification + DSR p<0.3 floor as additional gate ABOVE the auto-promotion gate of DEC-2026-06-01-001/002 (which require amendment for opt-in deployment per DEC-2026-06-04-009).
 
 ---
 
