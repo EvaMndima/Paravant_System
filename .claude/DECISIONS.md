@@ -2951,9 +2951,9 @@ parameters:
 
 **End of Decisions Log**
 
-**Total Decisions:** 97 active, 0 superseded, 5 locked (1 amended); DEC-2026-06-04-013 amended
-**Last Updated:** 2026-06-11
-**Next Decision ID:** DEC-2026-06-04-022
+**Total Decisions:** 100 active, 0 superseded, 5 locked (1 amended); DEC-2026-06-04-013 amended
+**Last Updated:** 2026-08-11
+**Next Decision ID:** DEC-2026-08-11-004
 
 ## Phase 5 Decisions (Backtesting & Simulation)
 
@@ -2996,3 +2996,65 @@ parameters:
   - `src/core/risk/regime.py`
   - `src/data/models/system.py`
 - **References:** PRD Section 5.3
+
+---
+
+## Pre-Publication Decisions (2026-08-11)
+
+### DEC-2026-08-11-001: Startup Strategy Validation Is Read-Only, via TemplateManager
+- **Decision:** `StartupChecklist._check_strategies` validates active strategies by calling `TemplateManager.get_template()` and `TemplateManager.validate_parameters()` directly. It MUST NOT call `StrategyEngine.create_strategy()`.
+- **Context:** The check was calling `create_strategy()` with four keyword arguments that do not exist on its signature (`template`, `symbol`, `account_id`, `status`) and reading three attributes absent from the Strategy model (`.template`, `.symbol`, `.params`) plus one it never had (`.account_id`). Every call raised, and a bare `except Exception` reported it as "Strategy <name> validation failed". The check could not pass in any environment with active strategies.
+- **Rationale:**
+  - **create_strategy is not a validator:** it constructs a Strategy and persists it via `DataStore.save_strategy`, and hardcodes `StrategyStatus.DRAFT` with no `status` parameter to opt out. Correcting the keyword arguments alone would have replaced a loud `TypeError` with a silent write of one duplicate DRAFT row per active strategy on every startup.
+  - **Validation is what the check claims to do:** template resolution plus parameter validation is exactly the stated intent, and both are already public on TemplateManager.
+  - **Catches template drift:** a template can change after a strategy row is written; this surfaces that at startup rather than at first signal.
+  - **Read-only startup checks:** a pre-flight check must not mutate the state it is checking.
+- **Alternatives Considered:**
+  - **Fix the keyword arguments only:** REJECTED - turns a visible crash into silent data corruption. This was the fix proposed by the read-only audit, which had seen the signature but not the body.
+  - **Add a persist=False flag to create_strategy:** REJECTED - widens a public API to serve one caller, and a validation-only path through a persistence method invites future misuse.
+  - **Delete the check:** REJECTED - validating that active strategies are constructible is a legitimate pre-flight condition.
+- **Status:** ACTIVE
+- **Date Decided:** 2026-08-11
+- **Implemented By:** `src/core/orchestrator.py` `_check_strategies`; `tests/unit/test_orchestrator.py` `TestCheckStrategiesWithRealEngine`
+- **Affected Files:**
+  - `src/core/orchestrator.py`
+  - `tests/unit/test_orchestrator.py`
+- **References:** `docs/PRODUCTION_READINESS_ASSESSMENT.md` sections 2.4 and 3.2 item 4, plan item 2.1. Related: DEC-2026-08-11-002 (error propagation, same defect).
+
+### DEC-2026-08-11-002: Programming Errors Propagate From Startup Checks
+- **Decision:** Startup checks catch expected domain errors and return `CheckResult(passed=False)`. `TypeError` and `AttributeError` propagate instead.
+- **Context:** The defect in DEC-2026-08-11-001 survived for roughly six months because a bare `except Exception` converted a `TypeError` from a broken call into an ordinary failed-check message. The message described a data problem when the cause was a programming error, so the log gave no route to the bug.
+- **Rationale:**
+  - **Same failure outcome, better diagnosis:** startup aborts on a failed check either way, so propagating costs no safety. What changes is that a programming error now produces a traceback pointing at the defect.
+  - **A bare except hides the next one too:** the catch was the reason the defect was undiagnosable, independent of the defect itself.
+  - **Consistent with fail-closed:** an unrecoverable programming error must not be reported as a recoverable condition.
+- **Alternatives Considered:**
+  - **Keep the broad catch, add exc_info=True logging:** REJECTED - still reports a programming error as a check failure, and relies on someone reading logs at the right level.
+  - **Narrow to specific domain exceptions across the whole class:** DEFERRED - the other seven checks wrap genuine I/O (database, exchange, disk, memory) where a broad catch is defensible. Revisit if a second defect hides the same way.
+- **Status:** ACTIVE
+- **Date Decided:** 2026-08-11
+- **Implemented By:** `src/core/orchestrator.py` `_check_strategies`; `tests/unit/test_orchestrator.py::TestCheckStrategiesWithRealEngine::test_programming_errors_propagate`
+- **Affected Files:**
+  - `src/core/orchestrator.py`
+  - `tests/unit/test_orchestrator.py`
+- **References:** `docs/PRODUCTION_READINESS_ASSESSMENT.md` plan item 2.2. Related: DEC-2026-08-11-001.
+
+### DEC-2026-08-11-003: Pre-Publication Repository Hygiene
+- **Decision:** Before public release the repository root holds only project structure. Specifically: 35 `SESSION_*`/`PHASE_*` AI prompt files and 17 one-off root scripts removed; `.claude/skills` and `.agent/skills` untracked; `src/core/strategy/regime.py` and the empty `src/domain/` and `src/core/account/` packages removed; `docs/design/pdf/` untracked; full 102-commit history retained.
+- **Context:** A reviewer lists the root directory and clones the repository before reading any code. The root held 45 entries, most of them build scaffolding. Two directories were tracked as gitlinks (mode 160000) with no `.gitmodules`, so a fresh clone produced empty directories that `git submodule update --init` could not repair.
+- **Rationale:**
+  - **Prompt files are scaffolding, not documentation:** they describe completed work and duplicate what this decision log holds. Curated into one honest document (`docs/AI_ASSISTED_DEVELOPMENT.md`) rather than deleted silently or published raw.
+  - **Root scripts were unreferenced:** verified that no import statement in `src/`, `scripts/` or `tests/` resolves to any of them, and none appears in Dockerfile, Procfile or railway.toml. The six root `test_*.py` files were never collected (`testpaths = ["tests"]`) but inflated the apparent test surface.
+  - **Skills directories are third-party:** clones of `sickn33/antigravity-awesome-skills`, unrelated to the trading system. Untracked rather than promoted to real submodules - the system does not depend on them and vendoring an unrelated repository is not appropriate.
+  - **regime.py was unreachable:** CPython resolves packages before same-named modules, so the `regime/` package had shadowed it since its creation. Its exports already live in `regime/manual.py` and are re-exported for backward compatibility.
+  - **History is retained deliberately:** four months of single-author commits is evidence of sustained work. Untracking the PDFs shrinks the working tree, not the clone; rewriting all 102 commits to reclaim about 21 MB was considered and declined as a poor trade.
+- **Alternatives Considered:**
+  - **Archive prompt files to docs/archive/build-log/:** REJECTED - moves 35 files of prompt text into published documentation; reads as clutter rather than transparency.
+  - **git filter-repo to purge PDFs from history:** REJECTED - rewrites every commit SHA to save about 21 MB of clone.
+  - **Squash to a fresh initial commit:** REJECTED - discards the commit record, which is one of the repository's stronger signals.
+  - **Promote skills directories to real submodules:** REJECTED - see rationale.
+- **Status:** ACTIVE
+- **Date Decided:** 2026-08-11
+- **Implemented By:** Pre-publication cleanup on branch `cleanup/pre-publication`. Pre-cleanup state recoverable at tag `pre-cleanup` (`622ac49`).
+- **Affected Files:** repository root, `.gitignore`, `LICENSE`, `src/core/strategy/regime.py`, `src/domain/`, `src/core/account/`, `docs/design/pdf/`, `docs/validation/`
+- **References:** `docs/PRODUCTION_READINESS_ASSESSMENT.md` sections 2.6 and 3.2 items 8-10, plan items 1.1, 1.2, 1.7, and Phase 0 item 0.4. A secret scan across all 102 commits returned no findings.
