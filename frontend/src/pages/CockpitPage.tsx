@@ -36,24 +36,33 @@ const INITIAL_WATCHLIST: WatchlistItem[] = [
   { id: '7', symbol: 'DOGE', name: 'Dogecoin', price: 0.162, change: -0.004, changePercent: -2.41 },
 ];
 
+// Demonstration seed reflecting the system's actual research outcome.
+//
+// The previous seed showed a ~$12,000 profitable portfolio with BTF and CMF
+// marked "active". Both are RETIRED, and no strategy in this project has ever
+// passed its own validation gates -- every screened hypothesis returned a
+// profit factor below 1.0 (docs/RESEARCH_FINDINGS.md). A screenshot of that
+// dashboard would have contradicted the repository's headline finding.
+//
+// Statuses here are also the true ones: nothing is `active`, because the live
+// kill switch is off and no strategy passes the promotion gate.
 const INITIAL_STRATEGIES: StrategySummary[] = [
-  { id: 'btf',    name: 'Bear Trend Follower',       status: 'active',  pnlDay: 312.40,  pnlTotal: 4821.30, sparkline: [10,14,13,16,15,18,17,20,22,24] },
-  { id: 'icvp',   name: 'Ichimoku Cloud VP',         status: 'active',  pnlDay: 184.20,  pnlTotal: 2903.10, sparkline: [8,9,11,10,13,14,13,16,15,17] },
-  { id: 'cmf',    name: 'Cascading Momentum Filter', status: 'active',  pnlDay: 97.60,   pnlTotal: 1412.80, sparkline: [5,7,6,9,8,11,10,13,12,14] },
-  { id: 'ema',    name: 'EMA Trend RSI',              status: 'active',  pnlDay: -43.10,  pnlTotal: 620.40,  sparkline: [12,11,10,9,11,10,9,8,10,9] },
-  { id: 'bsb',    name: 'BB Squeeze Breakout',       status: 'paused',  pnlDay: 0,       pnlTotal: 380.20,  sparkline: [6,6,6,6,6,6,6,6,6,6] },
-  { id: 'bsm',    name: 'BB Squeeze Momentum',       status: 'paused',  pnlDay: 0,       pnlTotal: 210.50,  sparkline: [4,4,4,4,4,4,4,4,4,4] },
-  { id: 'don',    name: 'Donchian ATR',               status: 'active',  pnlDay: 58.30,   pnlTotal: 940.70,  sparkline: [7,8,9,8,10,9,11,10,12,11] },
-  { id: 'ramr',   name: 'Regime-Aware Mean Rev.',    status: 'stopped', pnlDay: 0,       pnlTotal: -120.30, sparkline: [3,2,1,2,1,2,1,2,1,2] },
-  { id: 'super',  name: 'Supertrend Volume MACD',    status: 'active',  pnlDay: 71.80,   pnlTotal: 1180.60, sparkline: [6,8,7,9,8,10,9,11,10,12] },
+  { id: 'btf',    name: 'Bear Trend Follower',        status: 'stopped', pnlDay: 0, pnlTotal: -184.20, sparkline: [12,11,12,10,9,10,8,7,8,6] },
+  { id: 'icvp',   name: 'Ichimoku Cloud VP',          status: 'stopped', pnlDay: 0, pnlTotal:  -96.40, sparkline: [10,10,9,10,8,9,8,8,7,7] },
+  { id: 'cmf',    name: 'Cascading Momentum Filter',  status: 'stopped', pnlDay: 0, pnlTotal: -141.70, sparkline: [11,10,9,9,8,7,8,6,5,5] },
+  { id: 'macdpb', name: 'MACD Pullback',              status: 'stopped', pnlDay: 0, pnlTotal: -108.90, sparkline: [9,9,8,9,7,8,7,6,6,5] },
+  { id: 'rsibb',  name: 'RSI + BB Mean Reversion',    status: 'stopped', pnlDay: 0, pnlTotal:  -73.10, sparkline: [8,7,8,7,6,7,6,6,5,5] },
+  { id: 'don',    name: 'Donchian ATR',               status: 'paused',  pnlDay: 0, pnlTotal: -212.60, sparkline: [13,12,11,11,9,10,8,7,6,6] },
+  { id: 'ramr',   name: 'Regime-Aware Mean Rev.',     status: 'paused',  pnlDay: 0, pnlTotal:  -45.30, sparkline: [7,7,6,7,6,6,5,6,5,5] },
+  { id: 'rvcb',   name: 'Realized Vol Compression',   status: 'paused',  pnlDay: 0, pnlTotal:   -8.40, sparkline: [6,6,6,5,6,5,6,5,5,5] },
 ];
 
 const INITIAL_ACTIVITY: ActivityItem[] = [
-  { id: '1', type: 'trade',  title: 'BTC Long Closed',        description: 'BTF closed BTCUSDT long +$312', timestamp: new Date(Date.now() - 180000) },
-  { id: '2', type: 'alert',  title: 'Regime Shift Detected',  description: 'Market regime updated to bear trending', timestamp: new Date(Date.now() - 600000) },
-  { id: '3', type: 'agent',  title: 'ICVP Signal: ETH',       description: 'Ichimoku cloud cross detected on ETHUSDT 1h', timestamp: new Date(Date.now() - 1200000) },
-  { id: '4', type: 'trade',  title: 'SOL Short Opened',       description: 'CMF opened SOLUSDT short at $148.20', timestamp: new Date(Date.now() - 1800000) },
-  { id: '5', type: 'alert',  title: 'Drawdown Warning',       description: 'Portfolio daily drawdown at 1.8% of 2% limit', timestamp: new Date(Date.now() - 2400000) },
+  { id: '1', type: 'alert',  title: 'Live trading disabled',  description: 'LIVE_TRADING_ENABLED is off; paper simulation only', timestamp: new Date(Date.now() - 180000) },
+  { id: '2', type: 'alert',  title: 'Regime shift detected',  description: 'BTC sub-regime updated to choppy_bear (2-close confirmation)', timestamp: new Date(Date.now() - 600000) },
+  { id: '3', type: 'agent',  title: 'Promotion gate blocked', description: 'No strategy classified READY_FOR_LIVE; activation held', timestamp: new Date(Date.now() - 1200000) },
+  { id: '4', type: 'agent',  title: 'DSR screen complete',    description: 'H-2026-06-011 rejected: TIER_D, PF 0.44 at N=255', timestamp: new Date(Date.now() - 1800000) },
+  { id: '5', type: 'alert',  title: 'Paper session running',  description: 'Donchian ATR collecting evidence, 19 of 30 trades', timestamp: new Date(Date.now() - 2400000) },
 ];
 
 const INITIAL_POSITIONS: Position[] = [

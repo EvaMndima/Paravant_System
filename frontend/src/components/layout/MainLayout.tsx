@@ -2,6 +2,7 @@ import React from 'react';
 import { Outlet, useLocation } from 'react-router-dom';
 import { Sidebar, getLabelFromPath } from './Sidebar';
 import { Header } from './Header';
+import { DemoDataBanner } from './DemoDataBanner';
 
 export const MainLayout: React.FC = () => {
   const location = useLocation();
@@ -12,6 +13,7 @@ export const MainLayout: React.FC = () => {
       <Sidebar />
 
       <div className="flex-1 flex flex-col min-w-0">
+        <DemoDataBanner />
         <Header title={pageLabel} />
 
         <main

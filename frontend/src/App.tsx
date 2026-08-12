@@ -18,9 +18,20 @@ const AlertsPage          = lazy(() => import('@/pages/AlertsPage'))
 const TradeHistoryPage    = lazy(() => import('@/pages/TradeHistoryPage'))
 const SettingsPage        = lazy(() => import('@/pages/SettingsPage'))
 const BacktestResultsPage = lazy(() => import('@/pages/BacktestResultsPage'))
-const DevPage             = lazy(() => import('@/pages/DevPage'))
-const Dev2Page            = lazy(() => import('@/pages/Dev2Page'))
-const Dev3Page            = lazy(() => import('@/pages/Dev3Page'))
+
+// Component galleries used during design work, not part of the product.
+//
+// Vite statically replaces `import.meta.env.DEV` with `false` when building, so
+// Rollup eliminates this branch entirely and never emits the chunks. Previously
+// these were unconditional routes and shipped ~155 kB of gallery into the
+// production bundle -- Dev2Page alone was 93.5 kB.
+const devRoutes = import.meta.env.DEV
+  ? [
+      { path: '/dev',  Component: lazy(() => import('@/pages/DevPage')) },
+      { path: '/dev2', Component: lazy(() => import('@/pages/Dev2Page')) },
+      { path: '/dev3', Component: lazy(() => import('@/pages/Dev3Page')) },
+    ]
+  : []
 
 function App() {
   return (
@@ -45,10 +56,10 @@ function App() {
                     <Route path="/backtests"     element={<BacktestResultsPage />} />
                   </Route>
 
-                  {/* Dev pages outside main layout */}
-                  <Route path="/dev"  element={<DevPage />} />
-                  <Route path="/dev2" element={<Dev2Page />} />
-                  <Route path="/dev3" element={<Dev3Page />} />
+                  {/* Component galleries, development builds only */}
+                  {devRoutes.map(({ path, Component }) => (
+                    <Route key={path} path={path} element={<Component />} />
+                  ))}
 
                   {/* Catch-all redirect */}
                   <Route path="*" element={<Navigate to="/" replace />} />
