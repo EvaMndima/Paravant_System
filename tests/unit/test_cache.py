@@ -13,7 +13,7 @@ from typing import Any
 
 import pytest
 
-from src.data.cache import CacheBackend, InMemoryCache, CacheManager
+from src.data.cache import InMemoryCache, CacheManager
 
 
 class TestInMemoryCache:

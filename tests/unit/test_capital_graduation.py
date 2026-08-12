@@ -7,7 +7,6 @@ from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 from unittest.mock import MagicMock
 
-import pytest
 
 from src.core.risk.sizing import (
     GRADUATION_DAYS,

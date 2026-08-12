@@ -22,7 +22,7 @@ from unittest.mock import patch
 import pytest
 import yaml
 
-from src.core.config.backup import BackupMetadata, ConfigBackupManager
+from src.core.config.backup import ConfigBackupManager
 from src.core.config.loader import ConfigLoader, get_config, reset_config
 from src.core.config.risk_profiles import (
     RiskProfileConfig,
@@ -30,8 +30,6 @@ from src.core.config.risk_profiles import (
 )
 from src.core.config.settings import Settings, get_settings, reset_settings
 from src.core.config.templates import (
-    ParameterSpec,
-    StrategyTemplate,
     TemplateManager,
 )
 
@@ -587,7 +585,7 @@ class TestBackupSystem:
                 monthly_retention_months=0,
             )
             # Create a backup
-            metadata = manager.create_backup(data={"test": True})
+            _metadata = manager.create_backup(data={"test": True})
             # The retention policy with 0 days should clean up
             manager._apply_retention_policy()
 

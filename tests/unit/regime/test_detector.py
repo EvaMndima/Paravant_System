@@ -8,11 +8,9 @@ Decision: DEC-2026-05-04-002 - 2-consecutive-close confirmation rule
 """
 from __future__ import annotations
 
-import asyncio
 from datetime import datetime, timedelta, timezone
 from unittest.mock import AsyncMock, MagicMock
 
-import numpy as np
 import pytest
 
 from src.core.strategy.regime.detector import RegimeDetector, RegimeState

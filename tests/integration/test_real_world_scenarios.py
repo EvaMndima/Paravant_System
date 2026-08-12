@@ -7,7 +7,6 @@ Tests complete end-to-end scenarios:
 3. Multiple strategies per account
 4. Constraint violations and error handling
 """
-import pytest
 from datetime import datetime, timezone
 
 from src.data.models import (

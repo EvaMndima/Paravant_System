@@ -9,7 +9,6 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 
-import pytest
 
 from src.core.strategy.backtest.portfolio import PortfolioState
 from src.core.strategy.backtest.trader import SimulatedTrader

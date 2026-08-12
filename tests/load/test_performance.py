@@ -10,14 +10,12 @@ Decision: DEC-2026-02-08-008 - Structured logging
 """
 from __future__ import annotations
 
-import asyncio
 import os
 import statistics
 import time
 import tracemalloc
 from concurrent.futures import ThreadPoolExecutor
-from datetime import date, datetime, timedelta, timezone
-from typing import Any
+from datetime import date, timedelta
 
 import pytest
 from fastapi.testclient import TestClient

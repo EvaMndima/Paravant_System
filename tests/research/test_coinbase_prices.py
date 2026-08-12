@@ -6,7 +6,7 @@ roundtrip. Live fetch/pagination is exercised by a smoke run, not unit tests
 """
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 
 import pytest
 

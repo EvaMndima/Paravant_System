@@ -26,7 +26,6 @@ from datetime import datetime, timezone
 import pytest
 
 from src.brokers.binance.client import BinanceClient
-from src.brokers.binance.exceptions import BinanceConnectionError
 from src.core.exceptions import SymbolNotFoundError
 
 

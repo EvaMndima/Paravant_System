@@ -10,7 +10,6 @@ Tests:
 """
 import math
 import pytest
-from datetime import datetime, timezone
 
 from src.data.models import Position, PositionSide, PositionStatus
 

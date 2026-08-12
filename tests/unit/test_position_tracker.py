@@ -8,21 +8,16 @@ Phase 4B: Position Tracking & Execution Quality
 """
 from __future__ import annotations
 
-import asyncio
 import math
 from datetime import datetime, timedelta, timezone
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
 from src.core.exceptions import PositionStorageError
 from src.core.execution.interface import Balance
 from src.core.execution.position_tracker import (
-    PROFITABLE_EXTENSION_MULTIPLIER,
-    STALENESS_THRESHOLDS,
-    PositionSyncResult,
     PositionTracker,
-    StalenessResult,
 )
 from src.data.models.order import OrderSide
 from src.data.models.position import Position, PositionSide, PositionStatus
@@ -207,7 +202,7 @@ class TestOpenPosition:
         """BUY fill with no existing position opens a LONG."""
         trade = _make_trade(side=OrderSide.BUY, quantity=0.5, price=45000.0, commission=5.0)
 
-        position = await tracker.process_fill(trade, strategy_id="strat_1")
+        _position = await tracker.process_fill(trade, strategy_id="strat_1")
 
         mock_store.save_position.assert_called_once()
         saved = mock_store.save_position.call_args[0][0]
@@ -223,7 +218,7 @@ class TestOpenPosition:
         """SELL fill with no existing position opens a SHORT."""
         trade = _make_trade(side=OrderSide.SELL, quantity=1.0, price=2500.0, symbol="ETHUSDT")
 
-        position = await tracker.process_fill(trade)
+        _position = await tracker.process_fill(trade)
 
         saved = mock_store.save_position.call_args[0][0]
         assert saved.side == PositionSide.SHORT
@@ -265,7 +260,7 @@ class TestAddToPosition:
         mock_store.update_position = MagicMock(return_value=updated)
 
         trade = _make_trade(side=OrderSide.BUY, quantity=0.5, price=46000.0, commission=5.0)
-        result = await tracker.process_fill(trade)
+        _result = await tracker.process_fill(trade)
 
         # Verify correct calculation passed to update
         call_kwargs = mock_store.update_position.call_args
@@ -311,7 +306,7 @@ class TestReducePosition:
 
         # Sell 0.5 at 46000 -> realized = (46000-45000)*0.5 - 5 = 495
         trade = _make_trade(side=OrderSide.SELL, quantity=0.5, price=46000.0, commission=5.0)
-        result = await tracker.process_fill(trade)
+        _result = await tracker.process_fill(trade)
 
         call_kwargs = mock_store.update_position.call_args[1]
         assert abs(call_kwargs["size"] - 0.5) < 0.001
@@ -338,7 +333,7 @@ class TestReducePosition:
         mock_store.update_position = MagicMock(return_value=updated)
 
         trade = _make_trade(side=OrderSide.SELL, quantity=0.5, price=46000.0, commission=5.0)
-        result = await tracker.process_fill(trade)
+        _result = await tracker.process_fill(trade)
 
         call_kwargs = mock_store.update_position.call_args[1]
         assert call_kwargs["status"] == PositionStatus.CLOSED
@@ -366,7 +361,7 @@ class TestReducePosition:
 
         # BUY back at 2400 -> realized = (2500-2400)*1.0 - 2.0 = 98
         trade = _make_trade(side=OrderSide.BUY, quantity=1.0, price=2400.0, commission=2.0, symbol="ETHUSDT")
-        result = await tracker.process_fill(trade)
+        _result = await tracker.process_fill(trade)
 
         call_kwargs = mock_store.update_position.call_args[1]
         assert call_kwargs["status"] == PositionStatus.CLOSED
@@ -389,7 +384,7 @@ class TestReducePosition:
 
         # Sell 0.5 when only 0.3 exists - should use min(0.5, 0.3) = 0.3
         trade = _make_trade(side=OrderSide.SELL, quantity=0.5, price=46000.0, commission=2.0)
-        result = await tracker.process_fill(trade)
+        _result = await tracker.process_fill(trade)
 
         call_kwargs = mock_store.update_position.call_args[1]
         # Should be fully closed, not negative size

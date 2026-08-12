@@ -20,7 +20,7 @@ from src.core.config.risk_profiles import RiskProfileConfig, RiskProfileManager
 from src.core.risk.controller import RiskController
 from src.core.risk.kill_switch import KillSwitch
 from src.core.risk.sizing import calculate_fixed_risk_size
-from src.core.risk.types import OrderRequest, PortfolioState
+from src.core.risk.types import OrderRequest
 from src.data.store import DataStore
 
 

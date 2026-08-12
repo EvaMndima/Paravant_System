@@ -11,7 +11,7 @@ Tests cover:
 """
 from __future__ import annotations
 
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -34,13 +34,12 @@ from src.core.strategy.regime import (
     should_reduce_size,
 )
 from src.core.strategy.similarity import (
-    SimilarityResult,
     StrategyCandidate,
     ExistingStrategy,
     check_similarity,
     SIMILARITY_THRESHOLD,
 )
-from src.data.models import Strategy, StrategyStatus, StrategyType
+from src.data.models import StrategyStatus, StrategyType
 
 
 # ---------------------------------------------------------------------------

@@ -2,7 +2,6 @@
 
 Tests the full DataStore repository pattern with real database operations.
 """
-import pytest
 from datetime import datetime, timezone
 from decimal import Decimal
 
@@ -13,10 +12,6 @@ from src.data.models import (
     Order, OrderSide, OrderType, OrderStatus,
     Position, PositionSide, PositionStatus,
     Trade,
-    PnLRecord, EquitySnapshot,
-    StrategyAssignment, AssignmentStatus,
-    SystemState, AuditLog,
-    Signal, SignalDirection,
 )
 
 
@@ -333,7 +328,6 @@ class TestDataStoreTrades:
         store = DataStore()
         store.engine = test_db
         
-        from datetime import datetime, timezone
         
         trade = Trade(
             order_id=sample_order.id,

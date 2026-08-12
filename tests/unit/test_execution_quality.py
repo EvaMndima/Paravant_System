@@ -9,13 +9,8 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 
-import pytest
 
 from src.core.execution.quality import (
-    BLOCK_THRESHOLD_PCT,
-    HIGH_SLIPPAGE_THRESHOLD_PCT,
-    LOW_FILL_RATE_THRESHOLD_PCT,
-    WARN_THRESHOLD_PCT,
     ExecutionReportGenerator,
     FillRateTracker,
     SlippageEstimator,

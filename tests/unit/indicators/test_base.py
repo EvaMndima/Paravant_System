@@ -9,7 +9,6 @@ from __future__ import annotations
 
 import numpy as np
 import pytest
-from numpy.typing import NDArray
 
 from src.core.indicators.base import Indicator, IndicatorResult
 from src.data.market_data import OHLCVSeries

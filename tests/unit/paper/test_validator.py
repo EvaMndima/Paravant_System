@@ -3,7 +3,6 @@ from __future__ import annotations
 
 import pytest
 
-from src.core.strategy.paper.types import PaperTradingMode
 from src.core.strategy.paper.validator import PaperTradingThresholds
 
 

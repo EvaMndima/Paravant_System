@@ -15,7 +15,6 @@ from src.data.models import (
     Strategy,
     Order,
     Position,
-    Signal,
     StrategyAssignment,
     AssignmentStatus,
     StrategyType,

@@ -9,21 +9,19 @@ Decision: DEC-2026-02-08-008 - Structured logging
 """
 from __future__ import annotations
 
-import asyncio
 from datetime import datetime, timezone
-from typing import Any
-from unittest.mock import AsyncMock, MagicMock, patch, PropertyMock
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from sqlalchemy import create_engine, event
-from sqlalchemy.orm import Session, sessionmaker
+from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from src.core.event_bus import EventBus
 from src.data.models import (
     Account, AccountStatus, Base, Order, OrderSide, OrderStatus,
     OrderType, Position, PositionSide, PositionStatus, RiskProfile,
-    Strategy, StrategyStatus, StrategyType, SystemState,
+    Strategy, StrategyStatus, StrategyType,
 )
 from src.data.store import DataStore
 

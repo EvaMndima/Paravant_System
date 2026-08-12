@@ -14,9 +14,8 @@ Target: >90% coverage for kill_switch.py and dead_mans_switch.py
 """
 from __future__ import annotations
 
-import time
 from datetime import datetime, timedelta, timezone
-from unittest.mock import MagicMock, call, patch
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -400,7 +399,7 @@ class TestDeactivationCodeGeneration:
         state.kill_switch_activated_at = datetime.now(timezone.utc)
 
         code1 = kill_switch.generate_deactivation_code()
-        code2 = kill_switch.generate_deactivation_code()
+        _code2 = kill_switch.generate_deactivation_code()
 
         # code1 should no longer work
         success = kill_switch.deactivate(code1)
@@ -637,7 +636,6 @@ class TestDeadMansSwitchExceptionPaths:
         from src.core.risk.dead_mans_switch import DeadMansSwitch
         from src.core.risk.kill_switch import KillSwitch
         from unittest.mock import MagicMock
-        from datetime import datetime, timezone, timedelta
 
         store = MagicMock()
         kill_switch = KillSwitch(store)
@@ -657,7 +655,7 @@ class TestDeadMansSwitchExceptionPaths:
         """Kill switch activation failure should be logged but not crash."""
         from src.core.risk.dead_mans_switch import DeadMansSwitch
         from src.core.risk.kill_switch import KillSwitch
-        from unittest.mock import MagicMock, patch
+        from unittest.mock import MagicMock
 
         store = MagicMock()
         kill_switch = MagicMock(spec=KillSwitch)

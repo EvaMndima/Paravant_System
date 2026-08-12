@@ -5,8 +5,7 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 
-from src.core.strategy.backtest.portfolio import OpenPosition, PortfolioState
-from src.core.strategy.backtest.types import BacktestConfig
+from src.core.strategy.backtest.portfolio import PortfolioState
 from src.data.models.signal import SignalDirection
 
 
@@ -229,7 +228,7 @@ class TestClosePosition:
             slippage_cost=2.1,
             timestamp=ts,
         )
-        trade = portfolio.close_position(
+        _trade = portfolio.close_position(
             fill_price=42000.0,  # same price — break even before commissions
             commission=4.2,
             slippage_cost=2.1,

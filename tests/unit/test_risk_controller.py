@@ -12,11 +12,15 @@ Target: >90% coverage for src/core/risk/
 """
 from __future__ import annotations
 
-import math
-from datetime import date, datetime, timezone
-from unittest.mock import MagicMock, patch
+from typing import TYPE_CHECKING, Any
+from unittest.mock import MagicMock
 
 import pytest
+
+if TYPE_CHECKING:
+    # Only referenced in annotations. The fixture imports it lazily at runtime,
+    # and `from __future__ import annotations` means these are never evaluated.
+    from src.core.risk.controller import RiskController
 
 from src.core.config.risk_profiles import (
     RegimeAdjustments,
@@ -33,8 +37,6 @@ from src.core.risk.checks import (
     check_weekly_loss_limit,
 )
 from src.core.risk.sizing import (
-    EMERGENCY_BUFFER_PCT,
-    MINIMUM_CASH_RESERVE_PCT,
     NEW_STRATEGY_MAX_PCT,
     PROVEN_STRATEGY_MAX_PCT,
     apply_regime_adjustment,
@@ -49,7 +51,6 @@ from src.core.risk.types import (
     OrderRequest,
     PortfolioState,
     PositionSizeResult,
-    RiskCheckResult,
 )
 from src.data.store import DataStore
 

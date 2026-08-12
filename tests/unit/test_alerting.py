@@ -12,19 +12,14 @@ Tests cover:
 Decision: DEC-2026-02-08-003 - Timezone-aware UTC timestamps
 Decision: DEC-2026-02-08-008 - Structured logging
 """
-import asyncio
-from datetime import datetime, timedelta, timezone
-from unittest.mock import AsyncMock, MagicMock, Mock, patch
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
 from src.core.alerting.channels.escalation import (
-    EscalationContact,
     EscalationLevel,
     EscalationManager,
-    EscalationPolicy,
 )
-from src.core.alerting.channels.telegram import TelegramChannel
 from src.core.alerting.manager import (
     Alert,
     AlertChannel,

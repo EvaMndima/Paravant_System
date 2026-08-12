@@ -62,7 +62,7 @@ class TestEMA:
         # Get overlapping valid indices
         valid_mask = ~np.isnan(ema_values)
         valid_ema = ema_values[valid_mask]
-        valid_closes = closes[valid_mask]
+        _valid_closes = closes[valid_mask]
 
         # EMA should be within reasonable range of prices
         assert np.all(valid_ema > closes.min() * 0.9)

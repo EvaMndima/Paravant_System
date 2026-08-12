@@ -110,7 +110,7 @@ class TestRSI:
         valid_rsi = result.values[~np.isnan(result.values)]
 
         # Calculate what EMA-based RSI would look like (WRONG formula)
-        closes = sample_ohlcv_series.closes
+        _closes = sample_ohlcv_series.closes
         ema_alpha = 2 / (14 + 1)  # EMA alpha (WRONG)
         wilder_alpha = 1 / 14  # Wilder's alpha (CORRECT)
 
@@ -176,7 +176,7 @@ class TestRSI:
         valid21 = result21.values[~np.isnan(result21.values)]
 
         std7 = np.std(valid7)
-        std14 = np.std(valid14)
+        _std14 = np.std(valid14)
         std21 = np.std(valid21)
 
         # Shorter periods generally more responsive (higher volatility)

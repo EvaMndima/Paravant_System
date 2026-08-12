@@ -1,5 +1,5 @@
 """Unit tests for time utilities."""
-from datetime import datetime, date, time, timedelta, timezone
+from datetime import datetime, date, timedelta, timezone
 from src.utils.time import (
     utc_now, utc_today, unix_timestamp_now,
     unix_timestamp_from_datetime, datetime_from_unix_timestamp,

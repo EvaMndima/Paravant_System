@@ -10,8 +10,6 @@ Tests:
 """
 import math
 import pytest
-from datetime import datetime, timezone
-from sqlalchemy.exc import IntegrityError
 
 from src.data.models import Account, AccountStatus, RiskProfile, StrategyAssignment, AssignmentStatus
 
@@ -77,7 +75,7 @@ class TestAccountModel:
     def test_account_negative_balance_rejected(self, db_session):
         """Test that negative balance is rejected."""
         with pytest.raises(ValueError, match="balance_usdt must be non-negative"):
-            account = Account(
+            _account = Account(
                 name="Negative Test",
                 broker="binance",
                 balance_usdt=-100.0,
@@ -86,7 +84,7 @@ class TestAccountModel:
     def test_account_nan_balance_rejected(self, db_session):
         """Test that NaN balance is rejected."""
         with pytest.raises(ValueError, match="balance_usdt cannot be NaN"):
-            account = Account(
+            _account = Account(
                 name="NaN Test",
                 broker="binance",
                 balance_usdt=math.nan,
@@ -95,7 +93,7 @@ class TestAccountModel:
     def test_account_inf_equity_rejected(self, db_session):
         """Test that Infinity equity is rejected."""
         with pytest.raises(ValueError, match="equity_usdt cannot be Infinity"):
-            account = Account(
+            _account = Account(
                 name="Inf Test",
                 broker="binance",
                 equity_usdt=math.inf,

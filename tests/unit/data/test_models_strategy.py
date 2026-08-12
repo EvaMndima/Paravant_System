@@ -8,8 +8,7 @@ Tests:
 - add_lifecycle_event method
 - Timezone-aware timestamps
 """
-import pytest
-from datetime import datetime, timezone
+from datetime import datetime
 
 from src.data.models import Strategy, StrategyStatus, StrategyType
 

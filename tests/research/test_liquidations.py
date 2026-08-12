@@ -21,7 +21,6 @@ from typing import Any
 
 import pytest
 
-from research.data import liquidations as liq
 from research.data.liquidation_collector import LiquidationCollector
 from research.data.liquidations import (
     LiquidationEvent,

@@ -7,18 +7,13 @@ Tests previously uncovered methods:
 - Strategy assignments and signals
 - Order/Trade/Position filtering methods
 """
-import pytest
 from datetime import datetime, timezone, timedelta
-from decimal import Decimal
 
 from src.data.store import DataStore
 from src.data.models import (
-    Account, AccountStatus, RiskProfile,
-    Strategy, StrategyStatus, StrategyType,
     PnLRecord, EquitySnapshot,
     StrategyAssignment, AssignmentStatus,
-    Signal, SignalDirection,
-    AuditLog
+    Signal, SignalDirection
 )
 
 class TestDataStorePnL:

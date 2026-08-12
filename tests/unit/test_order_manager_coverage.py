@@ -18,7 +18,6 @@ import pytest
 from src.core.exceptions import OrderNotFoundError
 from src.core.execution.interface import Balance, ExecutionEngine, OrderResult
 from src.core.execution.order_manager import OrderManager
-from src.core.risk.types import OrderRequest
 from src.data.models.order import Order, OrderSide, OrderStatus, OrderType
 from src.data.store import DataStore
 

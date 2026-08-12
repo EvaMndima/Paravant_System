@@ -11,7 +11,6 @@ from __future__ import annotations
 
 import io
 
-import pytest
 
 from src.utils.geo_block import (
     GEO_BLOCK_EXIT_CODE,

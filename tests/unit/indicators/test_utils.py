@@ -137,7 +137,7 @@ class TestCrossover:
 
         # Index 3: fast=3, slow=3 (equal)
         # Index 4: fast=4, slow=3 (above) -> Crossover
-        assert utils.crossover(fast, slow) == True
+        assert utils.crossover(fast, slow) is True
 
     def test_no_crossover_false(self):
         """Test no crossover returns False."""
@@ -145,7 +145,7 @@ class TestCrossover:
         slow = np.array([6.0, 6.0, 6.0, 6.0, 6.0], dtype=np.float64)
 
         # Fast never crosses above slow
-        assert utils.crossover(fast, slow) == False
+        assert utils.crossover(fast, slow) is False
 
     def test_already_above_false(self):
         """Test already above returns False."""
@@ -153,7 +153,7 @@ class TestCrossover:
         slow = np.array([3.0, 3.0, 3.0, 3.0, 3.0], dtype=np.float64)
 
         # Fast already above slow
-        assert utils.crossover(fast, slow) == False
+        assert utils.crossover(fast, slow) is False
 
     def test_different_length_raises(self):
         """Test different array lengths raise ValueError."""
@@ -175,7 +175,7 @@ class TestCrossunder:
 
         # Index 3: fast=3, slow=3 (equal)
         # Index 4: fast=2, slow=3 (below) -> Crossunder
-        assert utils.crossunder(fast, slow) == True
+        assert utils.crossunder(fast, slow) is True
 
     def test_no_crossunder_false(self):
         """Test no crossunder returns False."""
@@ -183,7 +183,7 @@ class TestCrossunder:
         slow = np.array([3.0, 3.0, 3.0, 3.0, 3.0], dtype=np.float64)
 
         # Fast stays above slow
-        assert utils.crossunder(fast, slow) == False
+        assert utils.crossunder(fast, slow) is False
 
 
 class TestHighest:

@@ -7,9 +7,8 @@ Tests:
 - to_dict() method
 - Timezone-aware timestamp generation
 """
-import pytest
-from datetime import datetime, timezone
-from src.data.models.base import Base, generate_id, TimestampMixin
+from datetime import datetime
+from src.data.models.base import generate_id
 
 
 class TestGenerateId:
@@ -70,7 +69,7 @@ class TestTimestampMixin:
         db_session.add(account)
         db_session.commit()
 
-        original_updated_at = account.updated_at
+        _original_updated_at = account.updated_at
         time.sleep(0.1)  # Small delay
 
         account.name = "Updated Name"

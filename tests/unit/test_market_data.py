@@ -14,12 +14,11 @@ from __future__ import annotations
 
 import math
 from datetime import datetime, timedelta, timezone
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock
 
 import pytest
 
 from src.brokers.binance.client import BinanceClient
-from src.core.exceptions import MarketDataError, SymbolNotFoundError
 from src.data.market_data import OHLCV, OHLCVSeries, MarketDataFetcher
 
 

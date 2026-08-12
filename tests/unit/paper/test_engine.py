@@ -8,12 +8,10 @@ from unittest.mock import AsyncMock, MagicMock, Mock
 import pytest
 
 from src.core.exceptions import PaperTradingError
-from src.core.strategy.backtest.metrics import BacktestMetrics
 from src.core.strategy.backtest.portfolio import OpenPosition
-from src.core.strategy.backtest.types import BacktestConfig
 from src.core.strategy.factory import SignalGeneratorFactory
 from src.core.strategy.paper.engine import PaperTradingEngine
-from src.core.strategy.paper.types import PaperTradingMode, PaperTradingStatus
+from src.core.strategy.paper.types import PaperTradingMode
 from src.data.market_data import OHLCV, OHLCVSeries
 from src.core.strategy.signals import TradingSignal
 from src.data.models import Strategy, StrategyStatus

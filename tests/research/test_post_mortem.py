@@ -33,7 +33,7 @@ def test_macd_pb_post_mortem_content() -> None:
     assert pm.lifecycle_summary.cumulative_live_trades == 0  # never live
     assert "1.97" in pm.causal_analysis and "0.76" in pm.causal_analysis
     # The single-regime concentration + promotion-rigor lessons are present.
-    cats = {l.category for l in pm.lessons}
+    cats = {lesson.category for lesson in pm.lessons}
     assert {"REGIME_FIT", "PROMOTION_RIGOR"} <= cats
     # VBB is flagged as the most-similar active strategy to monitor next.
     sims = {s.strategy_id for s in pm.similar_active_strategies}

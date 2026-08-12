@@ -7,7 +7,6 @@ Phase 4B: Position Tracking & Execution Quality
 """
 from __future__ import annotations
 
-import asyncio
 from datetime import datetime, timezone
 from unittest.mock import MagicMock
 
@@ -254,14 +253,14 @@ class TestPositionLifecycle:
             symbol="BTCUSDT", side=OrderSide.BUY,
             quantity=0.1, price=45000.0, commission=1.0,
         )
-        btc_pos = await tracker.process_fill(btc_trade)
+        _btc_pos = await tracker.process_fill(btc_trade)
 
         # Open ETH LONG
         eth_trade = _make_trade_mock(
             symbol="ETHUSDT", side=OrderSide.BUY,
             quantity=1.0, price=2500.0, commission=0.5,
         )
-        eth_pos = await tracker.process_fill(eth_trade)
+        _eth_pos = await tracker.process_fill(eth_trade)
 
         assert len(tracker._positions) == 2
         assert "BTCUSDT" in tracker._positions

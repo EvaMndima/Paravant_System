@@ -11,7 +11,6 @@ from datetime import datetime, timedelta, timezone
 import pytest
 
 from research.data import btc_reference
-from research.data.btc_reference import BtcThrustSeries
 from src.data.market_data import OHLCV, OHLCVSeries
 
 _UTC = timezone.utc

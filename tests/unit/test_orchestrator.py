@@ -19,11 +19,10 @@ Decision: DEC-2026-02-12-012 - Injectable datetime for testing
 """
 import asyncio
 from datetime import datetime, timedelta, timezone
-from unittest.mock import AsyncMock, MagicMock, Mock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from src.core.alerting.manager import AlertManager
 from src.core.orchestrator import (
     DegradationManager,
     DegradationMode,
@@ -31,7 +30,6 @@ from src.core.orchestrator import (
     HealthChecker,
     Orchestrator,
     OrchestratorMetrics,
-    PendingEntry,
     StartupChecklist,
     SystemStatus,
 )
@@ -618,7 +616,7 @@ class TestDegradationManager:
         """Healthy status triggers recovery to NORMAL."""
         manager = DegradationManager(triggers)
 
-        from src.core.orchestrator import CheckStatus, SystemHealth
+        from src.core.orchestrator import SystemHealth
 
         # Enter degraded mode first
         unhealthy = SystemHealth(

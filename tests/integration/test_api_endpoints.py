@@ -8,8 +8,6 @@ Tests:
 - CORS configuration
 - Global exception handler
 """
-import pytest
-from fastapi.testclient import TestClient
 
 
 class TestHealthEndpoint:

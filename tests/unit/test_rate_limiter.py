@@ -20,7 +20,6 @@ import pytest
 from src.brokers.binance.rate_limiter import (
     PRIORITY_ORDER,
     RATE_LIMIT_THRESHOLDS,
-    PriorityLevel,
     RateLimiter,
     TokenBucket,
 )

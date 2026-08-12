@@ -8,25 +8,24 @@ Decision: DEC-2026-02-08-008 - Structured logging
 """
 from __future__ import annotations
 
-import asyncio
 import json
 import os
 from datetime import date, datetime, timedelta, timezone
 from typing import Any
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine, event
-from sqlalchemy.orm import Session, sessionmaker
+from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from src.data.models import (
     Account, AccountStatus, AuditLog, Base, EquitySnapshot,
     Order, OrderSide, OrderStatus, OrderType, PnLRecord,
     Position, PositionSide, PositionStatus, RiskProfile,
-    Strategy, StrategyAssignment, StrategyStatus, StrategyType,
-    SystemState, Trade,
+    Strategy, StrategyStatus, StrategyType,
+    Trade,
 )
 from src.data.store import DataStore
 

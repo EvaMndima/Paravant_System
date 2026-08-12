@@ -1,0 +1,186 @@
+name: CI
+
+on:
+  push:
+    branches: [master, main]
+  pull_request:
+  workflow_dispatch:
+
+# Cancel superseded runs on the same ref.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # Never let a runner inherit or invent live-trading configuration.
+  # tests/conftest.py strips these per-test as well; this is defence in depth.
+  LIVE_TRADING_ENABLED: "false"
+  BINANCE_TESTNET: "true"
+  ENVIRONMENT: "development"
+
+jobs:
+  lint:
+    name: Lint (ruff)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - run: pip install -r requirements-dev.txt
+      - name: ruff check
+        run: ruff check src/ research/ scripts/ tests/
+
+  typecheck:
+    name: Type check (mypy)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - run: pip install -r requirements.txt -r requirements-dev.txt types-psutil
+      - name: mypy
+        # pyproject declares disallow_untyped_defs = true. This job is what
+        # makes that declaration true rather than aspirational.
+        run: mypy src/
+
+  test:
+    name: Tests (py${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # 3.11 matches the Dockerfile and .python-version, so it is the
+        # production-parity leg. The others catch forward incompatibility --
+        # local development currently runs 3.14, well ahead of deployment.
+        python-version: ["3.11", "3.12", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+      - run: pip install -r requirements.txt -r requirements-dev.txt
+      - name: pytest
+        # Network-dependent tests skip unless PARAVANT_RUN_NETWORK_TESTS=1
+        # (DEC-2026-08-11-004), so a clean runner produces 0 errors.
+        run: pytest tests/ -q --tb=short
+
+  coverage:
+    name: Coverage floor
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - run: pip install -r requirements.txt -r requirements-dev.txt
+      - name: pytest --cov
+        # Floor set just below the measured 63% so ordinary variation does not
+        # break the build. Ratchet it up; never down.
+        run: |
+          pytest tests/unit tests/research -q --tb=no \
+            --cov=src --cov=research \
+            --cov-report=term-missing:skip-covered \
+            --cov-fail-under=62
+
+  quickstart:
+    name: Quickstart (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      # This job exists because of a real defect. scripts/init_db.py printed a
+      # non-ASCII character on success; on a Windows console (cp1252) that
+      # raised UnicodeEncodeError, the bare `except` then raised again while
+      # reporting it, and the documented first command of the README exited 1
+      # with a traceback. 1,900 passing tests said nothing, because tests import
+      # modules and call functions -- nobody had run the entrypoint.
+      #
+      # The Windows leg is not optional. The bug only manifested there.
+      - name: Install as a new contributor would
+        run: pip install -r requirements.txt
+
+      - name: cp .env.example .env
+        run: cp .env.example .env
+
+      - name: Initialise the database
+        run: python scripts/init_db.py
+
+      - name: Verify the schema
+        run: python scripts/verify_db.py
+
+      - name: Boot the API and check /health
+        run: |
+          python -m uvicorn src.api.main:app --host 127.0.0.1 --port 8000 &
+          SERVER_PID=$!
+          trap 'kill $SERVER_PID 2>/dev/null || true' EXIT
+          python - <<'PY'
+          import sys, time, urllib.request, urllib.error
+          for attempt in range(40):
+              try:
+                  with urllib.request.urlopen("http://127.0.0.1:8000/health", timeout=2) as r:
+                      body = r.read().decode()
+                      print(f"/health -> {r.status} {body[:200]}")
+                      sys.exit(0 if r.status == 200 else 1)
+              except (urllib.error.URLError, ConnectionError, OSError):
+                  time.sleep(0.5)
+          print("API did not become healthy within 20s", file=sys.stderr)
+          sys.exit(1)
+          PY
+
+  frontend:
+    name: Frontend build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci
+      - name: Type check and build
+        # `npm run build` runs `tsc -b` before vite, so this is a real type gate
+        # for the frontend as well as a build check.
+        run: npm run build
+
+  frontend-lint:
+    # ADVISORY, NOT A GATE. eslint currently reports 84 errors, mostly
+    # react-hooks rules. Marking this required today would either block every
+    # PR or force a blanket disable, and a green check that means nothing is
+    # worse than an honest amber one. Promote to required once the count is 0.
+    # Tracked in docs/PRODUCTION_READINESS_ASSESSMENT.md Phase 3.
+    name: Frontend lint (advisory)
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci
+      - run: npx eslint .

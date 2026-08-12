@@ -201,7 +201,7 @@ class TestExceptionCodes:
             ConfigurationError(),
         ]
 
-        codes = [exc.code for exc in instances]
+        _codes = [exc.code for exc in instances]
         # Check for uniqueness (excluding base class codes that are intentionally reused)
         leaf_codes = [
             exc.code for exc in instances

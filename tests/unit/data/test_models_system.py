@@ -14,9 +14,7 @@ Tests for AuditLog:
 - JSON details field
 - Default ID generation
 """
-import pytest
 from datetime import datetime, timezone, timedelta
-from sqlalchemy.exc import IntegrityError
 
 from src.data.models import SystemState, AuditLog
 from src.data.models.base import generate_id
@@ -32,8 +30,8 @@ class TestSystemStateModel:
         db_session.commit()
 
         assert state.id == "system_state_singleton"
-        assert state.kill_switch_active == False
-        assert state.trading_enabled == True
+        assert state.kill_switch_active is False
+        assert state.trading_enabled is True
         assert state.health_status == "unknown"
 
     def test_system_state_default_values(self, db_session):
@@ -42,8 +40,8 @@ class TestSystemStateModel:
         db_session.add(state)
         db_session.commit()
 
-        assert state.kill_switch_active == False
-        assert state.trading_enabled == True
+        assert state.kill_switch_active is False
+        assert state.trading_enabled is True
         assert state.circuit_breakers == {}
         assert state.started_at is not None
         assert state.updated_at is not None
@@ -58,7 +56,7 @@ class TestSystemStateModel:
         db_session.add(state)
         db_session.commit()
 
-        assert state.kill_switch_active == True
+        assert state.kill_switch_active is True
         assert state.kill_switch_reason == "Daily loss limit exceeded"
         assert state.kill_switch_activated_at is not None
 
@@ -72,7 +70,7 @@ class TestSystemStateModel:
         db_session.commit()
 
         # Both conditions OK -> safe to trade
-        assert state.is_safe_to_trade == True
+        assert state.is_safe_to_trade is True
 
     def test_system_state_is_safe_to_trade_kill_switch_on(self, db_session):
         """Test is_safe_to_trade property when kill switch is active."""
@@ -84,7 +82,7 @@ class TestSystemStateModel:
         db_session.commit()
 
         # Kill switch active -> NOT safe to trade
-        assert state.is_safe_to_trade == False
+        assert state.is_safe_to_trade is False
 
     def test_system_state_is_safe_to_trade_trading_disabled(self, db_session):
         """Test is_safe_to_trade property when trading is disabled."""
@@ -96,7 +94,7 @@ class TestSystemStateModel:
         db_session.commit()
 
         # Trading disabled -> NOT safe to trade
-        assert state.is_safe_to_trade == False
+        assert state.is_safe_to_trade is False
 
     def test_system_state_is_safe_to_trade_both_off(self, db_session):
         """Test is_safe_to_trade property when both conditions prevent trading."""
@@ -108,7 +106,7 @@ class TestSystemStateModel:
         db_session.commit()
 
         # Both prevent trading -> NOT safe to trade
-        assert state.is_safe_to_trade == False
+        assert state.is_safe_to_trade is False
 
     def test_system_state_circuit_breakers_mutable_default(self, db_session):
         """Test that circuit_breakers dict is not shared between instances."""
@@ -145,7 +143,7 @@ class TestSystemStateModel:
         db_session.add(state)
         db_session.commit()
 
-        assert state.any_circuit_breaker_active == False
+        assert state.any_circuit_breaker_active is False
 
     def test_system_state_any_circuit_breaker_active_one_active(self, db_session):
         """Test any_circuit_breaker_active property with one breaker active."""
@@ -158,7 +156,7 @@ class TestSystemStateModel:
         db_session.add(state)
         db_session.commit()
 
-        assert state.any_circuit_breaker_active == True
+        assert state.any_circuit_breaker_active is True
 
     def test_system_state_any_circuit_breaker_active_empty_dict(self, db_session):
         """Test any_circuit_breaker_active property with empty breakers dict."""
@@ -167,7 +165,7 @@ class TestSystemStateModel:
         db_session.add(state)
         db_session.commit()
 
-        assert state.any_circuit_breaker_active == False
+        assert state.any_circuit_breaker_active is False
 
     def test_system_state_health_status_update(self, db_session):
         """Test updating health status."""
@@ -175,7 +173,7 @@ class TestSystemStateModel:
         db_session.add(state)
         db_session.commit()
 
-        initial_updated_at = state.updated_at
+        _initial_updated_at = state.updated_at
 
         # Update health status
         state.health_status = "healthy"
@@ -217,8 +215,8 @@ class TestSystemStateModel:
 
         state_dict = state.to_dict()
         assert state_dict["id"] == "system_state_singleton"
-        assert state_dict["kill_switch_active"] == True
-        assert state_dict["trading_enabled"] == False
+        assert state_dict["kill_switch_active"] is True
+        assert state_dict["trading_enabled"] is False
         assert state_dict["health_status"] == "degraded"
         assert "circuit_breakers" in state_dict
 

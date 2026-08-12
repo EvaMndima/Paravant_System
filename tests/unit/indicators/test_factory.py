@@ -53,7 +53,7 @@ class TestIndicatorFactory:
         rsi2 = factory.create("RSI")
         rsi3 = factory.create("RsI")
 
-        assert type(rsi1) == type(rsi2) == type(rsi3)
+        assert type(rsi1) is type(rsi2) is type(rsi3)
 
     def test_create_with_alias(self):
         """Test creating indicator with alias."""
