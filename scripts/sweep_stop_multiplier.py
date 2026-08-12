@@ -146,7 +146,7 @@ def print_sweep_table(
     """Print sweep results sorted by Sharpe ratio."""
     print(f"\n{'='*85}")
     print(f"  {strategy_name} — Stop Multiplier Sweep  (120d, SUPERVISED thresholds)")
-    print(f"  EP Chan: trail_distance = atr_stop_multiplier x ATR at entry")
+    print("  EP Chan: trail_distance = atr_stop_multiplier x ATR at entry")
     print(f"{'='*85}")
     header = (
         f"{'Mult':>6} {'Symbol':<9} {'Trades':>7} {'WR%':>6} "
@@ -170,7 +170,7 @@ def print_sweep_table(
         )
 
     # Summary: best Sharpe per symbol
-    print(f"\n  Best Sharpe per symbol:")
+    print("\n  Best Sharpe per symbol:")
     symbols = sorted({r["symbol"] for r in results if r.get("ok")})
     for sym in symbols:
         sym_rows = [r for r in results if r.get("ok") and r["symbol"] == sym]
@@ -187,7 +187,7 @@ def print_sweep_table(
 
 async def main() -> None:
     """Fetch data once, run all sweep combinations, print results."""
-    print(f"\nPARAVANT — ATR Stop-Multiplier Sweep (EP Chan framework)")
+    print("\nPARAVANT — ATR Stop-Multiplier Sweep (EP Chan framework)")
     print(f"Date: {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M UTC')}")
     print(f"Period: {DAYS} days  |  Timeframe: 1H  |  Capital: $10,000\n")
 

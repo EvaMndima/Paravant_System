@@ -18,7 +18,7 @@ from __future__ import annotations
 import enum
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 from src.utils.logging import get_logger
 
@@ -465,8 +465,8 @@ class SMSChannel:
         Args:
             alert: Alert to send.
         """
-        # Truncate message for SMS (160 char limit)
-        message = f"{alert.level.value.upper()}: {alert.title} - {alert.message[:100]}"
+        # No message is built: SMS sending is a stub for MVP, so truncating
+        # to the 160-char limit would be dead work.
         logger.info(
             "sms_alert_stub",
             alert_id=alert.alert_id,

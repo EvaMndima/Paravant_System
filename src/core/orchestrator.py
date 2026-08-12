@@ -25,7 +25,6 @@ from __future__ import annotations
 import asyncio
 import enum
 import heapq
-import math
 import shutil
 import signal
 import time
@@ -1073,8 +1072,6 @@ class DegradationManager:
         Returns:
             Current degradation mode (may have changed).
         """
-        previous_mode = self._mode
-
         # Check for READ_ONLY trigger (unhealthy status)
         if health.status == "unhealthy":
             if self._mode != DegradationMode.READ_ONLY:

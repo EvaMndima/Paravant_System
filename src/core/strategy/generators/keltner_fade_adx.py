@@ -129,8 +129,6 @@ class KeltnerFadeAdxGenerator(SignalGenerator):
                 return None
 
             price = float(series.closes[last_idx])
-            prev_high = float(series.highs[prev_idx])
-            prev_low = float(series.lows[prev_idx])
 
             # Validate critical values
             kc_upper = kc.upper[last_idx]

@@ -413,7 +413,7 @@ async def run(strategies: list[str], symbols_override: list[str] | None,
 
     # Also fetch BTC daily so we can classify each window's macro regime.
     # Decision: DEC-2026-05-27-008 — BTC daily is the universal regime anchor.
-    print(f"\nFetching BTC daily for regime classification ...")
+    print("\nFetching BTC daily for regime classification ...")
     try:
         btc_daily = await fetcher.fetch_historical_ohlcv(
             symbol="BTCUSDT",

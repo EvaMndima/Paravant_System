@@ -85,7 +85,7 @@ async def run(start: datetime, end: datetime, symbols: list[str]) -> None:
     days = (end - start).days
     print(f"\nWindow: {start.date()} -> {end.date()} ({days} days)")
     print(f"Symbols: {', '.join(symbols)}")
-    print(f"Strategy: BTF (bear_trend_follower) with stop_mult=2.5x ATR")
+    print("Strategy: BTF (bear_trend_follower) with stop_mult=2.5x ATR")
     print()
 
     results: list[dict] = []

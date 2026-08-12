@@ -674,7 +674,7 @@ class StrategyEngine:
         # Build human-readable reason
         condition_texts = [c["detail"] for c in conditions]
         reason = (
-            f"Auto-detected underperformance (PRD §3.5): "
+            "Auto-detected underperformance (PRD §3.5): "
             + "; ".join(condition_texts)
         )
 

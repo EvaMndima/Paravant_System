@@ -7,15 +7,13 @@ Checks for:
 """
 import sys
 import inspect
-from sqlalchemy.orm.base import Mapped
 from sqlalchemy.sql.schema import Column
-from sqlalchemy.types import JSON
 
 # Add src to path
 sys.path.append(".")
 
 try:
-    from src.data.models.base import Base
+    from src.data.models.base import Base  # noqa: F401 - import is the availability probe
     from src.data.models.account import Account
     from src.data.models.strategy import Strategy
     from src.data.models.order import Order
@@ -34,7 +32,8 @@ def check_mutable_defaults(model_class):
     # Inspect annotations/columns
     # This is a heuristic check
     for name, member in inspect.getmembers(model_class):
-        if name.startswith("__"): continue
+        if name.startswith("__"):
+            continue
         
         # Check SQLAlchemy Columns defined directly
         if isinstance(member, Column):

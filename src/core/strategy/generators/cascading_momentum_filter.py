@@ -193,7 +193,6 @@ class CascadingMomentumFilterGenerator(SignalGenerator):
             if len(valid_hist) < 2:
                 return None
             hist_curr = float(valid_hist[-1])
-            hist_prev = float(valid_hist[-2])
 
             last_idx = len(series) - 1
             price = float(series.closes[last_idx])

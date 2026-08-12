@@ -274,7 +274,7 @@ class HealthChecker:
                 name=name,
                 status=HealthStatus.UNKNOWN,
                 latency_ms=latency_ms,
-                message=f"Health check exceeded 10s timeout",
+                message="Health check exceeded 10s timeout",
             )
         except Exception as exc:
             latency_ms = (time.monotonic() - start_time) * 1000

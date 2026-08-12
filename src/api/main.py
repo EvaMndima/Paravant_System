@@ -12,6 +12,21 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
+from src.api.middleware.request_logger import RequestLoggerMiddleware
+from src.api.routes.accounts import router as accounts_router
+from src.api.routes.backtest import router as backtest_router
+from src.api.routes.dashboard import router as dashboard_router
+from src.api.routes.events import router as events_router
+from src.api.routes.execution import router as execution_router
+from src.api.routes.orders import router as orders_router
+from src.api.routes.paper_trading import router as paper_trading_router
+from src.api.routes.pnl import router as pnl_router
+from src.api.routes.positions import router as positions_router
+from src.api.routes.regime import router as regime_router
+from src.api.routes.risk import router as risk_router
+from src.api.routes.strategies import router as strategies_router
+from src.api.routes.system import router as system_router
+
 
 # Environment configuration
 ENVIRONMENT = os.getenv("ENVIRONMENT", "development")
@@ -72,8 +87,9 @@ app.add_middleware(
     allow_headers=["Content-Type", "Authorization", "X-Request-ID"],  # Explicit headers
 )
 
-# Request logging middleware (after CORS so CORS headers are already set)
-from src.api.middleware.request_logger import RequestLoggerMiddleware
+# Request logging middleware. Added after CORS so CORS headers are already set
+# when this middleware sees the response -- ordering of add_middleware calls is
+# what matters here, not import position.
 app.add_middleware(RequestLoggerMiddleware)
 
 
@@ -209,7 +225,6 @@ async def detailed_health_check() -> JSONResponse:
     try:
         from src.core.event_bus import get_event_bus
         bus = get_event_bus()
-        import asyncio
         sub_count = await bus.get_subscriber_count()
         components["event_bus"] = {"status": "healthy", "subscribers": sub_count}
     except RuntimeError:
@@ -349,21 +364,8 @@ async def shutdown_event() -> None:
         logger.error("database_shutdown_error", error=str(e))
 
 
-# Register route modules
-from src.api.routes.risk import router as risk_router
-from src.api.routes.orders import router as orders_router
-from src.api.routes.positions import router as positions_router
-from src.api.routes.execution import router as execution_router
-from src.api.routes.strategies import router as strategies_router
-from src.api.routes.backtest import router as backtest_router
-from src.api.routes.paper_trading import router as paper_trading_router
-from src.api.routes.system import router as system_router
-from src.api.routes.dashboard import router as dashboard_router
-from src.api.routes.accounts import router as accounts_router
-from src.api.routes.pnl import router as pnl_router
-from src.api.routes.events import router as events_router
-from src.api.routes.regime import router as regime_router
-
+# Register route modules. Imports live at the top of the file; only the
+# registration order is meaningful here.
 app.include_router(risk_router, prefix="/api/v1/risk", tags=["risk"])
 app.include_router(orders_router, prefix="/api/v1/orders", tags=["orders"])
 app.include_router(positions_router, prefix="/api/v1/positions", tags=["positions"])

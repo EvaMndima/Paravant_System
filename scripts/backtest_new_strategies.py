@@ -859,7 +859,7 @@ async def main() -> None:
 
     days = args.days
 
-    print(f"\nPARAVANT Strategy Universe Backtest Runner")
+    print("\nPARAVANT Strategy Universe Backtest Runner")
     print(f"Date: {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M UTC')}")
     print(f"Data: {days} days, Symbols: {', '.join(symbols)}")
     print(f"Strategies: {len(templates)} templates ({args.group})")

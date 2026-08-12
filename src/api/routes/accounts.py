@@ -16,7 +16,7 @@ from typing import Any
 from fastapi import APIRouter, HTTPException, Query, status
 from pydantic import BaseModel, Field
 
-from src.data.models.account import AccountStatus, RiskProfile
+from src.data.models.account import RiskProfile
 from src.utils.logging import get_logger
 
 logger = get_logger(__name__)

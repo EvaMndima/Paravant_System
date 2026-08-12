@@ -71,8 +71,6 @@ from research.backtest.cost_model import (
 from research.biographies.schema import (
     ClassificationHistoryEntry,
     CostComponentSource,
-    EffectiveKDerivation,
-    HardFloorStatus,
     KSensitivityCell,
     PerSymbolBreakdown,
     StatisticalValidationEntry,

@@ -18,7 +18,7 @@ from src.core.exceptions import AlertDeliveryError
 from src.utils.logging import get_logger
 
 if TYPE_CHECKING:
-    from src.core.alerting.manager import Alert, AlertChannel
+    from src.core.alerting.manager import Alert
 
 logger = get_logger(__name__)
 

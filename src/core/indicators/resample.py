@@ -12,8 +12,7 @@ Decision: DEC-2026-02-08-006 - Type hints 100% coverage
 from __future__ import annotations
 
 from collections import defaultdict
-from datetime import datetime, timezone
-from typing import Any
+from datetime import datetime
 
 from src.data.market_data import OHLCV, OHLCVSeries
 from src.utils.logging import get_logger

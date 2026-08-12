@@ -19,7 +19,7 @@ from __future__ import annotations
 import asyncio
 import json
 from datetime import datetime, timezone
-from typing import Any, AsyncGenerator
+from typing import AsyncGenerator
 
 from fastapi import APIRouter, Request
 from starlette.responses import StreamingResponse

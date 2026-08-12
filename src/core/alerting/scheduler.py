@@ -248,7 +248,6 @@ class AlertScheduler:
 
         # Trade count for today (orders filled since midnight UTC)
         from src.data.models.order import OrderStatus
-        from datetime import timezone as tz
         midnight = now.replace(hour=0, minute=0, second=0, microsecond=0)
         filled_today = self._data_store.get_orders_by_status(OrderStatus.FILLED)
         trades_today = sum(

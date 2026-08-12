@@ -10,7 +10,6 @@ Decision: DEC-2026-02-08-008 - Structured logging
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from typing import Any
 
 from fastapi import APIRouter, HTTPException, status
 from pydantic import BaseModel, Field

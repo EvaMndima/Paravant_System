@@ -177,18 +177,18 @@ class HeikinAshiTrendPulseGenerator(SignalGenerator):
             for i in range(1, n):
                 o = float(opens_arr[i])
                 h = float(highs_arr[i])
-                l = float(lows_arr[i])
+                lo = float(lows_arr[i])
                 c = float(closes_arr[i])
-                if np.isnan(o) or np.isnan(h) or np.isnan(l) or np.isnan(c):
+                if np.isnan(o) or np.isnan(h) or np.isnan(lo) or np.isnan(c):
                     ha_open[i]  = ha_open[i - 1]
                     ha_close[i] = ha_close[i - 1]
                     ha_high[i]  = ha_high[i - 1]
                     ha_low[i]   = ha_low[i - 1]
                     continue
-                ha_close[i] = (o + h + l + c) / 4.0
+                ha_close[i] = (o + h + lo + c) / 4.0
                 ha_open[i]  = (ha_open[i - 1] + ha_close[i - 1]) / 2.0
                 ha_high[i]  = max(h, ha_open[i], ha_close[i])
-                ha_low[i]   = min(l, ha_open[i], ha_close[i])
+                ha_low[i]   = min(lo, ha_open[i], ha_close[i])
 
             last_idx = n - 1
 

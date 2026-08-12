@@ -573,9 +573,9 @@ def run_phase2(
         return
 
     print(f"\n{'='*82}")
-    print(f"  PHASE 2 — 2D Joint Surface (Stop x TP)")
+    print("  PHASE 2 — 2D Joint Surface (Stop x TP)")
     print(f"  Qualifying pairs (WFO PF >= {PHASE2_QUALIFY_PF}): "
-          f"{', '.join(f'{l}/{s}' for l,s in qualifying)}")
+          f"{', '.join(f'{label}/{symbol}' for label, symbol in qualifying)}")
     print(f"{'='*82}")
 
     # W1 IS and OOS windows for surface analysis
@@ -708,7 +708,7 @@ async def main(
     only_symbol: str | None,
 ) -> None:
     """Fetch data and run selected sweep phases."""
-    print(f"\nPARAVANT — Take-Profit Walk-Forward Optimizer")
+    print("\nPARAVANT — Take-Profit Walk-Forward Optimizer")
     print(f"Date: {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M UTC')}")
     print(f"WFO: {len(WFO_WINDOWS)} windows ({IS_DAYS}d IS + {OOS_DAYS}d OOS each)")
     print(f"Fetching {TOTAL_DAYS}d of 1H data from Binance mainnet")

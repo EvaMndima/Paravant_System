@@ -189,7 +189,7 @@ def print_table(results: list[dict], title: str, param_cols: list[str]) -> None:
 
     # Best per symbol summary
     all_ok = [r for r in results if r.get("ok")]
-    print(f"\n  Best Sharpe per symbol (top 3):")
+    print("\n  Best Sharpe per symbol (top 3):")
     for sym in SYMBOLS:
         sym_rows = sorted(
             [r for r in all_ok if r["symbol"] == sym],
@@ -210,7 +210,7 @@ def print_table(results: list[dict], title: str, param_cols: list[str]) -> None:
 
 async def main() -> None:
     """Fetch data, run MACD_PB and EMA_RSI sweeps, print results."""
-    print(f"\nPARAVANT Bull Regime Parameter Sweep")
+    print("\nPARAVANT Bull Regime Parameter Sweep")
     print(f"Date: {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M UTC')}")
     print(f"Data: {DAYS} days  |  Symbols: {', '.join(SYMBOLS)}\n")
 
@@ -320,7 +320,7 @@ async def main() -> None:
 
     if passed_macd:
         best_macd = max(passed_macd, key=lambda x: x["sharpe"])
-        print(f"MACD_PB best passing config:")
+        print("MACD_PB best passing config:")
         print(
             f"  tol={best_macd['tol']:.1f}  stop={best_macd['stop']:.1f}  "
             f"{best_macd['symbol']}  "
@@ -341,7 +341,7 @@ async def main() -> None:
 
     if passed_ema:
         best_ema = max(passed_ema, key=lambda x: x["sharpe"])
-        print(f"EMA_RSI best passing config:")
+        print("EMA_RSI best passing config:")
         print(
             f"  ema={best_ema['fast']}/{best_ema['slow']}  "
             f"rsi_buy={best_ema['rsi_buy']:.0f}  "

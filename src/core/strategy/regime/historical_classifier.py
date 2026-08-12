@@ -44,7 +44,6 @@ import numpy as np
 
 from src.core.indicators.adx import ADX
 from src.core.indicators.ema import EMA
-from src.core.strategy.regime.detector import RegimeState
 from src.data.market_data import OHLCVSeries
 from src.utils.logging import get_logger
 
@@ -200,7 +199,6 @@ class HistoricalRegimeClassifier:
             ef = ema_fast_vals[i]
             es = ema_slow_vals[i]
             adx_val = adx_vals[i]
-            close = closes[i]
 
             # UNKNOWN: indicators not warmed up
             if (

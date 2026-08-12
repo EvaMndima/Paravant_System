@@ -14,7 +14,6 @@ from typing import Any
 from fastapi import APIRouter, HTTPException, status
 from pydantic import BaseModel, Field
 
-from src.core.config.templates import TemplateManager
 from src.core.exceptions import (
     InvalidParametersError,
     InvalidStatusTransitionError,

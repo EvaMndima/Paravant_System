@@ -9,8 +9,7 @@ from src.core.risk.types import OrderRequest, PortfolioState
 from src.core.config.risk_profiles import RiskProfileConfig, RegimeAdjustments
 from src.core.risk.checks import (
     check_position_size,
-    check_concentration,
-    check_max_positions
+    check_concentration
 )
 from src.core.risk.sizing import (
     calculate_fixed_risk_size,

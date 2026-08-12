@@ -57,7 +57,6 @@ from src.brokers.binance.execution import BinanceExecutionAdapter
 from src.brokers.binance.rate_limiter import RateLimiter
 from src.core.alerting.channels.telegram import TelegramChannel
 from src.core.alerting.manager import Alert, AlertLevel
-from src.core.strategy.backtest.types import BacktestConfig
 from src.core.strategy.factory import SignalGeneratorFactory
 from src.core.risk.types import OrderRequest
 from src.core.strategy.regime.detector import RegimeDetector, RegimeState

@@ -228,7 +228,7 @@ def print_table(results: list[dict], title: str, param_cols: list[str]) -> None:
     print(f"\n  PASSED: {len(passed)}/{len(ok)} runs")
 
     # Best per symbol
-    print(f"\n  Best Sharpe per symbol (top 3):")
+    print("\n  Best Sharpe per symbol (top 3):")
     for sym in SYMBOLS:
         sym_rows = sorted(
             [r for r in ok if r["symbol"] == sym],
@@ -354,7 +354,7 @@ async def main() -> None:
     )
     args = parser.parse_args()
 
-    print(f"\nPARAVANT New Strategies Parameter Sweep")
+    print("\nPARAVANT New Strategies Parameter Sweep")
     print(f"Date: {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M UTC')}")
     print(f"Data: {DAYS} days  |  Symbols: {', '.join(SYMBOLS)}\n")
 
