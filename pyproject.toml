@@ -106,3 +106,10 @@ python_version = "3.11"
 warn_return_any = true
 warn_unused_configs = true
 disallow_untyped_defs = true
+
+# python-binance ships no type stubs and no py.typed marker. The wrapper in
+# src/brokers/binance/client.py is fully annotated at its own boundary, so the
+# untyped third-party surface stops there rather than leaking into src/.
+[[tool.mypy.overrides]]
+module = ["binance.*"]
+ignore_missing_imports = true

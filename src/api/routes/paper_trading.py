@@ -8,6 +8,7 @@ Decision: DEC-2026-02-08-008 - Structured logging
 """
 from __future__ import annotations
 
+from collections.abc import Awaitable, Callable
 from typing import Any
 
 from fastapi import APIRouter, HTTPException, status
@@ -120,7 +121,7 @@ def _get_manager() -> PaperTradingManager:
     return _manager
 
 
-def _create_default_series_provider():
+def _create_default_series_provider() -> Callable[[str, int], Awaitable[OHLCVSeries | None]]:
     """Create a default series provider using MarketDataFetcher."""
     fetcher = MarketDataFetcher()
 

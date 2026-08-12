@@ -190,7 +190,13 @@ class KeltnerChannel(Indicator):
         )
 
     @staticmethod
-    def required_periods(ema_period: int, atr_period: int) -> int:
+    # Not a Liskov override: required_periods is never invoked through a
+    # base-typed reference. It is a per-class helper with a single-period
+    # default on Indicator; this indicator genuinely takes different period
+    # parameters. See DEC-2026-08-11-008.
+    def required_periods(  # type: ignore[override]
+        ema_period: int, atr_period: int
+    ) -> int:
         """Return minimum bars needed before first valid Keltner value.
 
         Both EMA and ATR must be valid. ATR needs period+1 bars.

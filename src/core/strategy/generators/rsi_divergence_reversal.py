@@ -153,7 +153,7 @@ class RsiDivergenceReversalGenerator(SignalGenerator):
                 if left_ok and right_ok:
                     swing_highs.append((i, float(highs[i]), float(rsi_full[i])))
 
-            indicators = {
+            indicators: dict[str, float | str] = {
                 "rsi": rsi_curr,
                 "atr": atr_curr,
                 "swing_lows_found": len(swing_lows),

@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import math
 from datetime import date, datetime, timedelta, timezone
-from typing import Any
+from typing import Any, cast
 
 from fastapi import APIRouter, HTTPException, Query, status
 from pydantic import BaseModel, Field
@@ -304,7 +304,9 @@ async def get_dashboard_summary() -> DashboardSummaryResponse:
     """
     cached = _cache.get("dashboard_summary")
     if cached is not None:
-        return cached
+        # TTLCache is intentionally heterogeneous, so get() is Any.
+        # The key determines the type.
+        return cast(DashboardSummaryResponse, cached)
 
     store = get_store()
     now = datetime.now(timezone.utc)
@@ -444,7 +446,9 @@ async def get_equity_curve(
     cache_key = f"equity:{time_range}"
     cached = _cache.get(cache_key)
     if cached is not None:
-        return cached
+        # TTLCache is intentionally heterogeneous, so get() is Any.
+        # The key determines the type.
+        return cast(EquityCurveResponse, cached)
 
     store = get_store()
     accounts = store.get_active_accounts()
@@ -498,7 +502,9 @@ async def get_performance_metrics() -> PerformanceMetricsResponse:
     """
     cached = _cache.get("performance")
     if cached is not None:
-        return cached
+        # TTLCache is intentionally heterogeneous, so get() is Any.
+        # The key determines the type.
+        return cast(PerformanceMetricsResponse, cached)
 
     store = get_store()
     accounts = store.get_active_accounts()

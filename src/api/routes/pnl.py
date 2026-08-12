@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from collections import defaultdict
 from datetime import date, timedelta
-from typing import Any
+from typing import Any, cast
 
 from fastapi import APIRouter, HTTPException, Query, status
 from pydantic import BaseModel, Field
@@ -192,7 +192,9 @@ def _get_primary_account_id(store: Any) -> str:
             status_code=status.HTTP_404_NOT_FOUND,
             detail="No active account found. Create an account first.",
         )
-    return accounts[0].id
+    # get_store() is declared Any (injected at startup), so Account.id
+    # reads as Any here. The model declares Mapped[str].
+    return cast(str, accounts[0].id)
 
 
 # ---------------------------------------------------------------------------

@@ -2951,9 +2951,9 @@ parameters:
 
 **End of Decisions Log**
 
-**Total Decisions:** 104 active, 0 superseded, 5 locked (1 amended); DEC-2026-06-04-013 amended
+**Total Decisions:** 105 active, 0 superseded, 5 locked (1 amended); DEC-2026-06-04-013 amended
 **Last Updated:** 2026-08-11
-**Next Decision ID:** DEC-2026-08-11-008
+**Next Decision ID:** DEC-2026-08-11-009
 
 ## Phase 5 Decisions (Backtesting & Simulation)
 
@@ -3130,3 +3130,21 @@ parameters:
 - **Implemented By:** 12 files under `scripts/` and `tests/performance/`
 - **Affected Files:** `scripts/init_db.py`, `verify_db.py`, `run_all.py`, `run_live_trading.py`, `validation_report.py`, `health_check.py`, `audit_check.py`, `backtest_rolling.py`, `backtest_btf_may2026.py`, `sweep_tp_wfo.py`, `sweep_stop_multiplier.py`, `tests/performance/test_risk_performance.py`
 - **References:** Verified after the change: `python scripts/init_db.py` and `python scripts/verify_db.py` both exit 0 on a default Windows console.
+
+### DEC-2026-08-11-008: required_periods Is a Per-Class Helper, Not a Polymorphic Contract
+- **Decision:** `Indicator.required_periods` provides a single-period default. Indicators whose warmup depends on several period parameters (Ichimoku, Keltner, StochasticRSI) declare their own signature and carry a narrow `# type: ignore[override]` with a comment pointing here.
+- **Context:** mypy reported three `[override]` errors because those subclasses take different parameters from the base. `disallow_untyped_defs = true` is declared in `pyproject.toml` but was never enforced, so the divergence had gone unremarked.
+- **Rationale:**
+  - **It is not used polymorphically.** Every call site invokes it on a concrete class -- `ADX.required_periods(14)` in tests, `self.required_periods(self.ema_period, self.atr_period)` inside the subclass. No caller holds a base-typed reference and calls it, so no caller can be broken by the differing arity. Liskov is about substitutability that something actually relies on.
+  - **The parameters are genuinely different.** Ichimoku needs `senkou_b_period` and `displacement`; Keltner needs `ema_period` and `atr_period`; StochasticRSI needs four. Collapsing them to `*periods: int` would discard the names that make the calls readable, to satisfy a contract nothing consumes.
+  - **A narrow, explained suppression beats a false abstraction.** The alternative designs each cost more clarity than the ignore does.
+- **Alternatives Considered:**
+  - **Widen the base to `*periods: int`:** REJECTED - loses named parameters at every call site.
+  - **Remove `required_periods` from the base:** REJECTED - it is a documented part of the base API and `tests/unit/indicators/test_base.py` exercises it directly.
+  - **Add `**kwargs` to the base:** REJECTED - types nothing and hides real mistakes.
+  - **Blanket-disable the `override` error code:** REJECTED - would hide genuine Liskov violations elsewhere. The suppression is per-method and commented.
+- **Status:** ACTIVE
+- **Date Decided:** 2026-08-11
+- **Implemented By:** `src/core/indicators/ichimoku.py`, `keltner.py`, `stochastic_rsi.py`
+- **Affected Files:** the three above
+- **References:** `docs/PRODUCTION_READINESS_ASSESSMENT.md` plan item 2.7. With this, `mypy src/` reports no issues across 167 files, so `disallow_untyped_defs` is enforced in fact and not only declared.

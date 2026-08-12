@@ -142,7 +142,7 @@ class RsiBbMeanReversionGenerator(SignalGenerator):
             at_lower_bb = low <= lower_band
 
             regime = "bear" if is_bear else "bull"
-            indicators = {
+            indicators: dict[str, float | str] = {
                 "rsi": rsi_curr,
                 "bb_upper": upper_band,
                 "bb_middle": middle_band,

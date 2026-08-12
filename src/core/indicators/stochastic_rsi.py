@@ -252,7 +252,11 @@ class StochasticRSI(Indicator):
         )
 
     @staticmethod
-    def required_periods(
+    # Not a Liskov override: required_periods is never invoked through a
+    # base-typed reference. It is a per-class helper with a single-period
+    # default on Indicator; this indicator genuinely takes different period
+    # parameters. See DEC-2026-08-11-008.
+    def required_periods(  # type: ignore[override]
         rsi_period: int,
         stoch_period: int,
         k_smooth: int,

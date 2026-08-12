@@ -20,6 +20,7 @@ from __future__ import annotations
 import math
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
+from collections.abc import Iterator
 from typing import Any
 
 import numpy as np
@@ -231,6 +232,21 @@ class OHLCVSeries:
             OHLCV candle at index.
         """
         return self.candles[index]
+
+    def __iter__(self) -> Iterator[OHLCV]:
+        """Iterate candles oldest-first.
+
+        Declared explicitly rather than relying on Python's legacy iteration
+        protocol, under which an object exposing ``__getitem__`` is iterable via
+        repeated ``obj[0]``, ``obj[1]``, ... until ``IndexError``. That fallback
+        works -- ``paper/engine.py`` has always iterated a series this way -- but
+        it is invisible to type checkers and surprising to readers. Behaviour is
+        identical; the contract is now stated.
+
+        Returns:
+            Iterator over candles in chronological order.
+        """
+        return iter(self.candles)
 
     @property
     def opens(self) -> NDArray[np.float64]:

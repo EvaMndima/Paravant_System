@@ -15,7 +15,7 @@ from fastapi import APIRouter, HTTPException, Query, status
 from pydantic import BaseModel
 
 from src.core.execution.position_tracker import PositionTracker
-from src.data.models.position import PositionStatus
+from src.data.models.position import Position, PositionStatus
 from src.utils.logging import get_logger
 
 logger = get_logger(__name__)
@@ -130,7 +130,7 @@ def init_position_routes(position_tracker: PositionTracker) -> None:
 
 
 def _position_to_response(
-    position: object,
+    position: Position,
     unrealized_pnl: float = 0.0,
     return_pct: float = 0.0,
 ) -> PositionResponse:
@@ -144,8 +144,7 @@ def _position_to_response(
     Returns:
         PositionResponse with all fields populated.
     """
-    # Access attributes directly - position is a SQLAlchemy model
-    pos = position  # type: ignore[assignment]
+    pos = position
 
     opened_at_str = ""
     if hasattr(pos, "opened_at") and pos.opened_at:

@@ -379,7 +379,13 @@ class IchimokuCloud(Indicator):
         )
 
     @staticmethod
-    def required_periods(senkou_b_period: int, displacement: int) -> int:
+    # Not a Liskov override: required_periods is never invoked through a
+    # base-typed reference. It is a per-class helper with a single-period
+    # default on Indicator; this indicator genuinely takes different period
+    # parameters. See DEC-2026-08-11-008.
+    def required_periods(  # type: ignore[override]
+        senkou_b_period: int, displacement: int
+    ) -> int:
         """Return minimum bars needed before first valid cloud value.
 
         The cloud needs senkou_b_period for the longest midpoint calculation

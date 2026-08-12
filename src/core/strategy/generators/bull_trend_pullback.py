@@ -145,7 +145,7 @@ class BullTrendPullbackGenerator(SignalGenerator):
             if np.isnan(atr_val) or atr_val <= 0:
                 return None
 
-            indicators = {
+            indicators: dict[str, float | str] = {
                 "htf_ema": htf_ema_val,
                 "trend_ema": trend_ema_val,
                 "rsi": rsi_curr,
