@@ -562,7 +562,8 @@ After setup is complete:
 1. Read `docs/TRADING_SYSTEM_PRD.md` for system overview
 2. Read `docs/ARCHITECTURE.md` for technical architecture
 3. Review `docs/INDICATOR_SPECIFICATION.md` for indicator details
-4. Start with Phase 1, Task 1.1.1 (see `docs/01_PHASE_1_FOUNDATION.md`)
+4. Read `docs/README.md` for the documentation index. The original phase
+   plans are complete and archived under `docs/archive/build-plans/`.
 
 ---
 

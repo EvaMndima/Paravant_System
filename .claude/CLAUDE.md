@@ -415,8 +415,9 @@ API_KEY = "abc123secret"  # NEVER DO THIS
 - `.claude/rules/decision-consistency.md` - Decision enforcement
 - `.claude/rules/zero-technical-debt.md` - Code quality rules
 - `.claude/rules/mvp-scope-control.md` - MVP scope boundaries
-- `docs/01_PHASE_1_FOUNDATION.md` - Phase 1 task details
-- `docs/00_MVP_TASK_INDEX.md` - Overall progress tracking
+- `docs/README.md` - Documentation index and reading order
+- `docs/RESEARCH_FINDINGS.md` - What the research established (and what was withdrawn)
+- `docs/archive/build-plans/` - Completed phase plans and the MVP task index (historical)
 - `TRADING_SYSTEM_PRD.md` - Product requirements
 - `ARCHITECTURE.md` - System architecture
 

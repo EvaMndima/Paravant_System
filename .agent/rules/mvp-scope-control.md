@@ -140,7 +140,7 @@ The following features are **EXPLICITLY OUT OF SCOPE** for MVP:
 
 2. **If unsure:**
    - Search `TRADING_SYSTEM_PRD.md` Part 2 for the feature
-   - Check `00_MVP_TASK_INDEX.md` for related tasks
+   - Check `docs/archive/build-plans/00_MVP_TASK_INDEX.md` for related tasks
    - Default to **NO** if not explicitly listed
 
 ---
@@ -253,7 +253,7 @@ Create a document with:
 ### Step 3.3: Update Documentation
 
 - Update `TRADING_SYSTEM_PRD.md` Part 2 (MVP Scope)
-- Update `00_MVP_TASK_INDEX.md` (Task List)
+- Update `docs/archive/build-plans/00_MVP_TASK_INDEX.md` (Task List)
 - Update relevant Phase files
 - Update timeline/effort estimates
 

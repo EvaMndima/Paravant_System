@@ -1,3 +1,16 @@
+> **Point-in-time record, 2026-08-08.** This audit was written against commit
+> `622ac49`, before the pre-publication cleanup. Several files it cites have
+> since been removed or moved *because* it flagged them -- `src/domain/`,
+> `src/core/account/` and the shadowed `src/core/strategy/regime.py` were
+> deleted, and `DATABASE_SEED_DATA.md` was archived. Those links no longer
+> resolve, and are left unedited: rewriting an audit so its findings appear
+> never to have applied would defeat its purpose.
+>
+> For the current state see [../README.md](../README.md) and
+> [../PRODUCTION_READINESS_ASSESSMENT.md](../PRODUCTION_READINESS_ASSESSMENT.md).
+
+---
+
 # PARAVANT — Pre-Publication Repository Audit
 
 **Audit date:** 2026-08-08
