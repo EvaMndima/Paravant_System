@@ -15,19 +15,19 @@ def main():
     try:
         # Create all tables
         init_db()
-        print("✅ Database schema created successfully")
+        print("[OK] Database schema created successfully")
         
         # Verify tables were created
         from sqlalchemy import inspect
         inspector = inspect(engine)
         tables = inspector.get_table_names()
         
-        print(f"✅ Created {len(tables)} tables:")
+        print(f"[OK] Created {len(tables)} tables:")
         for table in sorted(tables):
             print(f"   - {table}")
             
     except Exception as e:
-        print(f"❌ Error initializing database: {e}")
+        print(f"[FAIL] Error initializing database: {e}")
         sys.exit(1)
 
 

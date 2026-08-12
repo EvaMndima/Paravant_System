@@ -12,10 +12,10 @@ def check_python_version():
     import sys
     version = sys.version_info
     if version >= (3, 11):
-        print(f"✅ Python version: {version.major}.{version.minor}.{version.micro}")
+        print(f"[OK] Python version: {version.major}.{version.minor}.{version.micro}")
         return True
     else:
-        print(f"❌ Python version: {version.major}.{version.minor}.{version.micro} (3.11+ required)")
+        print(f"[FAIL] Python version: {version.major}.{version.minor}.{version.micro} (3.11+ required)")
         return False
 
 
@@ -39,10 +39,10 @@ def check_dependencies():
             missing.append(package)
     
     if missing:
-        print(f"❌ Missing dependencies: {', '.join(missing)}")
+        print(f"[FAIL] Missing dependencies: {', '.join(missing)}")
         return False
     else:
-        print(f"✅ All {len(required_packages)} core dependencies installed")
+        print(f"[OK] All {len(required_packages)} core dependencies installed")
         return True
 
 
@@ -58,13 +58,13 @@ def check_env_variables():
     missing_optional = [var for var in optional_vars if not os.getenv(var)]
     
     if missing_required:
-        print(f"❌ Missing required environment variables: {', '.join(missing_required)}")
+        print(f"[FAIL] Missing required environment variables: {', '.join(missing_required)}")
         return False
     else:
-        print("✅ Required environment variables present")
+        print("[OK] Required environment variables present")
         
     if missing_optional:
-        print(f"⚠️  Missing optional environment variables: {', '.join(missing_optional)}")
+        print(f"[WARN]  Missing optional environment variables: {', '.join(missing_optional)}")
     
     return True
 
@@ -77,10 +77,10 @@ def check_database():
         
         with engine.connect() as conn:
             conn.execute(text("SELECT 1"))
-        print("✅ Database connection successful")
+        print("[OK] Database connection successful")
         return True
     except Exception as e:
-        print(f"❌ Database connection failed: {e}")
+        print(f"[FAIL] Database connection failed: {e}")
         return False
 
 
@@ -104,18 +104,18 @@ def main():
             result = check_func()
             results.append(result)
         except Exception as e:
-            print(f"❌ Error during {name} check: {e}")
+            print(f"[FAIL] Error during {name} check: {e}")
             results.append(False)
     
     print("\n" + "=" * 50)
     if all(results):
-        print("✅ ALL CHECKS PASSED")
+        print("[OK] ALL CHECKS PASSED")
         print("=" * 50)
         return 0
     else:
         passed = sum(results)
         total = len(results)
-        print(f"⚠️  {passed}/{total} CHECKS PASSED")
+        print(f"[WARN]  {passed}/{total} CHECKS PASSED")
         print("=" * 50)
         return 1
 

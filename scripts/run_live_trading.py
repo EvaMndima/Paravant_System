@@ -1,10 +1,10 @@
-"""Live trading runner — real Binance orders, single session.
+"""Live trading runner -- real Binance orders, single session.
 
 Runs ONE strategy-symbol pair with REAL capital via Binance Spot API.
 Designed as the graduation step after paper trading validation.
 
 Default configuration:
-    Strategy: bear_trend_follower (BTF) — best performer in 60-day backtest
+    Strategy: bear_trend_follower (BTF) -- best performer in 60-day backtest
     Symbol:   BTCUSDT
     Capital:  Configurable via LIVE_CAPITAL_USDT env var (default $20)
 
@@ -17,11 +17,11 @@ Safety:
     - Kill switch checked before every order submission
     - Daily loss limit (10%) and max drawdown (20%) enforced as hard blocks
     - Stop-loss and take-profit enforced independently via intrabar high/low
-      check every poll cycle — does not rely solely on signal generator CLOSE
+      check every poll cycle -- does not rely solely on signal generator CLOSE
     - Reads BINANCE_TESTNET env var: set "true" to test on testnet first
     - Sends Telegram alerts on every entry, exit, and risk block
     - All orders are market orders (guaranteed fills, no stuck limit orders)
-    - Actual Binance fill prices recorded — PnL tracks real execution costs
+    - Actual Binance fill prices recorded -- PnL tracks real execution costs
     - Position state saved to SQLite + JSON backup every poll cycle
       so restarts do not cause ghost positions
 
@@ -90,17 +90,17 @@ LIVE_CAPITAL: float = float(os.getenv("LIVE_CAPITAL_USDT", "20.0"))
 LIVE_SYMBOL: str = os.getenv("LIVE_SYMBOL", "BTCUSDT")
 LIVE_TEMPLATE: str = os.getenv("LIVE_TEMPLATE", "bear_trend_follower")
 
-# Fraction of current equity to deploy per trade — 25% keeps max loss
+# Fraction of current equity to deploy per trade -- 25% keeps max loss
 # ~$0.50-$1.00 with ATR-based stops on a $20 account. Remaining 75% is buffer.
 POSITION_SIZE_FRACTION: float = 0.25
 
-# Binance minimum notional value — BTCUSDT spot minimum is $5
+# Binance minimum notional value -- BTCUSDT spot minimum is $5
 BINANCE_MIN_NOTIONAL: float = 5.0
 
-# Commission rate — Binance standard 0.1% per side (0.2% round-trip)
+# Commission rate -- Binance standard 0.1% per side (0.2% round-trip)
 COMMISSION_RATE: float = 0.001
 
-# Risk guard limits — hard stops before order submission
+# Risk guard limits -- hard stops before order submission
 MAX_DAILY_LOSS_PCT: float = float(os.getenv("MAX_DAILY_LOSS_PCT", "0.10"))   # 10% of initial capital
 MAX_DRAWDOWN_PCT: float = float(os.getenv("MAX_DRAWDOWN_PCT", "0.20"))       # 20% drawdown from initial capital
 
@@ -117,7 +117,7 @@ MAX_DRAWDOWN_PCT: float = float(os.getenv("MAX_DRAWDOWN_PCT", "0.20"))       # 2
 # At most MAX_STRATEGIES_LIVE_CONCURRENT run simultaneously, and total
 # committed capital across active tiers may never exceed
 # CAPITAL_RESERVE_FRACTION of LIVE_CAPITAL (leaving a cash buffer for fees,
-# slippage, and emergency exits — the reserve principle from
+# slippage, and emergency exits -- the reserve principle from
 # docs/research/PORTFOLIO_LAYER_DESIGN.md section 4.3).
 # ---------------------------------------------------------------------------
 MAX_STRATEGIES_LIVE_CONCURRENT: int = int(
@@ -200,7 +200,7 @@ BTP_PARAMS: dict[str, Any] = {
 }
 
 MACD_PB_PARAMS: dict[str, Any] = {
-    # Multi-regime winner per DEC-2026-05-28-002 — STABLE_EDGE in
+    # Multi-regime winner per DEC-2026-05-28-002 -- STABLE_EDGE in
     # choppy_bull, choppy_bear, trending_bull.
     "macd_fast": 12,
     "macd_slow": 26,
@@ -283,7 +283,7 @@ STRATEGY_PARAMS_LOOKUP: dict[str, dict[str, Any]] = {
 
 
 # ---------------------------------------------------------------------------
-# Position state — persisted to JSON so restarts don't create ghost positions
+# Position state -- persisted to JSON so restarts don't create ghost positions
 # ---------------------------------------------------------------------------
 
 
@@ -301,7 +301,7 @@ class LiveTier:
         symbol: Binance trading pair (e.g. "BTCUSDT").
         capital: Fixed USDT allocation for this tier (independent of others).
         activation_threshold: Total portfolio equity required to activate.
-        regime_tag: Legacy coarse regime tag — "bear", "bull", or "all".
+        regime_tag: Legacy coarse regime tag -- "bear", "bull", or "all".
             Used for backward-compatibility fallback when regime_tags is empty.
         regime_tags: Fine-grained SubRegime tags (preferred). When non-empty,
             tier activates only when the current confirmed SubRegime is in
@@ -355,10 +355,10 @@ def _build_tiers() -> list[LiveTier]:
         # ----------------------------------------------------------------
         # Bear tiers (validated in bear paper trading, ordered by conviction)
         # ----------------------------------------------------------------
-        # BTF tiers REMOVED 2026-05-27 — strategy retired after May 2026
+        # BTF tiers REMOVED 2026-05-27 -- strategy retired after May 2026
         # backtest + live paper showed PF=0.75-0.76 across 115 total trades.
         # See DEC-2026-05-27-007.
-        # CMF/SOL and RSI_BB/ETH tiers REMOVED 2026-05-28 — strategies
+        # CMF/SOL and RSI_BB/ETH tiers REMOVED 2026-05-28 -- strategies
         # retired (DEC-2026-05-28-002) after spot rolling backtest showed
         # POOR_IN_REGIME for all relevant regimes.
         # ----------------------------------------------------------------
@@ -385,7 +385,7 @@ def _build_tiers() -> list[LiveTier]:
             symbol="BTCUSDT",
             capital=cap,
             activation_threshold=cap * 2,
-            regime_tag="bull",  # legacy fallback (was wrong — see regime_tags)
+            regime_tag="bull",  # legacy fallback (was wrong -- see regime_tags)
             # DEC-2026-05-28-002: STABLE_EDGE in choppy_bear only.
             regime_tags=["choppy_bear"],
             params=BTP_PARAMS,
@@ -403,9 +403,9 @@ def _build_tiers() -> list[LiveTier]:
             params=SRC_PARAMS,
             lookback_bars=260,
         ),
-        # HATP/BTC REMOVED 2026-05-28 — strategy retired (DEC-2026-05-28-002).
+        # HATP/BTC REMOVED 2026-05-28 -- strategy retired (DEC-2026-05-28-002).
         # ----------------------------------------------------------------
-        # All-regime (ICVP is self-directing via cloud — works in 3 regimes)
+        # All-regime (ICVP is self-directing via cloud -- works in 3 regimes)
         # ----------------------------------------------------------------
         LiveTier(
             label="ICVP/BTC",
@@ -428,11 +428,11 @@ def _build_tiers() -> list[LiveTier]:
     return tiers
 
 
-# Module-level tier list — initialised once, mutated as tiers activate.
+# Module-level tier list -- initialised once, mutated as tiers activate.
 EXPANSION_TIERS: list[LiveTier] = _build_tiers()
 
 # -----------------------------------------------------------------------------
-# Demotion guardrail thresholds — single source of truth.
+# Demotion guardrail thresholds -- single source of truth.
 # Decision: DEC-2026-05-27-004 (promotion gate).
 # A strategy template is DEGRADED if its paper trading sessions in
 # aggregate show N >= MIN_TRADES and PF < MAX_PF. Live tiers using a
@@ -442,7 +442,7 @@ DEGRADATION_MIN_TRADES: int = 10
 DEGRADATION_MAX_PF: float = 0.8
 
 # -----------------------------------------------------------------------------
-# Decorrelation cap — max concurrent same-direction positions across tiers.
+# Decorrelation cap -- max concurrent same-direction positions across tiers.
 # Decision: DEC-2026-05-27-006.
 # When a basket of tiers shares the same signal (e.g. all BTF symbols
 # triggering SHORT at the same hour during a bear regime), correlation
@@ -475,7 +475,7 @@ def _tier_regime_match(
 
     Routing precedence (DEC-2026-05-28-003):
       1. If `tier.regime_tags` is non-empty: require sub_regime to be in
-         the list. Fail-closed when sub_regime is UNKNOWN — better to
+         the list. Fail-closed when sub_regime is UNKNOWN -- better to
          skip activation than to route to a wrong regime.
       2. Else fall back to legacy coarse `regime_tag` matching.
     """
@@ -505,16 +505,16 @@ def _can_activate_tier(
     caller has already confirmed the tier is eligible by regime, equity
     threshold, and is not degraded; this adds the two portfolio-level rails:
 
-      1. Concurrency cap — at most ``max_concurrent`` tiers active at once,
+      1. Concurrency cap -- at most ``max_concurrent`` tiers active at once,
          so capital and correlated risk stay bounded regardless of how many
          tiers are otherwise eligible.
-      2. Capital reserve — the PROJECTED committed capital (currently active
+      2. Capital reserve -- the PROJECTED committed capital (currently active
          tiers plus this candidate) must not exceed ``reserve_cap_usdt``.
          The projected (not current-only) check is deliberate: a current-only
          test would permit one activation that overshoots the reserve.
 
     Committed capital uses ``tier.capital`` (the fixed allocation), not live
-    equity — the reserve protects the cash buffer, not mark-to-market value.
+    equity -- the reserve protects the cash buffer, not mark-to-market value.
 
     Args:
         tier: The candidate (inactive) tier being considered for activation.
@@ -553,7 +553,7 @@ def _paper_strategy_is_degraded(template_id: str) -> tuple[bool, str]:
         (is_degraded, reason_string). reason_string is empty when not
         degraded, or a one-line explanation when degraded.
 
-    Failures (DB unreachable, no rows) return (False, "") — we fail open
+    Failures (DB unreachable, no rows) return (False, "") -- we fail open
     rather than block live activation on a transient DB issue, because
     the live engine already has its own state for the primary tier and
     the alternative (failing closed) would prevent restarts.
@@ -588,7 +588,7 @@ def _paper_strategy_is_degraded(template_id: str) -> tuple[bool, str]:
     losses_sum = sum(p for p in all_pnls if p <= 0)
     abs_losses = abs(losses_sum)
     if abs_losses == 0:
-        # All winners (or no losses) — definitely not degraded.
+        # All winners (or no losses) -- definitely not degraded.
         return False, ""
     pf = wins_sum / abs_losses
 
@@ -611,7 +611,7 @@ def _paper_strategy_classification(template_id: str) -> tuple[str, bool]:
 
     Fail-open contract (mirrors ``_paper_strategy_is_degraded``): the second
     tuple element ``db_ok`` is False when the database could not be read. The
-    caller treats that as "cannot determine" and does NOT block — so a transient
+    caller treats that as "cannot determine" and does NOT block -- so a transient
     DB outage never blocks a restart (which would leave an open position
     unmanaged). A successfully-computed non-READY classification has
     ``db_ok=True`` and the caller blocks: that fail-closed path is the point of
@@ -622,7 +622,7 @@ def _paper_strategy_classification(template_id: str) -> tuple[str, bool]:
             consistent with the demotion check).
 
     Returns:
-        (classification, db_ok). On DB error: ("RESEARCH", False) — a safe
+        (classification, db_ok). On DB error: ("RESEARCH", False) -- a safe
         placeholder the caller ignores because db_ok is False.
     """
     try:
@@ -677,7 +677,7 @@ def _tier1_activation_blocked(template_id: str) -> tuple[bool, str]:
 
     Fail-open contract (identical to ``_paper_strategy_is_degraded`` and the
     expansion-tier gate): when the DB cannot be read, ``db_ok`` is False and
-    this returns ``(False, "")`` — a transient outage must never block a
+    this returns ``(False, "")`` -- a transient outage must never block a
     restart, because an inactive tier 1 leaves any open position unmanaged
     (no stop/TP enforcement). Only a successfully-computed non-READY verdict
     blocks; that fail-closed path is the point of the gate.
@@ -710,7 +710,7 @@ def load_state(
     symbol: str | None = None,
     state_file: Path | None = None,
 ) -> dict[str, Any]:
-    """Load live trading state — tries SQLite first, then JSON backup.
+    """Load live trading state -- tries SQLite first, then JSON backup.
 
     Args:
         store: DataStore for SQLite/Neon reads.
@@ -806,7 +806,7 @@ def load_state(
             logger.warning("live_state_json_load_failed", error=str(exc), session_id=session_id)
 
     # 3. Fresh start
-    print(f"[{session_id}] No previous state — starting fresh.")
+    print(f"[{session_id}] No previous state -- starting fresh.")
     return empty
 
 
@@ -912,7 +912,7 @@ def _get_current_equity(
 def calculate_quantity(current_equity: float, price: float) -> float:
     """Calculate order quantity from current equity and current price.
 
-    Uses POSITION_SIZE_FRACTION of current equity — adjusts automatically
+    Uses POSITION_SIZE_FRACTION of current equity -- adjusts automatically
     as the account grows or shrinks. Rounds down to 6 decimal places to
     stay within Binance precision requirements.
 
@@ -933,12 +933,12 @@ def calculate_quantity(current_equity: float, price: float) -> float:
         )
         return 0.0
     quantity = usdt_to_spend / price
-    # Round down to 6 decimal places — safe floor for BTC/ETH Binance precision
+    # Round down to 6 decimal places -- safe floor for BTC/ETH Binance precision
     return math.floor(quantity * 1_000_000) / 1_000_000
 
 
 # ---------------------------------------------------------------------------
-# Risk guards — checked before every order submission
+# Risk guards -- checked before every order submission
 # ---------------------------------------------------------------------------
 
 
@@ -951,9 +951,9 @@ def _check_risk_guards(
     """Enforce risk limits before allowing an order to be submitted.
 
     Checks (in priority order):
-    1. Kill switch — hard halt set externally via the DB or dashboard
-    2. Daily loss limit — realized losses exceed MAX_DAILY_LOSS_PCT of initial capital
-    3. Max drawdown — current equity has fallen below MAX_DRAWDOWN_PCT of initial capital
+    1. Kill switch -- hard halt set externally via the DB or dashboard
+    2. Daily loss limit -- realized losses exceed MAX_DAILY_LOSS_PCT of initial capital
+    3. Max drawdown -- current equity has fallen below MAX_DRAWDOWN_PCT of initial capital
 
     Args:
         state: Current live trading state dict.
@@ -964,7 +964,7 @@ def _check_risk_guards(
     Returns:
         Tuple of (approved, rejection_reason). approved is True if all checks pass.
     """
-    # 1. Kill switch — always checked first, consistent with risk controller pipeline
+    # 1. Kill switch -- always checked first, consistent with risk controller pipeline
     try:
         system_state = store.get_system_state()
         if system_state.kill_switch_active:
@@ -982,7 +982,7 @@ def _check_risk_guards(
         )
         return False, f"risk_check_failed_db_error: {exc}"
 
-    # 2. Daily loss limit — guard against a bad trading session
+    # 2. Daily loss limit -- guard against a bad trading session
     realized_pnl = state.get("realized_pnl", 0.0)
     daily_loss_limit = -(initial_capital * MAX_DAILY_LOSS_PCT)
     if realized_pnl <= daily_loss_limit:
@@ -997,7 +997,7 @@ def _check_risk_guards(
             f"<= limit={daily_loss_limit:.2f}"
         )
 
-    # 3. Max drawdown — guard against sustained equity decline
+    # 3. Max drawdown -- guard against sustained equity decline
     current_equity = _get_current_equity(state, initial_capital, current_price)
     drawdown = (initial_capital - current_equity) / initial_capital
     if drawdown >= MAX_DRAWDOWN_PCT:
@@ -1027,11 +1027,11 @@ def _check_stops_and_tp(
 ) -> tuple[bool, str, float]:
     """Check if the current bar triggered stop-loss or take-profit.
 
-    Uses intrabar high/low to detect level breaches — consistent with the
+    Uses intrabar high/low to detect level breaches -- consistent with the
     backtest and paper trading SimulatedTrader.check_stop_take_profit() logic.
 
     When both stop and TP are hit on the same bar (extreme volatility gap),
-    stop-loss takes priority — conservative worst-case assumption.
+    stop-loss takes priority -- conservative worst-case assumption.
 
     For LONG positions:
       - Stop hit when bar.low <= stop_loss
@@ -1278,7 +1278,7 @@ async def _process_tier(
     for one strategy-symbol pair. Called once per tier per poll cycle
     from the main loop.
 
-    Entry is gated by regime_allows_entry — stops and signal closes
+    Entry is gated by regime_allows_entry -- stops and signal closes
     always execute regardless of regime.
 
     Args:
@@ -1324,7 +1324,7 @@ async def _process_tier(
         )
         if not approved and "kill_switch" in block_reason:
             await send_alert(
-                title=f"KILL SWITCH — Stop Exit Blocked [{tier.label}]",
+                title=f"KILL SWITCH -- Stop Exit Blocked [{tier.label}]",
                 message=(
                     f"Kill switch is active. Cannot close position.\n"
                     f"Position: IN {current_side} @ ${tier.state.get('entry_price', 0):,.2f}"
@@ -1398,7 +1398,7 @@ async def _process_tier(
             )
             if not approved and "kill_switch" in block_reason:
                 await send_alert(
-                    title=f"KILL SWITCH — Signal Close Blocked [{tier.label}]",
+                    title=f"KILL SWITCH -- Signal Close Blocked [{tier.label}]",
                     message=f"Kill switch active.\nBlock: {block_reason}",
                     level=AlertLevel.CRITICAL,
                 )
@@ -1583,7 +1583,7 @@ async def main() -> None:
 
     # PARA-12 (DEC-2026-05-31-003): each strategy trades its PER_STRATEGY_CAPITAL
     # slice, not the full account, so the minimum-notional check uses the slice.
-    # Fail closed — refuse to start a config whose per-strategy trade would be
+    # Fail closed -- refuse to start a config whose per-strategy trade would be
     # rejected by Binance, rather than activating tiers that silently never
     # place a valid order.
     usdt_per_trade = PER_STRATEGY_CAPITAL * POSITION_SIZE_FRACTION
@@ -1646,7 +1646,7 @@ async def main() -> None:
     for tier in EXPANSION_TIERS:
         tier.generator = factory.get_generator(tier.template)
 
-    # Activate tier 1 (threshold=0) — now subject to the SAME auto-promotion
+    # Activate tier 1 (threshold=0) -- now subject to the SAME auto-promotion
     # gate as expansion tiers (DEC-2026-06-01-002). Tier 1 was exempt under
     # DEC-2026-06-01-001 ("two decisions" follow-up); this closes that gap so
     # READY_FOR_LIVE is required uniformly across every live tier. State is
@@ -1665,7 +1665,7 @@ async def main() -> None:
         )
 
     if tier1_blocked:
-        # tier1.active stays False — uniform with expansion-tier gating. The
+        # tier1.active stays False -- uniform with expansion-tier gating. The
         # kill switch is independent and remains in effect (DEC-2026-05-27-001).
         # If a prior position is open it is NOT managed while inactive; the
         # alert surfaces this so the operator can intervene manually.
@@ -1678,11 +1678,11 @@ async def main() -> None:
         )
         unmanaged_note = (
             "\n[!] An open position exists and is NOT managed while tier 1 is "
-            "inactive — close it manually if needed."
+            "inactive -- close it manually if needed."
             if tier1.state.get("in_position") else ""
         )
         await send_alert(
-            title=f"Tier 1 BLOCKED — Not Started [{mode_label}]",
+            title=f"Tier 1 BLOCKED -- Not Started [{mode_label}]",
             message=(
                 f"Tier 1: {tier1.label} ({tier1.template})\n"
                 f"Blocked: {tier1_block_reason}.\n"
@@ -1696,7 +1696,7 @@ async def main() -> None:
             level=AlertLevel.WARNING,
         )
         # Tier 1 stays inactive, so the expansion-activation loop will re-check
-        # it every poll (threshold 0.0) — desirable, as it lets tier 1 come
+        # it every poll (threshold 0.0) -- desirable, as it lets tier 1 come
         # online automatically once paper data clears the gate. Pre-set the
         # alert-dedup flags so that re-check does not emit a duplicate blocked
         # alert this session (mirrors the expansion-tier "alert once" contract;
@@ -1726,7 +1726,7 @@ async def main() -> None:
 
     # Regime detection: coarse (BTC daily EMA50/EMA200) + fine SubRegime
     # (adds ADX trend strength + realized-vol classification on top of macro).
-    # Decision: DEC-2026-05-28-003 — SubRegime-aware tier routing.
+    # Decision: DEC-2026-05-28-003 -- SubRegime-aware tier routing.
     regime_detector = RegimeDetector(fetcher=fetcher)
     sub_regime_detector = SubRegimeDetector(fetcher=fetcher)
     cached_regime: RegimeState = RegimeState.UNKNOWN
@@ -1746,7 +1746,7 @@ async def main() -> None:
     print(f"\nPolling every {POLLING_INTERVAL}s. Press Ctrl+C to stop.\n")
 
     poll_count = 0
-    # Suppress Telegram alerts on isolated transient failures — only escalate
+    # Suppress Telegram alerts on isolated transient failures -- only escalate
     # after CONSECUTIVE_FAILURES_TO_ALERT in a row, which represents a real
     # ongoing problem (e.g. API key revoked, Binance outage) rather than a
     # single read-timeout that self-heals. Decision: DEC-2026-05-27-003.
@@ -1758,7 +1758,7 @@ async def main() -> None:
 
         try:
             # -----------------------------------------------------------
-            # Regime check — on startup and every 60 polls (~1 hour)
+            # Regime check -- on startup and every 60 polls (~1 hour)
             # Uses 2-bar daily confirmation to prevent whipsaw switches.
             # Decision: DEC-2026-05-04-002
             # -----------------------------------------------------------
@@ -1804,7 +1804,7 @@ async def main() -> None:
                     )
 
             # -----------------------------------------------------------
-            # Tier activation check — evaluate inactive tiers each poll
+            # Tier activation check -- evaluate inactive tiers each poll
             # -----------------------------------------------------------
             active_equity = sum(
                 t.capital + t.state.get("realized_pnl", 0.0)
@@ -1851,7 +1851,7 @@ async def main() -> None:
                     # activate if its pooled live-paper performance is classified
                     # READY_FOR_LIVE. Closes the gap where a brand-new (N=0 ->
                     # RESEARCH) or still-maturing (OBSERVING) strategy passed the
-                    # demotion check — which only catches PF<0.8 at N>=10 — and
+                    # demotion check -- which only catches PF<0.8 at N>=10 -- and
                     # activated with no validation. Fails OPEN when the DB can't
                     # be read (db_ok False), mirroring the demotion check, so a
                     # transient outage never blocks a restart.
@@ -1984,7 +1984,7 @@ async def main() -> None:
                 )
 
                 await send_alert(
-                    title=f"Hourly Update — {now_utc.strftime('%Y-%m-%d %H:%M')} UTC",
+                    title=f"Hourly Update -- {now_utc.strftime('%Y-%m-%d %H:%M')} UTC",
                     message=(
                         "\n".join(tier_lines) + "\n"
                         f"---\n"
@@ -1994,7 +1994,7 @@ async def main() -> None:
                     ),
                 )
 
-            # Poll succeeded — reset the consecutive-failure counter and
+            # Poll succeeded -- reset the consecutive-failure counter and
             # send a recovery alert if we had previously escalated.
             if consecutive_failures >= CONSECUTIVE_FAILURES_TO_ALERT:
                 await send_alert(
@@ -2081,7 +2081,7 @@ if __name__ == "__main__":
             asyncio.run(main())
             break
         except KeyboardInterrupt:
-            print("\nKeyboard interrupt — exiting.")
+            print("\nKeyboard interrupt -- exiting.")
             break
         except Exception as fatal:
             # Fail-fast on Binance geo-block: retries cannot fix a
@@ -2106,5 +2106,5 @@ if __name__ == "__main__":
                 print(f"Restarting in {CRASH_COOLDOWN}s...", flush=True)
                 _time.sleep(CRASH_COOLDOWN)
             else:
-                print("Max restarts reached — stopping to prevent Telegram spam.")
+                print("Max restarts reached -- stopping to prevent Telegram spam.")
                 sys.exit(1)

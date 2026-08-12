@@ -1,7 +1,7 @@
 # Building PARAVANT with AI Assistance
 
 **Written:** 2026-08-11
-**Covers:** 2026-02-08 to 2026-08-11, 114 commits, one human author
+**Covers:** 2026-02-08 to 2026-08-11, 123 commits, one human author
 
 This document exists because the alternative was worse. PARAVANT is roughly
 120,000 lines written over six months by one person working with AI coding
@@ -25,10 +25,10 @@ survived.
 | Layer | Files | Lines |
 |---|---|---|
 | `src/` application | 167 `.py` | 49,144 |
-| `tests/` | 133 `.py` | 36,363 |
+| `tests/` | 133 `.py` | 36,550 |
 | `frontend/src/` | 89 `.ts`/`.tsx` | 17,128 |
-| `scripts/` operational entrypoints | 24 | 11,865 |
-| `research/` validation library | 27 `.py` | 5,411 |
+| `scripts/` operational entrypoints | 24 | 11,853 |
+| `research/` validation library | 27 `.py` | 5,440 |
 
 A crypto trading system: Binance data ingestion, 19 indicators, 29 signal
 generators, a layered risk system, an order state machine, backtest and paper
@@ -36,10 +36,16 @@ engines sharing the live code path, a FastAPI surface of 63 endpoints, a React
 dashboard, and a statistical research layer whose purpose is to reject the
 system's own strategies.
 
-It found no trading edge. All 11 strategies were rejected under Deflated Sharpe
-Ratio on 2026-06-05, and two subsequent hypotheses were rejected after that.
-That result is documented in `docs/research/` and is treated as the project's
-finding rather than its failure.
+It found no trading edge. Eight subjects were rejected under Deflated Sharpe at
+a sample size where the verdict carries information; ten more were initially
+reported as rejected until the system's own guard established they had never had
+enough data to reject at all. That correction is itself the most instructive
+result, and is written up in [RESEARCH_FINDINGS.md](RESEARCH_FINDINGS.md).
+
+(This paragraph originally read "all 11 strategies were rejected". It was wrong,
+in the direction of overclaiming certainty, and survived here for the same
+reason it survived everywhere else: it was written once and copied forward
+without being rechecked against the data. Fixed 2026-08-11.)
 
 ---
 
@@ -53,7 +59,7 @@ while the work was live.
 
 Three things sat underneath every session and did most of the real work:
 
-**`.claude/DECISIONS.md`** -- 116 dated decision entries across 3,060 lines,
+**`.claude/DECISIONS.md`** -- 120 dated decision entries across 3,132 lines,
 each recording the decision, its context, its rationale, the alternatives
 considered and rejected, and its status. Maintained identically in `.agent/` so
 that different assistants could not diverge on what had been decided.
@@ -152,7 +158,7 @@ errors now propagate instead of being reported as check failures
 
 ### 4.2 Unintegrated completeness
 
-`src/core/orchestrator.py` is 1,853 lines implementing an eight-step startup
+`src/core/orchestrator.py` is 1,850 lines implementing an eight-step startup
 sequence, a kill-switch-first main loop, entry-timing coordination, graceful
 degradation, and emergency shutdown with position reconciliation. It is
 coherent, documented, and 71% covered by tests.
@@ -211,6 +217,48 @@ and worth stating precisely: **an AI review is a strong generator of leads and a
 weak source of verdicts.** Every finding in that audit was checked against the
 source before it was acted on, and this one changed under inspection.
 
+### 4.7 A test that documented a workaround instead of a bug
+
+`LiquidationStore` partitioned written events into date directories keyed on
+**wall-clock flush time**, while the reader derived candidate directories from
+the query window, expressed in **trade time**. Two clocks, one partition scheme.
+They agree only while events are flushed on the same UTC day they occurred; any
+wider gap wrote the event to disk and made it invisible to every subsequent
+query.
+
+What makes this a section-4 story rather than an ordinary bug: there was a
+passing test called
+`test_store_read_window_spans_midnight_partition_padding`, documenting that
+"an event flushed under the NEXT day's dir is still found by date padding". The
+divergence had been noticed at the midnight boundary and papered over with a
+one-day read pad, and the test then encoded the workaround as intended
+behaviour. **A test that documents a workaround makes a design flaw look like a
+design.** The general case survived because the specific case was covered.
+
+Caught only because a failing test in an unrelated cleanup pass was investigated
+rather than adjusted. The obvious fix -- change the assertion -- would have
+buried it.
+
+### 4.8 Nobody ran the quickstart
+
+`scripts/init_db.py` printed a check-mark emoji on success. On a default Windows
+console (cp1252) that raises `UnicodeEncodeError`. The bare `except Exception`
+around it then attempted to print a cross-mark emoji, which raised again,
+unhandled. The database was created correctly, and the script exited 1 with a
+traceback.
+
+The first command in the project's own README failed on the author's own
+platform, for months, and 1,900 passing tests said nothing about it -- because
+tests import modules and call functions, and nobody had run the documented
+entrypoint end to end. Eleven other files carried the same latent crash,
+including `run_live_trading.py`, where a raising `print` inside the loop is an
+availability failure with capital at stake.
+
+Two lessons, and the second is the general one. Emoji in program output is a
+portability bug, not a style preference. And a test suite verifies the code you
+told it about; the README is a claim about behaviour, and nothing was checking
+it.
+
 ---
 
 ## 5. What this suggests
@@ -239,6 +287,17 @@ source before it was acted on, and this one changed under inspection.
 
 7. **Documentation needs an owner or it will lie.** Six months of accurate code
    and a stale README is a net-negative repository for a first-time reader.
+
+8. **Run your own quickstart, on a clean machine, before you publish it.**
+   Section 4.8 is the cheapest possible bug to find and the most expensive one
+   to ship. A test suite checks the code it was pointed at; a README is an
+   unverified claim about behaviour until somebody executes it.
+
+9. **When a test fails during unrelated work, investigate before adjusting.**
+   Sections 4.7 and 4.1 were both found that way, and in both cases the
+   convenient fix -- change the assertion -- would have preserved the defect
+   and produced a green suite. The pressure to make a red test green is exactly
+   when the bug is easiest to bury.
 
 ---
 

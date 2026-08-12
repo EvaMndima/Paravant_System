@@ -25,7 +25,7 @@ CRASH_COOLDOWN = 60
 
 # Paper trading always runs. Live trading is fail-closed: it ONLY starts
 # when LIVE_TRADING_ENABLED is set to a truthy value ("true"/"1"/"yes").
-# Decision: DEC-2026-05-27-001 — live trading kill switch defaults OFF.
+# Decision: DEC-2026-05-27-001 -- live trading kill switch defaults OFF.
 def _live_enabled() -> bool:
     """Return True if live trading is explicitly enabled via env var."""
     raw = os.environ.get("LIVE_TRADING_ENABLED", "").strip().lower()
@@ -72,7 +72,7 @@ def main() -> None:
         """Forward SIGTERM/SIGINT to both children and exit cleanly."""
         nonlocal shutting_down
         shutting_down = True
-        print(f"\nWrapper received signal {sig} — stopping children.", flush=True)
+        print(f"\nWrapper received signal {sig} -- stopping children.", flush=True)
         for proc in procs.values():
             try:
                 proc.send_signal(signal.SIGTERM)
@@ -85,7 +85,7 @@ def main() -> None:
     # Lazy import to avoid circular concerns; only the supervisor needs this.
     from src.utils.geo_block import GEO_BLOCK_EXIT_CODE
 
-    # Supervision loop — poll children every 5 seconds.
+    # Supervision loop -- poll children every 5 seconds.
     while not shutting_down:
         time.sleep(5)
         for s in list(procs.keys()):
@@ -100,13 +100,13 @@ def main() -> None:
             # Fail-fast contract with the child runners: a geo-block
             # cannot be fixed by retrying, so the child exits with
             # GEO_BLOCK_EXIT_CODE (2) to signal "do not restart."
-            # Stop the WHOLE supervisor — both children share the same
+            # Stop the WHOLE supervisor -- both children share the same
             # Binance API, so if one is geo-blocked, the other is too.
             # Decision: DEC-2026-06-01-003.
             if rc == GEO_BLOCK_EXIT_CODE:
                 print(
                     f"[run_all] {s} exited with GEO_BLOCK_EXIT_CODE "
-                    f"({GEO_BLOCK_EXIT_CODE}). NOT restarting — this is a "
+                    f"({GEO_BLOCK_EXIT_CODE}). NOT restarting -- this is a "
                     f"Railway region issue, not a transient failure. "
                     f"Stopping wrapper to surface the problem to the operator.",
                     flush=True,

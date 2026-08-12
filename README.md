@@ -77,10 +77,13 @@ not marginal edges lost to multiple-comparisons correction, they lose money
 before the correction is applied. The `FUNDAMENTAL` tag means the mechanism
 failed, not the implementation.
 
-Two further hypotheses are blocked on paid data that was deliberately not
-purchased. One returned `INSUFFICIENT_DATA` at N=4 rather than a rejection —
-which is the guard in the next section working as intended. One was killed at
-the quality gate as a structural duplicate before it consumed a trial.
+One hypothesis returned `INSUFFICIENT_DATA` at N=4 rather than a rejection —
+the guard in the next section working as intended. One was killed at the quality
+gate as a structural duplicate before it consumed a trial. Two more are blocked
+not on budget but on **causality**: no free historical liquidation series exists
+that respects point-in-time correctness, so rather than backfill from a source
+that would leak information unavailable at decision time, a forward collector
+was built and those hypotheses wait months for N to accrue.
 
 ### The part worth reading
 
@@ -209,10 +212,10 @@ Deeper detail: **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)** ·
 | Layer | Files | Lines | Notes |
 |---|---|---|---|
 | `src/` application | 167 `.py` | 49,144 | API, risk, execution, indicators, strategies |
-| `tests/` | 133 `.py` | 36,363 | 1,905 tests, 63% coverage |
+| `tests/` | 133 `.py` | 36,550 | 1,907 tests, all passing |
 | `frontend/src/` | 89 `.ts`/`.tsx` | 17,128 | React 19 dashboard — see caveat below |
-| `scripts/` | 24 | 11,865 | Live loop, paper loop, sweeps, reporting |
-| `research/` | 27 `.py` | 5,411 | DSR, effective-K, cost model, biographies |
+| `scripts/` | 24 | 11,853 | Live loop, paper loop, sweeps, reporting |
+| `research/` | 27 `.py` | 5,440 | DSR, effective-K, cost model, biographies |
 
 Highlights:
 
@@ -227,7 +230,7 @@ Highlights:
   is not blocked; fails *closed* on a clear non-ready verdict.
 - **19 indicators**, each independently tested at 88-100% coverage.
 - **29 signal generators**, of which 0 are validated. That ratio is the point.
-- **116 dated architectural decisions** with rationale and rejected
+- **120 dated architectural decisions** with rationale and rejected
   alternatives, referenced by 69 distinct IDs from source comments.
 
 ---
@@ -251,8 +254,8 @@ uvicorn src.api.main:app --reload
 Then open <http://localhost:8000/docs> for the interactive API.
 
 Live trading additionally requires `LIVE_TRADING_ENABLED` to be set explicitly.
-It is deliberately absent from `.env.example`, so a fresh clone cannot trade by
-accident.
+It ships commented out in `.env.example`, so a fresh clone cannot place an order
+by accident (DEC-2026-05-27-001).
 
 Frontend:
 
@@ -316,7 +319,7 @@ Stated plainly, because a reviewer will find all of it anyway.
 **Engineering**
 
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) · [docs/API_CONTRACT.md](docs/API_CONTRACT.md) · [docs/INDICATOR_SPECIFICATION.md](docs/INDICATOR_SPECIFICATION.md)
-- [.claude/DECISIONS.md](.claude/DECISIONS.md) — 116 decisions with rationale and rejected alternatives
+- [.claude/DECISIONS.md](.claude/DECISIONS.md) — 120 decisions with rationale and rejected alternatives
 - [docs/operations/](docs/operations/) — kill-switch runbook, scheduled jobs
 - [docs/PRODUCTION_READINESS_ASSESSMENT.md](docs/PRODUCTION_READINESS_ASSESSMENT.md) — measured gaps and the plan
 

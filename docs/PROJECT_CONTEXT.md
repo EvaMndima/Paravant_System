@@ -929,6 +929,13 @@ enforcement mechanism against their own future scope creep.
 
 ## 19. Testing
 
+> **SUPERSEDED 2026-08-11.** The suite is now green:
+> `1,907 tests | 1,870 passed | 0 failed | 37 skipped | 0 errors`.
+> The 9 failures were fixed and the 32 errors were network-dependent tests that
+> now skip unless `PARAVANT_RUN_NETWORK_TESTS=1` (DEC-2026-08-11-004). The
+> coverage figure below has not been re-measured since. The block is left as the
+> 2026-08-08 record.
+
 ```
 1,900 tests | 1,855 passed | 9 failed | 4 skipped | 32 errors | 132s
 Coverage: 63% (src + research, 15,784 statements)

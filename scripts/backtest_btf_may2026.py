@@ -1,10 +1,10 @@
 #!/usr/bin/env python
-"""BTF re-backtest on the May 2026 window — overfitting diagnostic.
+"""BTF re-backtest on the May 2026 window -- overfitting diagnostic.
 
 Background:
     BTF was promoted on the basis of Q1 2026 backtests showing 100% WR and
     Sharpe 2.4-3.6. Live paper trading on the current May 2026 bear regime
-    shows only 48% WR, PF 0.75 across 25 trades — a sharp degradation that
+    shows only 48% WR, PF 0.75 across 25 trades -- a sharp degradation that
     suggests the Q1 numbers were sample-specific.
 
 What this script does:
@@ -45,7 +45,7 @@ setup_logging(level="WARNING")
 logger = get_logger(__name__)
 
 # Exact params from scripts/run_paper_trading.py BEAR_STRATEGY_CONFIG.
-# Kept in this file so the diagnostic is self-contained — if paper params
+# Kept in this file so the diagnostic is self-contained -- if paper params
 # change, update them here too.
 BTF_PARAMS: dict = {
     "htf_ema_period": 200,
@@ -131,7 +131,7 @@ async def run(start: datetime, end: datetime, symbols: list[str]) -> None:
             print(f"BACKTEST FAILED: {e}")
 
     print("\n" + "=" * 92)
-    print(f"BTF DIAGNOSTIC RESULTS — {start.date()} to {end.date()}")
+    print(f"BTF DIAGNOSTIC RESULTS -- {start.date()} to {end.date()}")
     print("=" * 92)
     print(
         f"{'Symbol':<10} {'Trades':>7} {'WR%':>7} {'Sharpe':>8} "

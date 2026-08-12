@@ -2951,9 +2951,9 @@ parameters:
 
 **End of Decisions Log**
 
-**Total Decisions:** 100 active, 0 superseded, 5 locked (1 amended); DEC-2026-06-04-013 amended
+**Total Decisions:** 104 active, 0 superseded, 5 locked (1 amended); DEC-2026-06-04-013 amended
 **Last Updated:** 2026-08-11
-**Next Decision ID:** DEC-2026-08-11-004
+**Next Decision ID:** DEC-2026-08-11-008
 
 ## Phase 5 Decisions (Backtesting & Simulation)
 
@@ -3058,3 +3058,75 @@ parameters:
 - **Implemented By:** Pre-publication cleanup on branch `cleanup/pre-publication`. Pre-cleanup state recoverable at tag `pre-cleanup` (`622ac49`).
 - **Affected Files:** repository root, `.gitignore`, `LICENSE`, `src/core/strategy/regime.py`, `src/domain/`, `src/core/account/`, `docs/design/pdf/`, `docs/validation/`
 - **References:** `docs/PRODUCTION_READINESS_ASSESSMENT.md` sections 2.6 and 3.2 items 8-10, plan items 1.1, 1.2, 1.7, and Phase 0 item 0.4. A secret scan across all 102 commits returned no findings.
+
+### DEC-2026-08-11-004: Hermetic Test Environment, Network Tests Opt-In
+- **Decision:** An autouse fixture in `tests/conftest.py` strips `BINANCE_*`, `TELEGRAM_*`, `DATABASE_URL` and the live-trading switches from `os.environ` and disables `.env` discovery on `Settings` for every test. Network-dependent integration tests are auto-marked `binance` and skipped unless `PARAVANT_RUN_NETWORK_TESTS=1`.
+- **Context:** `test_settings_defaults` failed because it asserted `binance_testnet is True` while reading the developer's real `.env`, which sets `BINANCE_TESTNET=false`. The test suite could observe -- and act on -- the setting that selects real-money mode. Separately, `tests/integration/test_binance_client.py` and `test_symbol_refresh.py` opened a live connection during fixture setup, producing 32 setup ERRORS on any machine without working exchange connectivity.
+- **Rationale:**
+  - **Safety before hygiene:** a test run must not be able to see live credentials. This is the same fail-closed principle as the kill switch, applied to the test boundary.
+  - **Two leaks, two fixes:** clearing `os.environ` is insufficient on its own because `Settings` declares `env_file=".env"` and re-reads the file at instantiation. Both had to be closed.
+  - **Opt-in by flag, not by credential sniffing:** skipping only when an API key is absent would mean that merely having a key configured is enough to start making live network calls. An explicit environment flag makes the choice deliberate.
+  - **A clean clone must produce zero errors:** 32 errors a contributor cannot act on are indistinguishable from a real regression.
+- **Alternatives Considered:**
+  - **`monkeypatch.chdir(tmp_path)` to hide `.env`:** REJECTED - breaks every other relative path (`config/templates`, etc.).
+  - **Skip network tests when `BINANCE_API_KEY` is unset:** REJECTED - see rationale; presence of a key should not authorise network traffic.
+  - **Delete the network tests:** REJECTED - they are valuable when run deliberately against testnet.
+- **Status:** ACTIVE
+- **Date Decided:** 2026-08-11
+- **Implemented By:** `tests/conftest.py` (`hermetic_environment`, `pytest_collection_modifyitems`)
+- **Affected Files:** `tests/conftest.py`
+- **References:** `docs/PRODUCTION_READINESS_ASSESSMENT.md` 2.1 and plan items 2.3-2.5.
+
+### DEC-2026-08-11-005: Liquidation Store Partitions by Trade Date, Not Flush Time
+- **Decision:** `LiquidationStore.write_batch` groups events by the UTC date of their own `trade_time_ms` and writes one immutable fragment per date. `flush_dt` is retained only to name the fragment file. Return type changes from `Path | None` to `list[Path]`, and `LiquidationCollector.flush` follows.
+- **Context:** `write_batch` selected its date-partition directory from wall-clock `flush_dt`, while `read_window` derives candidate directories from the query window, which is expressed in trade time. Two different clocks keying one partition scheme. They agree only while events are flushed on the same UTC day they occurred; any wider gap wrote the event to disk and made it invisible to every subsequent query.
+- **Rationale:**
+  - **Correct by construction:** the reader queries in trade time, so the writer must partition in trade time. Widening the read pad would only move the failure threshold.
+  - **The failure mode was silent and expensive:** this store accrues data for months before H-2026-06-004 and H-2026-06-009 can be screened. Lost events would have presented as "the hypothesis still has no data", with no signal as to why.
+  - **The model already declares the authority:** `LiquidationEvent.trade_time_ms` is documented as "the CAUSAL timestamp". Partitioning on anything else contradicts the type's own contract.
+  - **A passing test was masking it:** `test_store_read_window_spans_midnight_partition_padding` documented the one-day workaround, which made the flaw read as intentional.
+- **Alternatives Considered:**
+  - **Widen `_READ_DATE_PAD`:** REJECTED - fragile, and unbounded in the replay case.
+  - **Scan all date directories on read:** REJECTED - correct but discards the point of partitioning.
+  - **Keep `Path | None` and reject multi-date batches:** REJECTED - a buffer straddling UTC midnight is normal operation, not an error.
+- **Status:** ACTIVE
+- **Date Decided:** 2026-08-11
+- **Implemented By:** `research/data/liquidations.py`, `research/data/liquidation_collector.py`
+- **Affected Files:** `research/data/liquidations.py`, `research/data/liquidation_collector.py`, `tests/research/test_liquidations.py`
+- **Backward compatibility:** BREAKING within `research/`. `write_batch` and `flush` return `list[Path]`. Callers are the collector, `scripts/run_liquidation_collector.py` (return value unused), and tests -- all updated. `src/` is unaffected (one-way dependency, DEC-2026-06-04-001).
+- **References:** DEC-2026-06-04-021 (the collector this store backs). Regression cover: `test_store_partitions_by_trade_date_not_flush_date`, `test_store_batch_spanning_dates_splits_fragments`.
+
+### DEC-2026-08-11-006: TradingSignal.indicators Is Mapping[str, float | str]
+- **Decision:** `TradingSignal.indicators` is declared `Mapping[str, float | str]`, not `dict[str, float]`.
+- **Context:** The field was typed `dict[str, float]` while generators have always also stored categorical labels in it (`divergence_type="bullish"` and similar). mypy reported the mismatch 15 times across the generator package rather than once at the definition.
+- **Rationale:**
+  - **The annotation described a contract the code did not keep.** Fixing it at the definition is one change; suppressing it at 15 call sites is fifteen.
+  - **`Mapping`, not `dict`, because `dict` is invariant in its value type.** Widening to `dict[str, float | str]` made things worse -- 42 mypy errors became 64 -- because a generator building `dict[str, float | int]` cannot be passed to a `dict[str, float | str]` parameter at all. `Mapping` is covariant and accepts every generator's dict shape.
+  - **Read-only is the honest contract:** no code outside the generators reads `indicators`, and nothing mutates it after the signal is constructed.
+- **Alternatives Considered:**
+  - **`dict[str, float | str]`:** REJECTED - invariance, see rationale.
+  - **Annotate the local dict in each generator:** REJECTED - roughly 20 files to state one fact.
+  - **Serialise labels to float codes at the boundary:** REJECTED - destroys the diagnostic value of the field to satisfy a type that was wrong.
+- **Status:** ACTIVE
+- **Date Decided:** 2026-08-11
+- **Implemented By:** `src/core/strategy/signals.py`
+- **Affected Files:** `src/core/strategy/signals.py`
+- **References:** `docs/PRODUCTION_READINESS_ASSESSMENT.md` plan item 2.7.
+
+### DEC-2026-08-11-007: Operational Scripts Emit ASCII Only
+- **Decision:** Every script that writes to stdout uses ASCII markers (`[OK]`, `[FAIL]`, `[WARN]`) rather than emoji or typographic characters.
+- **Context:** `scripts/init_db.py` -- the first command in the README quickstart -- printed a check-mark emoji on success. On a default Windows console (cp1252) that raises `UnicodeEncodeError`. The bare `except Exception` then attempted to print a cross-mark emoji, which raised again, unhandled. The database was created correctly and the script exited 1 with a traceback. Twelve files carried non-ASCII inside `print()`, including `run_all.py`, `run_live_trading.py`, `validation_report.py` and `health_check.py`.
+- **Rationale:**
+  - **The quickstart is the first thing a reviewer runs.** A stack trace in the first sixty seconds is read as "this project does not work", regardless of the cause.
+  - **`run_live_trading.py` is not a place to risk an encoding crash.** A print that raises inside the live loop is an availability failure with capital at stake.
+  - **Console encoding is not the program's to assume.** Emitting ASCII is correct on every platform; forcing UTF-8 reconfiguration at each entrypoint treats the symptom.
+  - **Consistent with existing practice:** `validation_report.py` already used ASCII `[OK]`/`[MISS]`/`[...]` markers.
+- **Alternatives Considered:**
+  - **`sys.stdout.reconfigure(encoding="utf-8")` at each entrypoint:** REJECTED - a band-aid, easy to omit in the next script, and leaves the output undisplayable in some terminals regardless.
+  - **Set `PYTHONIOENCODING` in the docs:** REJECTED - pushes a defect onto the reader, and does not help anyone who runs the script without reading first.
+  - **Fix only `init_db.py`:** REJECTED - the same latent crash sits in the live loop and the daily report.
+- **Status:** ACTIVE
+- **Date Decided:** 2026-08-11
+- **Implemented By:** 12 files under `scripts/` and `tests/performance/`
+- **Affected Files:** `scripts/init_db.py`, `verify_db.py`, `run_all.py`, `run_live_trading.py`, `validation_report.py`, `health_check.py`, `audit_check.py`, `backtest_rolling.py`, `backtest_btf_may2026.py`, `sweep_tp_wfo.py`, `sweep_stop_multiplier.py`, `tests/performance/test_risk_performance.py`
+- **References:** Verified after the change: `python scripts/init_db.py` and `python scripts/verify_db.py` both exit 0 on a default Windows console.

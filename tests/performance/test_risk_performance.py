@@ -211,7 +211,7 @@ class TestPositionSizingPerformance:
         # Pure math should be extremely fast
         assert avg_duration < 0.010, f"Avg sizing: {avg_duration*1000:.2f}ms"
 
-        print(f"Fixed risk sizing (avg of {iterations}): {avg_duration*1000000:.2f}µs")
+        print(f"Fixed risk sizing (avg of {iterations}): {avg_duration*1000000:.2f}us")
 
     def test_portfolio_state_build_under_50ms(
         self,

@@ -21,7 +21,7 @@ try:
     from src.data.models.signal import Signal
     from src.data.models.strategy_assignment import StrategyAssignment
 except ImportError as e:
-    print(f"❌ Import Error: {e}")
+    print(f"[FAIL] Import Error: {e}")
     sys.exit(1)
 
 def check_mutable_defaults(model_class):

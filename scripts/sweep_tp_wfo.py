@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-"""Take-Profit Walk-Forward Optimizer — PARAVANT
+"""Take-Profit Walk-Forward Optimizer -- PARAVANT
 
 Professional quant methodology:
 
@@ -9,11 +9,11 @@ Professional quant methodology:
     OOS = out-of-sample window for generalization validation.
     WFO score = average OOS Profit Factor across windows with >= 3 trades.
 
-  Phase 1 — 1D TP Sweep:
+  Phase 1 -- 1D TP Sweep:
     Varies risk_reward_ratio (1.0 -> 4.0) with stop held at current value.
     Applied to all 8 configurable-TP promoted strategies (18 symbol pairs).
 
-  Phase 2 — 2D Joint Surface:
+  Phase 2 -- 2D Joint Surface:
     Jointly varies atr_stop_multiplier AND risk_reward_ratio.
     Only for pairs where Phase 1 WFO avg OOS PF >= 1.5.
     Identifies the robust risk/reward regime, not just the TP peak.
@@ -71,12 +71,12 @@ WFO_WINDOWS = [
 ]
 
 # ---------------------------------------------------------------------------
-# Phase 1 — 1D TP grid
+# Phase 1 -- 1D TP grid
 # ---------------------------------------------------------------------------
 RR_GRID_1D: list[float] = [1.0, 1.5, 2.0, 2.5, 3.0, 3.5, 4.0]
 
 # ---------------------------------------------------------------------------
-# Phase 2 — 2D joint surface (stop x TP)
+# Phase 2 -- 2D joint surface (stop x TP)
 # Only for strategy-symbol pairs where Phase 1 WFO avg OOS PF >= threshold
 # ---------------------------------------------------------------------------
 STOP_GRID_2D: list[float]    = [1.5, 2.0, 2.5, 3.0]
@@ -84,7 +84,7 @@ RR_GRID_2D: list[float]      = [1.5, 2.0, 2.5, 3.0, 3.5, 4.0]
 PHASE2_QUALIFY_PF: float     = 1.5   # minimum Phase 1 WFO avg OOS PF
 
 # ---------------------------------------------------------------------------
-# Strategy sweep targets — 8 promoted strategies with configurable rr_ratio
+# Strategy sweep targets -- 8 promoted strategies with configurable rr_ratio
 # ---------------------------------------------------------------------------
 SWEEP_TARGETS: dict[str, dict[str, Any]] = {
     "MACD_PB": {
@@ -187,11 +187,11 @@ SWEEP_TARGETS: dict[str, dict[str, Any]] = {
 
 # Strategies that cannot be TP-optimized via rr_ratio (explanation notes)
 NON_CONFIGURABLE_NOTES = [
-    ("BTF",    "Keltner middle-band TP (structural exit) — no rr_ratio param — correct as-is"),
-    ("CMF",    "CRITICAL: hardcoded TP = price + 2.5*ATR — add risk_reward_ratio param to generator"),
-    ("RSI_BB", "BB middle-band TP + RSI signal exit (mean-reversion target) — structural, correct"),
+    ("BTF",    "Keltner middle-band TP (structural exit) -- no rr_ratio param -- correct as-is"),
+    ("CMF",    "CRITICAL: hardcoded TP = price + 2.5*ATR -- add risk_reward_ratio param to generator"),
+    ("RSI_BB", "BB middle-band TP + RSI signal exit (mean-reversion target) -- structural, correct"),
     ("ICVP",   "CRITICAL: TP = stop distance (1:1 R:R, same multiplier for both) "
-               "— add separate risk_reward_ratio param; 1:1 requires >50% WR to be profitable"),
+               "-- add separate risk_reward_ratio param; 1:1 requires >50% WR to be profitable"),
 ]
 
 
@@ -325,7 +325,7 @@ def oos_metrics(
     if gross_loss > 0:
         pf = gross_profit / gross_loss
     elif gross_profit > 0:
-        pf = 9.99  # no losers — cap at 9.99 for display
+        pf = 9.99  # no losers -- cap at 9.99 for display
     else:
         pf = 0.0
 
@@ -408,13 +408,13 @@ def run_phase1(
         phase1_results[label] = {}
 
         print(f"\n{'='*82}")
-        print(f"  PHASE 1 — {label}  ({template_id})")
+        print(f"  PHASE 1 -- {label}  ({template_id})")
         print(f"  Current: RR={current_rr}  Stop={current_stop}x ATR")
         print(f"{'='*82}")
 
         for symbol in cfg["symbols"]:
             if symbol not in data:
-                print(f"  {symbol}: no data — skipped")
+                print(f"  {symbol}: no data -- skipped")
                 continue
 
             series = data[symbol]
@@ -422,7 +422,7 @@ def run_phase1(
             needed = TOTAL_DAYS * BARS_PER_DAY
 
             if n_bars < needed * 0.9:
-                print(f"  {symbol}: only {n_bars} bars (need ~{needed}) — skipped")
+                print(f"  {symbol}: only {n_bars} bars (need ~{needed}) -- skipped")
                 continue
 
             print(f"\n  {symbol}  ({n_bars} bars available)")
@@ -453,7 +453,7 @@ def run_phase1(
                     f"tp1d_{label}_{symbol}_is_rr{rr:.1f}",
                 )
 
-                # OOS backtests — run IS+OOS combined, filter trades by oos_start
+                # OOS backtests -- run IS+OOS combined, filter trades by oos_start
                 oos_window_metrics: list[dict] = []
                 for win_idx, (is_s, is_e, oos_s, oos_e) in enumerate(WFO_WINDOWS):
                     # Need at least oos_end bars
@@ -530,7 +530,7 @@ def run_phase1(
             if gain > 0.05:
                 rec_parts.append(f"WFO PF gain +{gain:.2f} => UPDATE RECOMMENDED")
             elif gain <= 0.05 and current_rr == optimal_rr:
-                rec_parts.append("Current RR is optimal — no change needed")
+                rec_parts.append("Current RR is optimal -- no change needed")
             else:
                 rec_parts.append(f"WFO PF gain +{gain:.2f} => marginal, within plateau")
 
@@ -573,7 +573,7 @@ def run_phase2(
         return
 
     print(f"\n{'='*82}")
-    print("  PHASE 2 — 2D Joint Surface (Stop x TP)")
+    print("  PHASE 2 -- 2D Joint Surface (Stop x TP)")
     print(f"  Qualifying pairs (WFO PF >= {PHASE2_QUALIFY_PF}): "
           f"{', '.join(f'{label}/{symbol}' for label, symbol in qualifying)}")
     print(f"{'='*82}")
@@ -597,12 +597,12 @@ def run_phase2(
         series = data[symbol]
         n_bars = len(series)
         if n_bars < oos_combined_end:
-            print(f"\n  {label}/{symbol}: insufficient bars for Phase 2 — skipped")
+            print(f"\n  {label}/{symbol}: insufficient bars for Phase 2 -- skipped")
             continue
 
         oos_start_dt = series.candles[w1_oos_s * BARS_PER_DAY].timestamp
 
-        print(f"\n  {label} — {symbol}  [2D surface: {len(STOP_GRID_2D)} stops x {len(RR_GRID_2D)} RR]")
+        print(f"\n  {label} -- {symbol}  [2D surface: {len(STOP_GRID_2D)} stops x {len(RR_GRID_2D)} RR]")
         print(f"  {'Stop':>5}  {'RR':>5}  {'IS_T':>5}  {'IS_PF':>6}  {'OOS_T':>6}  {'OOS_PF':>7}  {'OOS_WR':>7}  {'Kelly':>7}  Note")
         print(f"  {'-'*80}")
 
@@ -682,7 +682,7 @@ def run_phase2(
 def print_non_configurable_report() -> None:
     """Print notes for strategies that cannot be TP-optimized via rr_ratio."""
     print(f"\n{'='*82}")
-    print("  NON-CONFIGURABLE STRATEGIES — TP Analysis")
+    print("  NON-CONFIGURABLE STRATEGIES -- TP Analysis")
     print(f"{'='*82}")
     for label, note in NON_CONFIGURABLE_NOTES:
         marker = "CRITICAL" if "CRITICAL" in note else "NOTE"
@@ -708,7 +708,7 @@ async def main(
     only_symbol: str | None,
 ) -> None:
     """Fetch data and run selected sweep phases."""
-    print("\nPARAVANT — Take-Profit Walk-Forward Optimizer")
+    print("\nPARAVANT -- Take-Profit Walk-Forward Optimizer")
     print(f"Date: {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M UTC')}")
     print(f"WFO: {len(WFO_WINDOWS)} windows ({IS_DAYS}d IS + {OOS_DAYS}d OOS each)")
     print(f"Fetching {TOTAL_DAYS}d of 1H data from Binance mainnet")
@@ -747,7 +747,7 @@ async def main(
 
         # Phase 1 summary across all pairs
         print(f"\n{'='*82}")
-        print("  PHASE 1 SUMMARY — WFO TP Recommendations")
+        print("  PHASE 1 SUMMARY -- WFO TP Recommendations")
         print(f"{'='*82}")
         for label, sym_data in phase1_results.items():
             cfg = SWEEP_TARGETS[label]

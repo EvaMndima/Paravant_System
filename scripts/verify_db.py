@@ -18,17 +18,17 @@ def main():
         with engine.connect() as conn:
             result = conn.execute(text("SELECT 1"))
             result.fetchone()
-        print("✅ Database connection successful")
+        print("[OK] Database connection successful")
         
         # Verify schema
         inspector = inspect(engine)
         tables = inspector.get_table_names()
         
         if not tables:
-            print("❌ No tables found. Run scripts/init_db.py first.")
+            print("[FAIL] No tables found. Run scripts/init_db.py first.")
             sys.exit(1)
             
-        print(f"✅ Found {len(tables)} tables:")
+        print(f"[OK] Found {len(tables)} tables:")
         for table in sorted(tables):
             columns = inspector.get_columns(table)
             print(f"   - {table} ({len(columns)} columns)")
@@ -45,14 +45,14 @@ def main():
         
         missing = expected_tables - set(tables)
         if missing:
-            print(f"⚠️  Missing tables: {missing}")
+            print(f"[WARN]  Missing tables: {missing}")
         else:
-            print("✅ All expected tables present")
+            print("[OK] All expected tables present")
             
-        print("\n✅ Database verification complete")
+        print("\n[OK] Database verification complete")
         
     except Exception as e:
-        print(f"❌ Error verifying database: {e}")
+        print(f"[FAIL] Error verifying database: {e}")
         sys.exit(1)
 
 

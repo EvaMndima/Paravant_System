@@ -21,7 +21,7 @@ Usage:
     # Telegram-friendly compact summary
     python -m scripts.validation_report --compact
 
-    # Run as a Railway cron (e.g. once a day) — sends summary to Telegram
+    # Run as a Railway cron (e.g. once a day) -- sends summary to Telegram
     python -m scripts.validation_report --telegram
 
 Promotion gate (from DEC-2026-05-27-004):
@@ -55,7 +55,7 @@ logger = get_logger(__name__)
 
 
 # -----------------------------------------------------------------------------
-# Promotion gate thresholds — single source of truth.
+# Promotion gate thresholds -- single source of truth.
 # Decision: DEC-2026-05-27-004.
 # -----------------------------------------------------------------------------
 PROMOTION_GATE: dict[str, float | int] = {
@@ -93,7 +93,7 @@ class SessionStats:
     classification: str
     # Count of trades dropped from this session's stats because they carry the
     # PARA-02 corruption signature (force-close exit_price was a dimensionless
-    # equity/position_value ratio, not a market price). Read-time filter only —
+    # equity/position_value ratio, not a market price). Read-time filter only --
     # the underlying Neon row is never modified. Decision: DEC-2026-05-31-002.
     quarantined_trades: int = 0
 
@@ -102,7 +102,7 @@ class SessionStats:
         """True when >20% of this session's raw trades were quarantined.
 
         Signals that the reported metrics rest on a materially smaller sample
-        than the session actually recorded — treat its classification with care.
+        than the session actually recorded -- treat its classification with care.
         """
         raw_total = self.total_trades + self.quarantined_trades
         if raw_total == 0:
@@ -124,7 +124,7 @@ class PromotionDistance:
     satisfy the promotion gate (DEC-2026-05-27-004); 0 means the dimension
     already passes. A session is READY exactly when all four fields are zero,
     which (by construction) agrees with ``_classify`` returning READY_FOR_LIVE.
-    Purely informational — ``classification`` remains the source of truth.
+    Purely informational -- ``classification`` remains the source of truth.
     Decision: DEC-2026-06-01-002.
     """
 
@@ -170,7 +170,7 @@ def _profit_factor(wins_sum: float, losses_sum: float) -> float:
 def _sharpe_per_trade(returns: list[float]) -> float:
     """Return Sharpe ratio computed on per-trade percentage returns.
 
-    This is a per-trade Sharpe (not annualized) — comparable across
+    This is a per-trade Sharpe (not annualized) -- comparable across
     strategies with different trade frequencies, and what most quant
     desks use for paper validation.
     """
@@ -257,7 +257,7 @@ def promotion_distance(stats: SessionStats) -> PromotionDistance:
 
 
 # -----------------------------------------------------------------------------
-# PARA-02 historical quarantine — read-time filter for corrupted force-closes.
+# PARA-02 historical quarantine -- read-time filter for corrupted force-closes.
 # Decision: DEC-2026-05-31-002 (depends on DEC-2026-05-31-001, the forward-only
 # code fix). PARA-02 force-closes booked exit_price as the dimensionless
 # `equity / position_value` ratio (~1.x) instead of the market close, so some
@@ -415,7 +415,7 @@ def load_sessions(min_trades: int = 0) -> list[SessionStats]:
     # empty local SQLite is immediately visible. Mask credentials.
     db_url = os.environ.get("DATABASE_URL") or "sqlite:///data/trading.db (local default)"
     if "@" in db_url:
-        # postgres-style URL — show only the host part, not the credentials
+        # postgres-style URL -- show only the host part, not the credentials
         masked = db_url.split("@", 1)[1].split("?", 1)[0]
         print(f"[validation_report] Connecting to: <credentials hidden>@{masked}")
     else:
@@ -423,7 +423,7 @@ def load_sessions(min_trades: int = 0) -> list[SessionStats]:
 
     init_db()
     # CRITICAL: compute stats INSIDE the session context. PaperTradingSession
-    # has JSON columns (trade_log) that SQLAlchemy lazy-loads — accessing
+    # has JSON columns (trade_log) that SQLAlchemy lazy-loads -- accessing
     # them after the session closes raises DetachedInstanceError. By
     # computing stats inside the `with` block, the resulting SessionStats
     # dataclasses are plain Python objects and survive session close fine.
@@ -501,7 +501,7 @@ def print_console_report(sessions: list[SessionStats]) -> None:
         return
 
     print("=" * 110)
-    print(f"PARAVANT LIVE-PAPER VALIDATION REPORT — {datetime.now(timezone.utc).isoformat(timespec='seconds')}")
+    print(f"PARAVANT LIVE-PAPER VALIDATION REPORT -- {datetime.now(timezone.utc).isoformat(timespec='seconds')}")
     print("=" * 110)
     print(
         f"Promotion gate: "
@@ -591,13 +591,13 @@ def print_console_report(sessions: list[SessionStats]) -> None:
         )
         if flagged:
             print(
-                f"  [!] >20% dropped — metrics on reduced sample: "
+                f"  [!] >20% dropped -- metrics on reduced sample: "
                 f"{', '.join(flagged)}"
             )
 
     # Distance-to-promotion: for every non-READY session, the concrete gap on
     # each gate dimension (DEC-2026-06-01-002). This is the dashboard during the
-    # calendar wait — it answers "what is each maturing strategy still missing?"
+    # calendar wait -- it answers "what is each maturing strategy still missing?"
     print_distance_section(sessions)
 
     if n_ready == 0:
@@ -621,7 +621,7 @@ def compact_text(sessions: list[SessionStats]) -> str:
         f"DEGRADED: {n_degr}" + (f" ({', '.join(degr_list)})" if degr_list else ""),
     ]
 
-    # Distance to promotion — compact mode shows only the TRADE gap for brevity
+    # Distance to promotion -- compact mode shows only the TRADE gap for brevity
     # (the full per-dimension breakdown lives in the console report).
     # Decision: DEC-2026-06-01-002. Closest-to-ready first; cap the list so the
     # Telegram message stays tidy.

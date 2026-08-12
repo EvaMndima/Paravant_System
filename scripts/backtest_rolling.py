@@ -7,7 +7,7 @@ one-window fluke. This is the analysis that should have been done
 BEFORE BTF was promoted on the Q1 2026 numbers.
 
 A strategy whose PF varies dramatically across windows (e.g. 3.0 in
-Q1 then 0.4 in May) is not robust — it's overfit to a specific market
+Q1 then 0.4 in May) is not robust -- it's overfit to a specific market
 regime. A strategy whose PF stays in [1.2, 1.8] across all windows is
 showing a real (if modest) edge.
 
@@ -58,14 +58,14 @@ logger = get_logger(__name__)
 
 
 # -----------------------------------------------------------------------------
-# Strategy parameter snapshots — kept here so the diagnostic is reproducible
+# Strategy parameter snapshots -- kept here so the diagnostic is reproducible
 # even if scripts/run_paper_trading.py changes. Update these if the live
 # paper config changes.
 # -----------------------------------------------------------------------------
 STRATEGY_PARAMS: dict[str, dict[str, Any]] = {
     # -------------------------------- BEAR --------------------------------
     "bear_trend_follower": {
-        # BTF — RETIRED from live paper (DEC-2026-05-27-007) but KEPT in
+        # BTF -- RETIRED from live paper (DEC-2026-05-27-007) but KEPT in
         # backtest registry so we can verify per-regime whether the
         # retirement was warranted in every regime or only in CHOPPY_BEAR.
         "htf_ema_period": 200,
@@ -409,10 +409,10 @@ async def run(strategies: list[str], symbols_override: list[str] | None,
             series_by_sym[sym] = s
             print(f"  {sym}: {len(s)} bars")
         except Exception as e:
-            print(f"  {sym}: FETCH FAILED — {e}")
+            print(f"  {sym}: FETCH FAILED -- {e}")
 
     # Also fetch BTC daily so we can classify each window's macro regime.
-    # Decision: DEC-2026-05-27-008 — BTC daily is the universal regime anchor.
+    # Decision: DEC-2026-05-27-008 -- BTC daily is the universal regime anchor.
     print("\nFetching BTC daily for regime classification ...")
     try:
         btc_daily = await fetcher.fetch_historical_ohlcv(
@@ -430,7 +430,7 @@ async def run(strategies: list[str], symbols_override: list[str] | None,
             for bar, regime in zip(btc_daily.candles, regime_labels)
         }
     except Exception as e:
-        print(f"  BTC daily FETCH FAILED — {e}. Continuing without regime tags.")
+        print(f"  BTC daily FETCH FAILED -- {e}. Continuing without regime tags.")
         btc_daily = None
         regime_by_ts = {}
 
@@ -582,7 +582,7 @@ def print_report(results: list[WindowResult]) -> None:
             f"-> {verdict}"
         )
 
-    # Per-regime breakdown — THE KEY NEW DIAGNOSTIC.
+    # Per-regime breakdown -- THE KEY NEW DIAGNOSTIC.
     # A strategy with OVERFIT verdict overall but STABLE in one regime is
     # actually a REGIME-SPECIFIC edge, not overfit. This is what would
     # have caught BTF as "edge in TRENDING_BEAR, broken in CHOPPY_BEAR"
@@ -592,7 +592,7 @@ def print_report(results: list[WindowResult]) -> None:
     print("=" * 125)
     print(
         "If a strategy has STABLE_EDGE in one regime but POOR in another, it's "
-        "a REGIME-SPECIFIC edge — valid IF deployed only in that regime.\n"
+        "a REGIME-SPECIFIC edge -- valid IF deployed only in that regime.\n"
         "If a strategy is POOR in its declared/expected regime, it has no real edge."
     )
     print()
@@ -651,7 +651,7 @@ def main() -> None:
         "--window-days", type=int, default=60,
         help=(
             "Days per window (default 60). Must be large enough to "
-            "include indicator warmup — BTF needs ~34 days (4H EMA(200) = "
+            "include indicator warmup -- BTF needs ~34 days (4H EMA(200) = "
             "~800 1H bars). 60 days gives 1440 bars per window: ~812 "
             "warmup + ~628 active trading bars."
         ),

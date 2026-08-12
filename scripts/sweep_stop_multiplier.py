@@ -145,7 +145,7 @@ def print_sweep_table(
 ) -> None:
     """Print sweep results sorted by Sharpe ratio."""
     print(f"\n{'='*85}")
-    print(f"  {strategy_name} — Stop Multiplier Sweep  (120d, SUPERVISED thresholds)")
+    print(f"  {strategy_name} -- Stop Multiplier Sweep  (120d, SUPERVISED thresholds)")
     print("  EP Chan: trail_distance = atr_stop_multiplier x ATR at entry")
     print(f"{'='*85}")
     header = (
@@ -187,7 +187,7 @@ def print_sweep_table(
 
 async def main() -> None:
     """Fetch data once, run all sweep combinations, print results."""
-    print("\nPARAVANT — ATR Stop-Multiplier Sweep (EP Chan framework)")
+    print("\nPARAVANT -- ATR Stop-Multiplier Sweep (EP Chan framework)")
     print(f"Date: {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M UTC')}")
     print(f"Period: {DAYS} days  |  Timeframe: 1H  |  Capital: $10,000\n")
 
