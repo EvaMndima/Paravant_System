@@ -3,12 +3,18 @@
 **An autonomous crypto trading system, and a validation layer built to prove
 its own strategies don't work.**
 
-It succeeded. Of eleven strategies developed over four months, **zero** survived
-statistical correction for the number of experiments run. Two further
-hypotheses, tested afterwards under a pre-registered protocol, were also
-rejected — at sample sizes of 341 and 132 trades, with no capital at risk.
+It worked, and the most instructive thing it did was catch an error in its own
+reporting.
 
-That is the result this repository exists to report. The trading engine is the
+After four months and 29 signal generators, **no strategy in this repository has
+a validated edge.** Three were rejected outright at adequate sample size under
+Deflated Sharpe. Ten more were initially reported as rejected — until the
+system's own guard established that they had never had enough data to reject,
+and reclassified them as *unmeasurable*.
+
+The difference between "proven worthless" and "never actually measured" is the
+whole discipline. Getting it wrong in the safe direction, then catching it, is
+the result this repository exists to report. The trading engine is the
 supporting cast.
 
 ---
@@ -51,41 +57,68 @@ project evaluates whether to stop, against criteria written in advance.
 
 ## The result
 
-From `docs/research/retrospective/PORTFOLIO_SUMMARY_2026-06-05.md`:
+Three strategies were rejected at a sample size large enough for the verdict to
+mean something:
 
-```
-Strategies analysed under Deflated Sharpe:            11
-Surviving the DSR floor (p < 0.3):                     0
-  Tier A (deploy)                                      0
-  Tier B (half size)                                   0
-  Tier C (observe)                                     0
-  Tier D (reject)                                      5
-Previously-retired strategies, confirmed correct:    6/6
-False negatives found:                                 0
-```
-
-All five strategies previously classified `KEEP` — including the portfolio's
-most-trusted multi-regime performer — failed once corrected for the number of
-trials run. The method also *confirmed* every prior retirement, so it was not
-simply rejecting everything.
-
-Two forward hypotheses followed, under the full pre-registered protocol:
-
-| Hypothesis | Mechanism | N | Profit factor | DSR p | Verdict |
+| Subject | Source | N | Profit factor | DSR p | Verdict |
 |---|---|---|---|---|---|
-| H-2026-06-002 | Price breakout continuation | 341 | 0.59 | 1.0 | Rejected |
-| H-2026-06-003 | Perp-funding-confirmed trend | 132 | 0.53 | 1.0 | Rejected |
+| BTF (bear trend follower) | Recorded trades | 25 | 0.54 | 1.000 | `TIER_D` reject |
+| H-2026-06-002 (price breakout continuation) | Backtest | 341 | 0.59 | 1.000 | `TIER_D` reject |
+| H-2026-06-003 (funding-confirmed trend) | Backtest | 132 | 0.53 | 1.000 | `TIER_D` reject |
 
-A third was killed at the hypothesis-quality gate as a structural duplicate,
-before consuming a trial.
+A fourth hypothesis was killed at the quality gate as a structural duplicate of
+an existing strategy, before it consumed a trial.
 
-**Conclusion recorded:** trending-bull continuation is a hard gap across two
-distinct mechanism classes. A calibration lesson was recorded alongside it — the
-hypothesis that scored *higher* at the quality gate performed *worse*, meaning
-the scorecard measures mechanism plausibility and not expected profitability.
-That was written down rather than explained away.
+### The part worth reading
 
-Full write-up: **[docs/research/](docs/research/)**
+The 2026-06-05 retrospective originally reported **all eleven** strategies as
+`TIER_D_REJECT`. That report was wrong, and the project's own tooling is what
+established it.
+
+Ten of the eleven had between **0 and 4 recorded trades**. The paper-trading
+process had been down behind a regional exchange block, so the trade records the
+analysis read were nearly empty. A Deflated Sharpe p-value of 1.000 computed on
+zero trades is not a finding — it is a null input producing a degenerate output,
+and it was being printed next to the word "reject".
+
+The fix was a floor (`MIN_N_FOR_CLASSIFICATION = 10`) checked *before* any
+threshold, returning a distinct `INSUFFICIENT_DATA` verdict. From
+[`research/promotion/classifier.py`](research/promotion/classifier.py):
+
+> A genuinely edge-less strategy with enough trades still earns `TIER_D`; only
+> data *scarcity* yields `INSUFFICIENT_DATA`. The 2026-06-05 run's N=0..4
+> strategies were wrongly shown as `TIER_D_REJECT`; this guard prevents that
+> "no data" -> "proven noise" misread.
+
+Re-running the stored 2026-06-05 results through the corrected classifier:
+
+```
+                        as published    corrected
+TIER_D_REJECT                    11            1
+INSUFFICIENT_DATA                 0           10
+```
+
+This is the oldest error in applied statistics — treating absence of evidence as
+evidence of absence — and it is the exact failure the whole research layer was
+built to prevent, committed by that research layer, caught by it, and left in
+the repository with the superseded report still in place and marked.
+
+**None of this changes the bottom line: zero validated strategies.** It changes
+how much of that is *demonstrated* versus merely *unmeasured*, which is a
+distinction worth being precise about.
+
+### What was concluded
+
+Trending-bull continuation is a hard gap across two distinct mechanism classes
+(price momentum and derivatives flow), both rejected at large N. The next
+hypothesis for that regime must come from a different mechanism class entirely.
+
+A calibration lesson was recorded alongside it: H-003 scored *higher* at the
+hypothesis-quality gate (18/21 vs 14/21) and performed *worse*. The scorecard
+measures mechanism plausibility, not expected profitability. That was written
+down rather than explained away.
+
+Full write-up: **[docs/RESEARCH_FINDINGS.md](docs/RESEARCH_FINDINGS.md)**
 
 ---
 

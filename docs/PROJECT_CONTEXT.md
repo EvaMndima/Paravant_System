@@ -758,6 +758,21 @@ is itself a meaningful engineering artifact.
 
 ### 15.2 The retrospective DSR result (2026-06-05)
 
+> **CORRECTED 2026-08-11 — the table below is the superseded output.**
+>
+> Ten of these eleven strategies had 0 to 4 recorded trades, because paper
+> trading was down behind a regional exchange block. Under the corrected
+> classifier (`MIN_N_FOR_CLASSIFICATION = 10`, DEC-2026-06-04-014) they are
+> `INSUFFICIENT_DATA`, not `TIER_D_REJECT`. Only BTF (N=25) is a genuine
+> rejection from this run.
+>
+> The conclusion "no strategy has a validated edge" is unchanged. The claim that
+> all eleven were *shown to be worthless* is withdrawn — most were never
+> measured. Section 15.3 below also understates the forward loop, which ran 11
+> hypotheses and produced 7 genuine rejections, not 2.
+>
+> See **[RESEARCH_FINDINGS.md](RESEARCH_FINDINGS.md)** for the corrected account.
+
 All 11 strategies were re-analysed under Deflated Sharpe with the conservative cost
 model. Result (`docs/research/retrospective/PORTFOLIO_SUMMARY_2026-06-05.md`):
 

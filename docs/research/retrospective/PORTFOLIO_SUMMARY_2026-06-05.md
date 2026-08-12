@@ -1,3 +1,32 @@
+> # SUPERSEDED — THE TIER COLUMN BELOW IS WRONG
+>
+> **This report classified 10 of 11 strategies as `TIER_D_REJECT` on samples of
+> 0 to 4 trades. That is not a rejection. It is an absence of data.**
+>
+> The paper-trading process was down behind a regional exchange block when this
+> ran, so the recorded trades this analysis read were nearly empty. A DSR
+> p-value of 1.000 computed on N=0 is a degenerate output, not a verdict.
+>
+> The classifier was subsequently given a `MIN_N_FOR_CLASSIFICATION = 10` floor,
+> checked before any threshold, returning a distinct `INSUFFICIENT_DATA` tier
+> (DEC-2026-06-04-014). Re-running these same stored results through the
+> corrected classifier gives:
+>
+> | Verdict | As published | Corrected |
+> |---|---|---|
+> | `TIER_D_REJECT` | 11 | **1** (BTF, N=25) |
+> | `INSUFFICIENT_DATA` | 0 | **10** |
+>
+> **What still stands:** no strategy here has a validated edge, and BTF's
+> rejection at N=25 is genuine. What does not stand is the claim that the other
+> ten were shown to be worthless. They were never measured.
+>
+> This file is kept unedited below as the record of the error. See
+> [../../RESEARCH_FINDINGS.md](../../RESEARCH_FINDINGS.md) for the corrected
+> account.
+
+---
+
 # Retrospective DSR Portfolio Summary
 
 **Date:** 2026-06-05

@@ -250,6 +250,12 @@ So: 63 working backend endpoints, and a UI wired to 3 of them.
 
 ### 2.8 Research findings to date
 
+> **CORRECTED 2026-08-11.** The paragraph below repeats a superseded result.
+> Ten of the eleven strategies had 0-4 recorded trades and are
+> `INSUFFICIENT_DATA` under the corrected classifier, not `TIER_D_REJECT`. The
+> forward loop also ran 11 hypotheses producing 7 genuine rejections, not the 2
+> recorded here. See [RESEARCH_FINDINGS.md](RESEARCH_FINDINGS.md).
+
 `docs/research/retrospective/PORTFOLIO_SUMMARY_2026-06-05.md` records that all
 11 strategies analysed — including the 5 previously classified KEEP — land at
 `TIER_D_REJECT` under the Deflated Sharpe Ratio. Zero strategies survive the
