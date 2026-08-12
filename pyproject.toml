@@ -3,7 +3,7 @@ name = "paravant-trading"
 version = "0.1.0"
 description = "Personal Autonomous Trading System - MVP"
 authors = [
-    {name = "Nai", email = "nai@example.com"}
+    {name = "Eva Mndima", email = "enairuko@gmail.com"}
 ]
 requires-python = ">=3.11"
 license = {text = "MIT"}
