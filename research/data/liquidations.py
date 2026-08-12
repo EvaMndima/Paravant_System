@@ -250,40 +250,65 @@ class LiquidationStore:
         events: Sequence[LiquidationEvent],
         *,
         flush_dt: datetime | None = None,
-    ) -> Path | None:
-        """Write a batch of events to one immutable JSONL fragment.
+    ) -> list[Path]:
+        """Write a batch of events to immutable JSONL fragments, one per date.
+
+        Events are grouped by the UTC date of their own ``trade_time_ms`` and
+        one immutable fragment is written per date.
+
+        Partitioning on the event's causal timestamp -- not on wall-clock flush
+        time -- is what makes ``read_window`` correct. The reader derives
+        candidate date directories from the query window, and that window is
+        expressed in trade time. Keying writes on flush time made the two
+        clocks disagree whenever a flush crossed a UTC midnight or replayed
+        historical events, and the affected events became silently unreadable:
+        written to disk, absent from every query. ``_READ_DATE_PAD`` masked the
+        midnight case and nothing covered the general one.
 
         Args:
             events: Events to persist; an empty sequence is a no-op.
-            flush_dt: Timezone-aware UTC flush time, used only to choose the
-                date-partition directory and the fragment filename. Defaults to
+            flush_dt: Timezone-aware UTC flush time. Used only in the fragment
+                *filename*, to order and distinguish fragments written for the
+                same date. It no longer selects the partition. Defaults to
                 ``datetime.now(timezone.utc)``.
 
         Returns:
-            The path of the written fragment, or ``None`` if ``events`` was empty.
+            Paths of the written fragments, one per distinct trade date, sorted
+            by date. Empty list if ``events`` was empty.
 
         Raises:
             ValueError: If ``flush_dt`` is provided but not timezone-aware.
         """
         if not events:
-            return None
+            return []
         if flush_dt is None:
             flush_dt = datetime.now(timezone.utc)
         elif flush_dt.tzinfo is None:
             raise ValueError("flush_dt must be timezone-aware")
 
-        date_dir = self._root / flush_dt.strftime("%Y-%m-%d")
-        date_dir.mkdir(parents=True, exist_ok=True)
-        fragment = date_dir / f"part-{_to_ms(flush_dt)}-{uuid4().hex[:8]}.jsonl"
+        by_trade_date: dict[str, list[LiquidationEvent]] = {}
+        for event in events:
+            key = event.trade_time().strftime("%Y-%m-%d")
+            by_trade_date.setdefault(key, []).append(event)
 
-        payload = "".join(json.dumps(_to_row(e)) + "\n" for e in events)
-        fragment.write_text(payload, encoding="utf-8")
+        written: list[Path] = []
+        for date_key in sorted(by_trade_date):
+            date_dir = self._root / date_key
+            date_dir.mkdir(parents=True, exist_ok=True)
+            fragment = date_dir / f"part-{_to_ms(flush_dt)}-{uuid4().hex[:8]}.jsonl"
+            payload = "".join(
+                json.dumps(_to_row(e)) + "\n" for e in by_trade_date[date_key]
+            )
+            fragment.write_text(payload, encoding="utf-8")
+            written.append(fragment)
+
         logger.info(
             "liquidations_flushed",
-            fragment=str(fragment),
+            fragments=len(written),
             events=len(events),
+            trade_dates=sorted(by_trade_date),
         )
-        return fragment
+        return written
 
     def _candidate_date_dirs(self, t0: datetime, t1: datetime) -> Iterable[Path]:
         """Yield existing date dirs overlapping ``[t0, t1]`` padded by one day."""

@@ -195,14 +195,18 @@ class LiquidationCollector:
         self._received += 1
         return event
 
-    def flush(self) -> Path | None:
-        """Write the buffered events to one immutable fragment and clear it.
+    def flush(self) -> list[Path]:
+        """Write the buffered events to immutable fragments and clear the buffer.
+
+        The store partitions by each event's own trade date, so a buffer that
+        spans a UTC midnight produces one fragment per date rather than a single
+        fragment filed under the wall-clock flush date.
 
         Returns:
-            The fragment path written, or ``None`` if the buffer was empty.
+            Paths of the fragments written, empty if the buffer was empty.
         """
         if not self._buffer:
-            return None
+            return []
         batch = self._buffer
         self._buffer = []
         return self._store.write_batch(batch)

@@ -185,9 +185,9 @@ def test_store_write_read_roundtrip(tmp_path: Any) -> None:
 
 
 def test_store_empty_batch_is_noop(tmp_path: Any) -> None:
-    """Writing an empty batch returns None and creates no fragment."""
+    """Writing an empty batch returns no fragments and creates none."""
     store = LiquidationStore(tmp_path)
-    assert store.write_batch([], flush_dt=_BASE) is None
+    assert store.write_batch([], flush_dt=_BASE) == []
 
 
 def test_store_read_window_filters_by_trade_time(tmp_path: Any) -> None:
@@ -213,18 +213,67 @@ def test_store_read_window_dedups_across_fragments(tmp_path: Any) -> None:
 
 
 def test_store_read_window_spans_midnight_partition_padding(tmp_path: Any) -> None:
-    """An event flushed under the NEXT day's dir is still found by date padding."""
+    """An event flushed after midnight is filed under its own trade date."""
     store = LiquidationStore(tmp_path)
     # Trade time at 23:59:59 on day D; flushed at 00:00:02 on day D+1.
     trade_dt = datetime(2026, 6, 11, 23, 59, 59, tzinfo=timezone.utc)
     flush_dt = datetime(2026, 6, 12, 0, 0, 2, tzinfo=timezone.utc)
     event = _event(t_ms=_ms(trade_dt))
-    store.write_batch([event], flush_dt=flush_dt)
+    written = store.write_batch([event], flush_dt=flush_dt)
+
+    # Partitioned by trade date, not flush date. This used to land under
+    # 2026-06-12 and be readable only because _READ_DATE_PAD widened the scan.
+    assert [p.parent.name for p in written] == ["2026-06-11"]
 
     got = store.read_window(
         trade_dt - timedelta(minutes=5), trade_dt + timedelta(minutes=5)
     )
     assert got == [event]
+
+
+def test_store_partitions_by_trade_date_not_flush_date(tmp_path: Any) -> None:
+    """An event flushed long after it occurred is still readable.
+
+    Regression test. write_batch used to choose the date-partition directory
+    from the wall-clock flush time while read_window derives candidate
+    directories from the query window, which is in trade time. Any flush more
+    than _READ_DATE_PAD from the event's own date wrote the event to disk and
+    then made it invisible to every query -- silent data loss in a store whose
+    entire purpose is accruing a causal history over months.
+    """
+    store = LiquidationStore(tmp_path)
+    trade_dt = datetime(2026, 6, 11, 12, 0, 0, tzinfo=timezone.utc)
+    flush_dt = trade_dt + timedelta(days=62)  # replay / late flush
+    event = _event(t_ms=_ms(trade_dt))
+
+    written = store.write_batch([event], flush_dt=flush_dt)
+    assert [p.parent.name for p in written] == ["2026-06-11"]
+
+    got = store.read_window(
+        trade_dt - timedelta(hours=1), trade_dt + timedelta(hours=1)
+    )
+    assert got == [event]
+
+
+def test_store_batch_spanning_dates_splits_fragments(tmp_path: Any) -> None:
+    """A buffer straddling UTC midnight writes one fragment per trade date."""
+    store = LiquidationStore(tmp_path)
+    before = _event(
+        t_ms=_ms(datetime(2026, 6, 11, 23, 59, 50, tzinfo=timezone.utc)),
+    )
+    after = _event(
+        t_ms=_ms(datetime(2026, 6, 12, 0, 0, 10, tzinfo=timezone.utc)),
+        symbol="ETHUSDT",
+    )
+
+    written = store.write_batch([before, after], flush_dt=_BASE)
+    assert sorted(p.parent.name for p in written) == ["2026-06-11", "2026-06-12"]
+
+    got = store.read_window(
+        datetime(2026, 6, 11, 23, 0, 0, tzinfo=timezone.utc),
+        datetime(2026, 6, 12, 1, 0, 0, tzinfo=timezone.utc),
+    )
+    assert got == sorted([before, after], key=lambda e: (e.trade_time_ms, e.symbol))
 
 
 def test_store_read_window_rejects_naive_datetime(tmp_path: Any) -> None:
@@ -347,8 +396,8 @@ def test_collector_flush_writes_and_clears(tmp_path: Any) -> None:
     store = LiquidationStore(tmp_path)
     collector = LiquidationCollector(store=store)
     collector.on_message(_force_order_msg(t_ms=_ms(_BASE)))
-    fragment = collector.flush()
-    assert fragment is not None
+    written = collector.flush()
+    assert len(written) == 1
     assert collector.buffer_size == 0
     got = store.read_window(_BASE - timedelta(hours=1), _BASE + timedelta(hours=1))
     assert len(got) == 1
@@ -357,7 +406,7 @@ def test_collector_flush_writes_and_clears(tmp_path: Any) -> None:
 def test_collector_flush_empty_is_noop(tmp_path: Any) -> None:
     """Flushing an empty buffer writes nothing."""
     collector = LiquidationCollector(store=LiquidationStore(tmp_path))
-    assert collector.flush() is None
+    assert collector.flush() == []
 
 
 # ---------------------------------------------------------------------------
