@@ -45,7 +45,9 @@ jobs:
       - name: mypy
         # pyproject declares disallow_untyped_defs = true. This job is what
         # makes that declaration true rather than aspirational.
-        run: mypy src/
+        # research/features/ is included: it is the point-in-time feature
+        # store, where a type error is a correctness risk, not a style one.
+        run: mypy src/ research/features/
 
   test:
     name: Tests (py${{ matrix.python-version }})

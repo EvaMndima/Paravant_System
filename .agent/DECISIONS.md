@@ -2951,9 +2951,9 @@ parameters:
 
 **End of Decisions Log**
 
-**Total Decisions:** 105 active, 0 superseded, 5 locked (1 amended); DEC-2026-06-04-013 amended
-**Last Updated:** 2026-08-11
-**Next Decision ID:** DEC-2026-08-11-009
+**Total Decisions:** 106 active, 0 superseded, 5 locked (1 amended); DEC-2026-06-04-013 amended
+**Last Updated:** 2026-08-13
+**Next Decision ID:** DEC-2026-08-13-002
 
 ## Phase 5 Decisions (Backtesting & Simulation)
 
@@ -3148,3 +3148,21 @@ parameters:
 - **Implemented By:** `src/core/indicators/ichimoku.py`, `keltner.py`, `stochastic_rsi.py`
 - **Affected Files:** the three above
 - **References:** `docs/PRODUCTION_READINESS_ASSESSMENT.md` plan item 2.7. With this, `mypy src/` reports no issues across 167 files, so `disallow_untyped_defs` is enforced in fact and not only declared.
+
+### DEC-2026-08-13-001: Bar-Derived Features Are Knowable Only After the Bar Closes
+- **Decision:** A series stamped with bar OPEN times whose values derive from the bar's CLOSE must be read one full bar late. `coinbase_prices.close_at` and `btc_reference.thrust_at` now select on `open + bar_duration <= ts`. The rule is enforced generally by `research/features/`, where each feature declares its `FeatureKind`, `interval` and `publication_lag`, and the store refuses any value whose `knowable_at` exceeds the query instant.
+- **Context:** Both channels documented their accessors as causal and both were wrong in the same way. `times_ms` held bar OPEN times; `close_at`/`thrust_at` did `bisect_right(times_ms, ts)` and returned the matching bar's close-derived value. A query at 10:30 therefore received the 10:00-11:00 bar's close -- a price from 11:00. Up to 59 minutes of lookahead. Each channel looked correct read on its own; the defect only became visible when the same question was asked of all six channels uniformly.
+- **Rationale:**
+  - **Causality by construction, not convention.** Six channels each implemented causality independently, with different accessor names and no shared test. That is why two could be wrong while all six were documented as right. The store computes knowability from declared metadata, so a channel cannot assert its way to being causal.
+  - **Two audits, because there are two failure modes.** `audit_knowability` catches a record whose timestamp is legitimately past while its content is future (this defect). `audit_future_invariance` catches a resolver that scans beyond the query instant. Neither detects the other's failure; a suite with only the intuitive second check would have passed on a channel leaking 59 minutes.
+  - **The affected conclusions stand.** The leak biases results optimistically. H-2026-06-010 (Coinbase premium, PF 0.35) and H-2026-06-011 (BTC lead-lag, PF 0.44) were rejected anyway, so correcting the leak can only make those rejections more conservative. No published finding changes; re-screening is not required to preserve any conclusion.
+- **Alternatives Considered:**
+  - **Restamp the series with bar CLOSE times:** REJECTED - loses the bar's identity, and every caller that joins on bar open would silently shift.
+  - **Fix the two channels and stop there:** REJECTED - leaves the next channel free to repeat it. The defect was a class, not an instance.
+  - **Have resolvers apply their own lag:** REJECTED - that is exactly the per-channel convention that failed. The arithmetic belongs in one tested place.
+- **Status:** ACTIVE
+- **Date Decided:** 2026-08-13
+- **Implemented By:** `research/features/` (spec, store, audit, channels); fixes in `research/data/coinbase_prices.py` and `research/data/btc_reference.py`
+- **Affected Files:** the above, plus `tests/research/test_feature_store.py` (24 tests), `test_coinbase_prices.py`, `test_btc_reference.py`, `test_coinbase_premium.py`
+- **Note on the tests:** `test_close_at_is_causal` asserted `close_at(01:30) == 101.0` -- the leak -- with the comment "latest <= ts". A test named for causality was asserting its violation. This is the third instance in this repository of a test written to match a defect rather than the specification; see `docs/AI_ASSISTED_DEVELOPMENT.md` section 4.1.
+- **References:** DEC-2026-06-04-021 (the liquidation collector, whose causal accessor was already correct and served as the model), PARA-03/04 in `docs/research/RESEARCH_FIXLIST.md`.

@@ -44,6 +44,10 @@ _HEADERS = {
         "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36"
     )
 }
+# Bar duration. These series are 1H and are stamped with bar OPEN times,
+# so a bar is only knowable _BAR_MS after its timestamp.
+_BAR_MS = 3_600_000
+
 _CACHE_DIR = Path("research/.cache/coinbase")
 
 # Binance symbol (USDT-quoted) -> Coinbase product (USD-quoted).
@@ -69,7 +73,7 @@ class CoinbasePriceSeries:
         return len(self.times_ms)
 
     def close_at(self, ts: datetime) -> float | None:
-        """Return the Coinbase close at-or-before ``ts`` (causal lookup).
+        """Return the close of the last bar to have CLOSED at-or-before ``ts``.
 
         Args:
             ts: Timezone-aware UTC instant (a decision-bar timestamp).
@@ -82,7 +86,12 @@ class CoinbasePriceSeries:
         """
         if ts.tzinfo is None:
             raise ValueError("close_at requires a timezone-aware datetime")
-        pos = bisect.bisect_right(self.times_ms, int(ts.timestamp() * 1000))
+        # Select on the bar's CLOSE, not its open. times_ms holds bar OPEN
+        # times while the value is the bar's close, so a bar is only knowable
+        # once _BAR_MS has elapsed. Reading on the open leaked up to 59 minutes
+        # of future price -- a query at 10:30 returned the 10:00-11:00 close.
+        # See DEC-2026-08-13-001.
+        pos = bisect.bisect_right(self.times_ms, int(ts.timestamp() * 1000) - _BAR_MS)
         if pos == 0:
             return None
         return self.closes[pos - 1]

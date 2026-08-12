@@ -113,3 +113,10 @@ disallow_untyped_defs = true
 [[tool.mypy.overrides]]
 module = ["binance.*"]
 ignore_missing_imports = true
+
+# requests ships no stubs in this environment. types-requests is declared in
+# requirements-dev.txt; this keeps a bare research/ check from failing when it
+# is absent.
+[[tool.mypy.overrides]]
+module = ["requests.*"]
+ignore_missing_imports = true

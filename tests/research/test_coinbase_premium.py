@@ -63,7 +63,10 @@ def _isolate(monkeypatch, tmp_path):
 
 def test_emits_long_on_positive_top_percentile_premium() -> None:
     """Window mostly at parity, current bar elevated -> LONG, trailing stop."""
-    closes = [100.0] * (_N - 1) + [101.0]   # last bar: +1% Coinbase premium
+    # The spike sits at index _N-2, not _N-1. At the decision bar the only
+    # Coinbase bar that has CLOSED is the previous one, so a spike on the final
+    # bar is not yet knowable. See DEC-2026-08-13-001.
+    closes = [100.0] * (_N - 2) + [101.0] + [100.0]
     _seed_coinbase(closes)
     gen = CoinbasePremiumGenerator()
     sig = gen.generate(_binance_series(), _PARAMS, _SYMBOL)
@@ -76,14 +79,15 @@ def test_emits_long_on_positive_top_percentile_premium() -> None:
 
 def test_no_signal_when_premium_non_positive() -> None:
     """Coinbase below Binance (discount) -> no signal."""
-    _seed_coinbase([100.0] * (_N - 1) + [99.0])
+    _seed_coinbase([100.0] * (_N - 2) + [99.0] + [100.0])
     gen = CoinbasePremiumGenerator()
     assert gen.generate(_binance_series(), _PARAMS, _SYMBOL) is None
 
 
 def test_no_signal_when_premium_below_percentile() -> None:
     """Window mostly high premium, current small positive -> below p80 -> no signal."""
-    _seed_coinbase([105.0] * (_N - 1) + [100.5])   # window ~5%, current 0.5%
+    # Current (knowable) premium is the _N-2 bar: 0.5% against a ~5% window.
+    _seed_coinbase([105.0] * (_N - 2) + [100.5] + [105.0])
     gen = CoinbasePremiumGenerator()
     assert gen.generate(_binance_series(), _PARAMS, _SYMBOL) is None
 

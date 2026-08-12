@@ -46,9 +46,13 @@ def test_compute_thrust_and_warmup() -> None:
 
 def test_thrust_at_is_causal() -> None:
     s = btc_reference.compute_thrust(_btc_series(), lookback_bars=5)
+    # times_ms are bar OPEN times while thrust[i] is computed from closes[i],
+    # so a bar is knowable only one hour after its timestamp. Queries are
+    # therefore one bar later than this test originally used.
+    # See DEC-2026-08-13-001.
     assert s.thrust_at(_START - timedelta(hours=1)) is None      # before series
     assert s.thrust_at(_START + timedelta(hours=2)) is None      # warmup -> NaN -> None
-    val = s.thrust_at(_START + timedelta(hours=5))
+    val = s.thrust_at(_START + timedelta(hours=6))               # bar 5, now closed
     assert val is not None and abs(val - 0.05) < 1e-9
 
 
@@ -64,5 +68,6 @@ def test_cache_roundtrip(monkeypatch, tmp_path) -> None:
     loaded = btc_reference.load_cached()
     assert loaded is not None
     assert len(loaded) == 30
-    val = loaded.thrust_at(_START + timedelta(hours=5))
+    # +6h, not +5h: a bar stamped with its open is knowable only once closed.
+    val = loaded.thrust_at(_START + timedelta(hours=6))
     assert val is not None and abs(val - 0.05) < 1e-9

@@ -29,6 +29,10 @@ from src.utils.logging import get_logger
 
 logger = get_logger(__name__)
 
+# Bar duration. These series are 1H and are stamped with bar OPEN times,
+# so a bar is only knowable _BAR_MS after its timestamp.
+_BAR_MS = 3_600_000
+
 _CACHE_DIR = Path("research/.cache/btc_reference")
 # Single fixed cache key (the reference is the same for every alt).
 _CACHE_NAME = "BTC_THRUST"
@@ -51,7 +55,7 @@ class BtcThrustSeries:
         return len(self.times_ms)
 
     def thrust_at(self, ts: datetime) -> float | None:
-        """Return BTC's thrust at the latest bar at-or-before ``ts`` (causal).
+        """Return BTC's thrust at the last bar to have CLOSED at-or-before ``ts``.
 
         Args:
             ts: Timezone-aware UTC instant (an alt decision-bar timestamp).
@@ -65,7 +69,10 @@ class BtcThrustSeries:
         """
         if ts.tzinfo is None:
             raise ValueError("thrust_at requires a timezone-aware datetime")
-        pos = bisect.bisect_right(self.times_ms, int(ts.timestamp() * 1000))
+        # Select on the bar's CLOSE. times_ms holds bar OPEN times while thrust
+        # is computed from closes[i], so a bar is knowable only after _BAR_MS.
+        # See DEC-2026-08-13-001.
+        pos = bisect.bisect_right(self.times_ms, int(ts.timestamp() * 1000) - _BAR_MS)
         if pos == 0:
             return None
         value = self.thrust[pos - 1]

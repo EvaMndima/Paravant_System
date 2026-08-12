@@ -31,9 +31,18 @@ def test_close_at_is_causal() -> None:
         times_ms=(_ms(2025, 1, 1, 0), _ms(2025, 1, 1, 1), _ms(2025, 1, 1, 2)),
         closes=(100.0, 101.0, 102.0),
     )
-    assert s.close_at(datetime(2024, 12, 31, tzinfo=_UTC)) is None        # before
-    assert s.close_at(datetime(2025, 1, 1, 1, 30, tzinfo=_UTC)) == 101.0  # latest <= ts
-    assert s.close_at(datetime(2025, 1, 1, 2, tzinfo=_UTC)) == 102.0
+    # times_ms are bar OPEN times; the value is the bar's CLOSE. A bar is only
+    # knowable once it has closed, one hour after its open.
+    #
+    # This test previously asserted close_at(01:30) == 101.0 -- the 01:00-02:00
+    # bar's close, read half an hour before that bar ended. It was named
+    # "is_causal" while asserting a leak of up to 59 minutes of future price.
+    # See DEC-2026-08-13-001.
+    assert s.close_at(datetime(2024, 12, 31, tzinfo=_UTC)) is None         # before series
+    assert s.close_at(datetime(2025, 1, 1, 0, 30, tzinfo=_UTC)) is None    # 00:00 bar still open
+    assert s.close_at(datetime(2025, 1, 1, 1, tzinfo=_UTC)) == 100.0       # 00:00 bar just closed
+    assert s.close_at(datetime(2025, 1, 1, 1, 30, tzinfo=_UTC)) == 100.0   # 01:00 bar still open
+    assert s.close_at(datetime(2025, 1, 1, 2, tzinfo=_UTC)) == 101.0       # 01:00 bar closed
 
 
 def test_close_at_requires_tz_aware() -> None:
