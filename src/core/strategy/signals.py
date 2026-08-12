@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import math
 from abc import ABC, abstractmethod
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any
@@ -54,7 +55,18 @@ class TradingSignal:
     strength: float = 0.5
     stop_loss: float | None = None
     take_profit: float | None = None
-    indicators: dict[str, float] = field(default_factory=dict)
+    # Diagnostic snapshot of indicator state at emission. Values are usually
+    # numeric, but generators also record categorical labels here (e.g.
+    # divergence_type="bullish"), so the value type is float | str. It was
+    # previously dict[str, float], which every generator storing a label
+    # silently violated.
+    #
+    # Declared as Mapping rather than dict because dict is INVARIANT in its
+    # value type, so a generator building dict[str, float] cannot be passed to
+    # a dict[str, float | str] parameter. Mapping is covariant, so every
+    # generator's dict shape is accepted. Read-only is also the honest
+    # contract -- nothing mutates this after the signal is constructed.
+    indicators: Mapping[str, float | str] = field(default_factory=dict)
     metadata: dict[str, Any] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
