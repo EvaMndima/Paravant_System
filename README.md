@@ -212,7 +212,7 @@ Deeper detail: **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)** ·
 | Layer | Files | Lines | Notes |
 |---|---|---|---|
 | `src/` application | 167 `.py` | 49,144 | API, risk, execution, indicators, strategies |
-| `tests/` | 133 `.py` | 36,550 | 1,907 tests, all passing |
+| `tests/` | 133 `.py` | 36,550 | 1,870 passing, 37 skipped, 0 failing |
 | `frontend/src/` | 89 `.ts`/`.tsx` | 17,128 | React 19 dashboard — see caveat below |
 | `scripts/` | 24 | 11,853 | Live loop, paper loop, sweeps, reporting |
 | `research/` | 27 `.py` | 5,440 | DSR, effective-K, cost model, biographies |

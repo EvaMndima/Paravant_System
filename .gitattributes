@@ -1,0 +1,56 @@
+# Normalise line endings so a repository authored on Windows does not produce
+# whole-file diffs for contributors on Linux and macOS.
+#
+# Without this, `core.autocrlf=true` on the authoring machine means every commit
+# renegotiates line endings and a cross-platform contributor sees every line of
+# a file as changed. Text files are stored LF in the repository and checked out
+# native.
+
+* text=auto
+
+# Explicit, so intent does not depend on git's content heuristic.
+*.py     text diff=python
+*.pyi    text diff=python
+*.ts     text
+*.tsx    text
+*.js     text
+*.jsx    text
+*.json   text
+*.md     text diff=markdown
+*.yaml   text
+*.yml    text
+*.toml   text
+*.cfg    text
+*.ini    text
+*.txt    text
+*.css    text
+*.html   text
+*.sql    text
+.env.example text
+Dockerfile   text
+Procfile     text
+
+# Shell scripts must keep LF or they break when executed in the container.
+*.sh     text eol=lf
+
+# Windows batch files must keep CRLF.
+*.bat    text eol=crlf
+
+# Binary. Never normalise, never diff as text.
+*.png    binary
+*.jpg    binary
+*.jpeg   binary
+*.gif    binary
+*.ico    binary
+*.pdf    binary
+*.db     binary
+*.sqlite binary
+*.sqlite3 binary
+*.woff   binary
+*.woff2  binary
+*.ttf    binary
+
+# Generated or vendored: exclude from language statistics and diffs.
+frontend/package-lock.json  linguist-generated=true -diff
+docs/design/references/**   linguist-vendored=true
+docs/archive/**             linguist-documentation=true
