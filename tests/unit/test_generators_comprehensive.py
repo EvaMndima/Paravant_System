@@ -206,13 +206,19 @@ class TestDonchianAtr:
             assert result.symbol == "BTCUSDT"
     
     def test_missing_parameter_raises(self):
-        """Test that missing parameters raise SignalGenerationError."""
+        """Test that missing parameters raise SignalGenerationError.
+
+        The series is sized from the generator's own ``min_bars_required``.
+        A fixed 150 bars silently stopped exercising this path once the
+        generator's requirement rose to 210: it returned None on insufficient
+        data before ever reading the parameters, so the test asserted nothing.
+        """
         factory = SignalGeneratorFactory()
         gen = factory.get_generator("donchian_atr")
-        
-        series = _make_ohlcv_series(n_bars=150)
+
+        series = _make_ohlcv_series(n_bars=gen.min_bars_required + 10)
         params = {}  # Empty params
-        
+
         with pytest.raises(SignalGenerationError):
             gen.generate(series, params, "BTCUSDT")
 
@@ -299,7 +305,11 @@ class TestRsiBbMeanReversion:
         gen = factory.get_generator("rsi_bb_mean_reversion")
         
         assert gen.template_id == "rsi_bb_mean_reversion"
-        assert gen.min_bars_required == 50
+        # The generator gates on an EMA(200) regime filter, so it must request
+        # at least the 200-bar warmup. Asserted as a lower bound rather than
+        # the exact 210 so adjusting the ADX/BB/RSI buffer does not fail this
+        # test; the load-bearing property is that the EMA warmup is covered.
+        assert gen.min_bars_required >= 200
     
     def test_insufficient_data_returns_none(self):
         """Test graceful handling of insufficient data."""
@@ -344,13 +354,17 @@ class TestRsiBbMeanReversion:
             assert result.symbol == "BTCUSDT"
     
     def test_missing_parameter_raises(self):
-        """Test that missing parameters raise SignalGenerationError."""
+        """Test that missing parameters raise SignalGenerationError.
+
+        Series sized from the generator's own ``min_bars_required`` -- see the
+        note on the DonchianAtr equivalent.
+        """
         factory = SignalGeneratorFactory()
-        gen =factory.get_generator("rsi_bb_mean_reversion")
-        
-        series = _make_ohlcv_series(n_bars=150)
+        gen = factory.get_generator("rsi_bb_mean_reversion")
+
+        series = _make_ohlcv_series(n_bars=gen.min_bars_required + 10)
         params = {"rsi_period": 14}  # Incomplete
-        
+
         with pytest.raises(SignalGenerationError):
             gen.generate(series, params, "BTCUSDT")
 

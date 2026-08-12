@@ -169,7 +169,22 @@ class TestRiskControllerIntegration:
 
         # All checks should pass
         assert all(r.approved for r in results)
-        assert len(results) == 7  # All 7 checks ran
+
+        # Assert on which checks ran, not how many. The previous version
+        # asserted a literal 7 and broke when check_portfolio_correlation was
+        # added (DEC-2026-02-22-001) -- a count tells you nothing about whether
+        # the right checks ran, and fails when the risk layer is correctly
+        # extended. kill_switch must be present and first (DEC-2026-02-12-003).
+        ran = [r.check_name for r in results]
+        assert ran[0] == "kill_switch"
+        assert {
+            "kill_switch",
+            "daily_loss_limit",
+            "max_drawdown",
+            "max_positions",
+            "concentration",
+            "position_size",
+        }.issubset(set(ran)), f"missing expected risk checks, ran: {ran}"
 
     def test_validate_order_rejected_by_kill_switch(
         self,

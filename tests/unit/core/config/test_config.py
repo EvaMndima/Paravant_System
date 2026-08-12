@@ -235,9 +235,18 @@ class TestTemplates:
     """Test suite for strategy template loading and validation."""
 
     def test_template_manager_loads_all_templates(self) -> None:
-        """Should load all 7 templates from the templates directory."""
-        manager = TemplateManager(templates_dir=Path("config/templates"))
-        assert len(manager.templates) == 7
+        """Should load every template YAML in the templates directory.
+
+        Asserted against the directory contents rather than a literal count.
+        The previous version hardcoded 7 and silently went stale as the library
+        grew to 14 -- a test that fails when the system grows correctly is
+        worse than no test.
+        """
+        templates_dir = Path("config/templates")
+        expected = len(list(templates_dir.glob("*.yaml")))
+        manager = TemplateManager(templates_dir=templates_dir)
+        assert expected > 0, "no template YAML files found"
+        assert len(manager.templates) == expected
         # Original 3 templates
         assert "ema_trend_rsi" in manager.list_template_ids()
         assert "bb_squeeze_breakout" in manager.list_template_ids()
@@ -358,8 +367,11 @@ class TestConfigLoader:
         assert loader.settings is not None
         # Access risk profiles
         assert len(loader.risk_profiles.list_profiles()) == 3
-        # Access templates
-        assert len(loader.templates.list_template_ids()) == 7
+        # Access templates. Counted from the directory, not hardcoded, so the
+        # assertion does not go stale as templates are added.
+        assert len(loader.templates.list_template_ids()) == len(
+            list(Path("config/templates").glob("*.yaml"))
+        )
 
     def test_config_loader_singleton(self) -> None:
         """get_config() should return the same instance."""
