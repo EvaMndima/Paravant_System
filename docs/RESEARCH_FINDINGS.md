@@ -37,12 +37,12 @@ DSR verdict starts carrying information.
 |---|---|---|---|---|---|---|
 | BTF | Multi-timeframe bear trend | — | 25 | 0.54 | 1.000 | retired |
 | H-2026-06-002 | Price breakout continuation | TRENDING_BULL | 341 | 0.59 | 1.000 | FUNDAMENTAL |
-| H-2026-06-003 | Perp funding confirmation | TRENDING_BULL | 132 | 0.53 | 1.000 | FUNDAMENTAL |
-| H-2026-06-006 | Funding extreme contrarian v2 | HIGH_VOL | 28 | 0.94 | 0.960 | FUNDAMENTAL |
-| H-2026-06-007 | — | TRENDING_BULL | 87 | 0.44 | 1.000 | FUNDAMENTAL |
-| H-2026-06-008 | — | TRENDING_BULL | 121 | 0.88 | 1.000 | FUNDAMENTAL |
-| H-2026-06-010 | — | TRENDING_BULL | 75 | 0.35 | 1.000 | FUNDAMENTAL |
-| H-2026-06-011 | — | TRENDING_BULL | 255 | 0.44 | 1.000 | FUNDAMENTAL |
+| H-2026-06-011 | BTC lead-lag, information diffusion into mid-cap alts | TRENDING_BULL | 255 | 0.44 | 1.000 | FUNDAMENTAL |
+| H-2026-06-003 | Perp funding confirmation of trend | TRENDING_BULL | 132 | 0.53 | 1.000 | FUNDAMENTAL |
+| H-2026-06-008 | Cross-sectional relative-strength momentum | TRENDING_BULL | 121 | 0.88 | 1.000 | FUNDAMENTAL |
+| H-2026-06-007 | Spot-ETF net-flow structural demand | TRENDING_BULL | 87 | 0.44 | 1.000 | FUNDAMENTAL |
+| H-2026-06-010 | Coinbase premium, US-institutional cross-venue demand | TRENDING_BULL | 75 | 0.35 | 1.000 | FUNDAMENTAL |
+| H-2026-06-006 | Funding-extreme contrarian, per-symbol percentile gate | HIGH_VOL | 28 | 0.94 | 0.960 | FUNDAMENTAL |
 
 Pooled sample sizes across all regimes run considerably higher — up to 974 for
 H-002 and 918 for H-011. The regime-specific N is shown because that is the cell
@@ -53,9 +53,32 @@ edges lost to multiple-comparisons correction; they lose money before the
 correction is applied. The DSR is confirming a conclusion the raw numbers
 already support.
 
-Two further hypotheses (H-004, H-009) are `PROPOSED` and blocked on paid data
-that was deliberately not purchased. One (H-005) returned `INSUFFICIENT_DATA` —
-see the next section, because that is the guard working correctly.
+One (H-005) returned `INSUFFICIENT_DATA` rather than a rejection — see the next
+section, because that is the guard working correctly.
+
+Two more (H-004, H-009) are `PROPOSED` and blocked, and the reason they are
+blocked is worth stating precisely: **not budget, but causality.**
+
+Both are liquidation-cascade hypotheses — buy the flush when forced selling
+overshoots. Testing them needs a historical liquidation series that respects
+point-in-time correctness, and no such free series exists:
+
+| Source | Why it cannot be used |
+|---|---|
+| Binance `/fapi/v1/allForceOrders` | Deprecated; no longer accepts requests |
+| Binance `/fapi/v1/forceOrders` | User-private, and capped at 90 days |
+| Binance `forceOrder` websocket | Real-time only; no history |
+| Hyperliquid `/info` | Has no market-wide liquidation request type. Verified by probing, not assumed |
+
+The available alternative — reconstructing history from a source that would leak
+information unavailable at decision time — was rejected. Instead a **forward
+collector** was built (DEC-2026-06-04-021): it streams Binance `forceOrder`
+events to JSONL behind a causal accessor that can only return events strictly
+prior to a query timestamp. The hypotheses stay `PROPOSED` until N >= 30 accrues
+in HIGH_VOL, which will take months.
+
+Choosing to wait months rather than test against contaminated history is the
+same decision as Section 3, made prospectively instead of retrospectively.
 
 ---
 
@@ -196,16 +219,28 @@ predictive value.
 Results recorded as findings rather than discarded. From
 [research/NEGATIVE_SPACE_MAP.md](research/NEGATIVE_SPACE_MAP.md):
 
-**TRENDING_BULL continuation is a hard gap.** Six hypotheses targeted it. All six
-were rejected at regime-N between 75 and 341, spanning two distinct mechanism
-classes — price momentum (H-002, H-007, H-008, H-010, H-011) and derivatives
-flow (H-003). Every one carries the `FUNDAMENTAL` failure tag, meaning the
-mechanism failed rather than the implementation.
+**TRENDING_BULL is a hard gap, probed from six independent directions.** Six
+hypotheses targeted that regime cell. All six were rejected at regime-N between
+75 and 341, and — this is the part that matters — they are not variations on one
+idea. They are six distinct mechanism classes:
+
+| Hypothesis | Mechanism class | Data it depends on |
+|---|---|---|
+| H-002 | Price breakout continuation | Price only |
+| H-003 | Perp funding confirmation | Derivatives positioning |
+| H-007 | Spot-ETF net-flow demand | Regulated-vehicle flows |
+| H-008 | Cross-sectional relative strength | Multi-asset ranking |
+| H-010 | Coinbase premium | Cross-venue price divergence |
+| H-011 | BTC lead-lag diffusion | Inter-asset timing |
+
+Every one carries the `FUNDAMENTAL` failure tag, meaning the mechanism failed
+rather than the implementation. Four of the six draw on data other than price —
+this is not a case of testing the same momentum idea six ways.
 
 The operational consequence is recorded: the next hypothesis for that regime
-cell must come from a genuinely different mechanism class. Another continuation
-variant is not a new experiment, and would consume a trial for information
-already held.
+cell must come from a mechanism class genuinely outside these six. Another
+continuation variant is not a new experiment, and would consume a trial for
+information already held.
 
 **Funding-based mechanisms are 0-for-3.** H-003, H-005 and H-006 all scored
 18/21 at Stage 1 and all failed. The ledger records this explicitly as a family

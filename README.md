@@ -7,10 +7,10 @@ It worked, and the most instructive thing it did was catch an error in its own
 reporting.
 
 After four months and 29 signal generators, **no strategy in this repository has
-a validated edge.** Three were rejected outright at adequate sample size under
-Deflated Sharpe. Ten more were initially reported as rejected — until the
-system's own guard established that they had never had enough data to reject,
-and reclassified them as *unmeasurable*.
+a validated edge.** Eight subjects were rejected outright at a sample size where
+the verdict carries information. Ten more were initially reported as rejected —
+until the system's own guard established that they had never had enough data to
+reject at all, and reclassified them as *unmeasurable*.
 
 The difference between "proven worthless" and "never actually measured" is the
 whole discipline. Getting it wrong in the safe direction, then catching it, is
@@ -23,8 +23,7 @@ supporting cast.
 
 Most trading repositories show you a backtest that made money. This one shows
 you the machinery that determines whether a backtest that made money *means*
-anything, applied adversarially to its author's own six months of work until it
-returned `no`.
+anything, applied adversarially to its author's own work until it returned `no`.
 
 The core question the research layer answers is:
 
@@ -57,17 +56,31 @@ project evaluates whether to stop, against criteria written in advance.
 
 ## The result
 
-Three strategies were rejected at a sample size large enough for the verdict to
-mean something:
+Eight subjects were rejected at a sample size where a Deflated Sharpe verdict
+carries information — one strategy from recorded trades, and seven forward
+hypotheses screened against backtest:
 
-| Subject | Source | N | Profit factor | DSR p | Verdict |
+| Subject | Mechanism | Regime | N | PF | DSR p |
 |---|---|---|---|---|---|
-| BTF (bear trend follower) | Recorded trades | 25 | 0.54 | 1.000 | `TIER_D` reject |
-| H-2026-06-002 (price breakout continuation) | Backtest | 341 | 0.59 | 1.000 | `TIER_D` reject |
-| H-2026-06-003 (funding-confirmed trend) | Backtest | 132 | 0.53 | 1.000 | `TIER_D` reject |
+| BTF | Multi-timeframe bear trend | — | 25 | 0.54 | 1.000 |
+| H-2026-06-002 | Price breakout continuation | TRENDING_BULL | 341 | 0.59 | 1.000 |
+| H-2026-06-011 | BTC lead-lag diffusion into alts | TRENDING_BULL | 255 | 0.44 | 1.000 |
+| H-2026-06-003 | Perp funding confirmation | TRENDING_BULL | 132 | 0.53 | 1.000 |
+| H-2026-06-008 | Cross-sectional relative strength | TRENDING_BULL | 121 | 0.88 | 1.000 |
+| H-2026-06-007 | Spot-ETF net-flow demand | TRENDING_BULL | 87 | 0.44 | 1.000 |
+| H-2026-06-010 | Coinbase premium | TRENDING_BULL | 75 | 0.35 | 1.000 |
+| H-2026-06-006 | Funding-extreme contrarian | HIGH_VOL | 28 | 0.94 | 0.960 |
 
-A fourth hypothesis was killed at the quality gate as a structural duplicate of
-an existing strategy, before it consumed a trial.
+N is the count in the regime the hypothesis made a claim about; pooled samples
+across all regimes run to 974. **Every profit factor is below 1.0** — these are
+not marginal edges lost to multiple-comparisons correction, they lose money
+before the correction is applied. The `FUNDAMENTAL` tag means the mechanism
+failed, not the implementation.
+
+Two further hypotheses are blocked on paid data that was deliberately not
+purchased. One returned `INSUFFICIENT_DATA` at N=4 rather than a rejection —
+which is the guard in the next section working as intended. One was killed at
+the quality gate as a structural duplicate before it consumed a trial.
 
 ### The part worth reading
 
@@ -109,14 +122,23 @@ distinction worth being precise about.
 
 ### What was concluded
 
-Trending-bull continuation is a hard gap across two distinct mechanism classes
-(price momentum and derivatives flow), both rejected at large N. The next
-hypothesis for that regime must come from a different mechanism class entirely.
+**TRENDING_BULL is a hard gap, probed from six independent directions.** The six
+hypotheses targeting it are not variants of one idea — they are price momentum,
+derivatives positioning, ETF flows, cross-sectional ranking, cross-venue premium,
+and inter-asset lead-lag. Four of the six use data other than price. All six were
+rejected, every one tagged `FUNDAMENTAL` (the mechanism failed, not the code).
+The recorded consequence: the next hypothesis for that regime must come from
+outside those six classes.
 
-A calibration lesson was recorded alongside it: H-003 scored *higher* at the
-hypothesis-quality gate (18/21 vs 14/21) and performed *worse*. The scorecard
-measures mechanism plausibility, not expected profitability. That was written
-down rather than explained away.
+**Funding-based mechanisms are 0-for-3.** All three scored 18/21 at the quality
+gate. All three failed.
+
+**The quality scorecard does not predict outcome.** Across the seven screened
+hypotheses its score correlates with realised profit factor at Pearson
+**r = +0.146**, and the lower-scoring half performed *better* (mean PF 0.73 vs
+0.54). Recorded rather than explained away — with the caveat it deserves: n=7
+and every outcome is a failure, so this is evidence that it does not predict
+*degree of failure*, not proof that it is useless.
 
 Full write-up: **[docs/RESEARCH_FINDINGS.md](docs/RESEARCH_FINDINGS.md)**
 
