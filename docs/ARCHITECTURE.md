@@ -45,6 +45,7 @@ Each module states what it owns and, as importantly, what it does not.
 | Alerting | `src/core/alerting/` | Telegram channel, 15 trigger types, scheduler, escalation | Deciding what is alarming |
 | Config | `src/core/config/` | YAML + env layering, templates, risk profiles, backup | Runtime mutation of config |
 | Research | `research/` | DSR, effective-K, cost model, tier classification, biographies | Anything that runs live |
+| Features | `research/features/` | Point-in-time resolution, knowability arithmetic, leakage audits | Fetching, caching, feature computation |
 
 `src/core/pnl/` is deliberately empty. Its `__init__.py` documents that P&L
 logic lives in `execution/position_tracker.py` to avoid an import cycle, and

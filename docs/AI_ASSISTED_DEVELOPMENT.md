@@ -1,22 +1,20 @@
 # Building PARAVANT with AI Assistance
 
 **Written:** 2026-08-11
-**Covers:** 2026-02-08 to 2026-08-11, 123 commits, one human author
+**Covers:** 2026-02-08 to 2026-08-13, 131 commits, one human author
 
-This document exists because the alternative was worse. PARAVANT is roughly
-120,000 lines written over six months by one person working with AI coding
-assistants. Publishing that without saying so would be dishonest, and hiding
-it would waste the most transferable thing the project produced: a fairly
-precise picture of where AI-assisted development succeeds, where it fails,
-and what has to be built to catch the failures.
-
-The repository previously contained 35 `SESSION_*_IMPLEMENTATION_PROMPT.md`
-files at its root -- the raw prompts. They were removed in favour of this
-document. They remain in git history at tag `pre-cleanup`.
+PARAVANT is roughly 120,000 lines written over six months by one person working
+with AI coding assistants. The most transferable thing it produced is not the
+trading system. It is a fairly precise picture of where that way of working
+holds up, where it breaks, and what has to be built to catch the breaks.
 
 Sections 3 and 4 are the ones worth your time. Section 3 is what worked.
-Section 4 is what went wrong, with the specific defects and how long each
-survived.
+Section 4 is eight failure modes, each with the mechanism that produced it, how
+long it survived, and what now prevents it.
+
+The repository previously contained 35 `SESSION_*_IMPLEMENTATION_PROMPT.md`
+files at its root -- the raw prompts. They were replaced by this document, and
+remain in git history at tag `pre-cleanup`.
 
 ---
 
@@ -24,11 +22,13 @@ survived.
 
 | Layer | Files | Lines |
 |---|---|---|
-| `src/` application | 167 `.py` | 49,144 |
-| `tests/` | 133 `.py` | 36,550 |
-| `frontend/src/` | 89 `.ts`/`.tsx` | 17,128 |
-| `scripts/` operational entrypoints | 24 | 11,853 |
-| `research/` validation library | 27 `.py` | 5,440 |
+| `src/` application | 167 `.py` | 49,184 |
+| `tests/` | 134 `.py` | 36,876 |
+| `frontend/src/` | 90 `.ts`/`.tsx` | 17,187 |
+| `scripts/` operational entrypoints | 25 | 11,900 |
+| `research/` validation library | 32 `.py` | 6,461 |
+
+*As of 2026-08-13; `python scripts/doc_stats.py` regenerates this table.*
 
 A crypto trading system: Binance data ingestion, 19 indicators, 29 signal
 generators, a layered risk system, an order state machine, backtest and paper
@@ -42,11 +42,6 @@ reported as rejected until the system's own guard established they had never had
 enough data to reject at all. That correction is itself the most instructive
 result, and is written up in [RESEARCH_FINDINGS.md](RESEARCH_FINDINGS.md).
 
-(This paragraph originally read "all 11 strategies were rejected". It was wrong,
-in the direction of overclaiming certainty, and survived here for the same
-reason it survived everywhere else: it was written once and copied forward
-without being rechecked against the data. Fixed 2026-08-11.)
-
 ---
 
 ## 2. The working method
@@ -59,7 +54,7 @@ while the work was live.
 
 Three things sat underneath every session and did most of the real work:
 
-**`.claude/DECISIONS.md`** -- 120 dated decision entries across 3,132 lines,
+**`.claude/DECISIONS.md`** -- 122 dated decision entries across 3,169 lines,
 each recording the decision, its context, its rationale, the alternatives
 considered and rejected, and its status. Maintained identically in `.agent/` so
 that different assistants could not diverge on what had been decided.
@@ -86,7 +81,7 @@ author.
 
 ### 3.1 Written decisions with rejected alternatives
 
-The single highest-value artifact. 69 distinct decision IDs are referenced in
+The single highest-value artifact. 71 distinct decision IDs are referenced in
 source comments, so the rationale is reachable from the code rather than only
 from a document nobody opens.
 
@@ -125,11 +120,23 @@ backtest path returns results identical to the O(n^2) path it replaced.
 
 ---
 
-## 4. What went wrong
+## 4. Where it failed, and how each was caught
 
-The failures share a shape: **locally correct code that is globally
-disconnected, plus verification that agreed with the code instead of checking
-it.**
+Eight failure modes. All eight were found by a systematic pre-publication
+review of this repository -- reading the code against its own claims, running
+its documented commands, and asking one uniform question of subsystems that had
+only ever been reviewed individually. None was reported by a user, and none was
+found by the test suite.
+
+That last point is the finding. A 1,900-test suite at 63% coverage was green
+throughout, because these defects are not the kind a conventional suite is
+shaped to detect.
+
+They share a shape: **locally correct code that is globally disconnected, plus
+verification that agreed with the code instead of checking it.**
+
+Seven of the eight are fixed, each with a mechanism that prevents recurrence
+rather than a one-off patch. The eighth is open and documented.
 
 ### 4.1 Verification shaped like the defect
 
@@ -309,9 +316,25 @@ methodology, and every judgment call recorded in `DECISIONS.md` are the author's
 The implementation was largely assistant-generated against written specifications
 and then reviewed.
 
-This document was itself drafted with assistance, from a repository audit and
-from verification performed against the source. Every figure in Section 1 was
-measured with commands runnable against this repository. Every defect in
-Section 4 was confirmed by reading the code, and the fixes for 4.1, 4.3 and 4.5
-are in the commit history of the `cleanup/pre-publication` branch. The
-duplication in 4.2 is open.
+This document was itself drafted with assistance, and verified against the
+source. Every figure in Section 1 is reproducible with
+`python scripts/doc_stats.py`. Every defect in Section 4 was confirmed by
+reading the code before it was written up.
+
+Status of the eight:
+
+| | Failure mode | Status |
+|---|---|---|
+| 4.1 | Verification shaped like the defect | Fixed; five tests now run against a real engine |
+| 4.2 | Unintegrated completeness | **Open**, documented in ARCHITECTURE.md section 10 |
+| 4.3 | Namespace collision | Fixed; shadowed module removed |
+| 4.4 | Documentation drifting off the system | Fixed; figures now generated, not typed |
+| 4.5 | Build artifacts nobody owned | Fixed; broken gitlinks untracked |
+| 4.6 | An AI audit that read a signature but not a body | Caught in review; the recommended fix was not applied |
+| 4.7 | A test documenting a workaround instead of a bug | Fixed; partition key corrected, two regression tests |
+| 4.8 | Nobody ran the quickstart | Fixed; CI now runs it on Linux and Windows |
+
+Each fix is a mechanism rather than a patch: a real-engine test, a CI job that
+executes the documented quickstart, a feature store that computes knowability
+instead of trusting it. The distinction matters, because every one of these
+defects survived a green test suite.

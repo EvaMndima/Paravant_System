@@ -34,6 +34,39 @@ touch locked decisions (PARA-01) require a DECISIONS.md entry before fixing.
 | PARA-10 | PERF | O(n^2) backtest; uncached array rebuilds | `engine.py:143`; `market_data.py:262-269` |
 | PARA-11 | MEDIUM | Flat slippage ignores order size (PRD specs size-aware) | `backtest/types.py:84` vs PRD 3.6.2.1 |
 | PARA-12 | MEDIUM | Each strategy backtested assuming full capital | `backtest/types.py:87`; no portfolio capital model |
+| PARA-13 | HIGH | Bar-derived features readable before the bar closed (FIXED) | `research/data/coinbase_prices.py`, `btc_reference.py` |
+
+---
+
+## PARA-13 (HIGH) -- Bar-derived features were readable before the bar closed
+
+**Status:** FIXED 2026-08-13 (DEC-2026-08-13-001).
+
+`CoinbasePriceSeries.close_at` and `BtcThrustSeries.thrust_at` selected with
+`bisect_right(times_ms, ts)` where `times_ms` holds bar OPEN times and the value
+derives from the bar's CLOSE. A query at 10:30 received the 10:00-11:00 bar's
+close -- a price from 11:00. Up to 59 minutes of lookahead.
+
+Both accessors were documented as causal and both read as correct in isolation.
+The defect surfaced only when the same question was asked of all six data
+channels at once.
+
+**Affected:** H-2026-06-010 (Coinbase premium), H-2026-06-011 (BTC lead-lag).
+
+**Impact on conclusions: none.** Lookahead biases results optimistically, and
+both hypotheses were rejected regardless -- PF 0.35 and 0.44 against 1.0
+break-even. Removing the leak can only make those rejections more conservative,
+so no published finding depends on it and re-screening is not required.
+
+**Fix:** both accessors now select on the bar's close. More importantly the
+class of defect is caught mechanically: `research/features/` requires every
+feature to declare its kind, interval and publication lag, and refuses any value
+whose computed `knowable_at` falls after the query instant. `audit_knowability`
+detects this shape; `audit_future_invariance` -- the more intuitive check --
+provably does not, which is why both exist.
+
+**Note:** `test_close_at_is_causal` asserted the leaked value, with the comment
+"latest <= ts". A test named for causality was asserting its violation.
 
 ---
 

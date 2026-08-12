@@ -147,6 +147,49 @@ Full write-up: **[docs/RESEARCH_FINDINGS.md](docs/RESEARCH_FINDINGS.md)**
 
 ---
 
+## Point-in-time correctness
+
+`research/features/` is a feature store that resolves named features *as of* an
+instant and returns a value only if it was knowable then. It is the piece of
+this repository closest to conventional ML infrastructure, and it exists because
+the property it enforces had already been violated.
+
+Six data channels — funding rates, ETF flows, Coinbase prices, BTC thrust,
+cross-sectional rank, liquidations — each documented its accessor as causal.
+Read one at a time, each looked right. Asking one uniform question of all six
+found two that were not: they stamped values with the **start** of the interval
+that produced them while the value came from the interval's **end**, so a query
+at 10:30 could receive a price from 11:00.
+
+The store removes the possibility rather than the instance. A feature declares
+its kind, its interval, and its publication lag; a resolver reports *when* its
+value was observed; the store computes when that became knowable and refuses
+anything later than the query instant. Causality stops being a property each
+channel asserts and becomes arithmetic that is checked.
+
+```python
+store.as_of(ts, symbol="BTCUSDT")          # a feature vector, guaranteed causal
+store.build_matrix(timestamps, symbol=...)  # a training set, row-wise as-of
+```
+
+Two audits, because there are two ways to leak and neither test finds the
+other's failure:
+
+| Audit | Catches |
+|---|---|
+| `audit_knowability` | A record whose timestamp is genuinely past while its **content** is future — the defect above |
+| `audit_future_invariance` | A resolver that scans **beyond** the query instant |
+
+Truncating the dataset at 10:30 does not remove the 10:00 bar, so the intuitive
+invariance check passes on data leaking 59 minutes. `TestWhyTwoAudits` asserts
+exactly that. A suite with only the obvious check would have shipped it.
+
+Both affected hypotheses had already been rejected, and lookahead biases results
+optimistically, so correcting it makes those rejections more conservative. No
+published conclusion changes. Recorded as `DEC-2026-08-13-001`.
+
+---
+
 ## Architecture
 
 Three processes from one image: a read/query API, a paper-trading loop, and a
@@ -211,11 +254,13 @@ Deeper detail: **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)** ·
 
 | Layer | Files | Lines | Notes |
 |---|---|---|---|
-| `src/` application | 167 `.py` | 49,144 | API, risk, execution, indicators, strategies |
-| `tests/` | 133 `.py` | 36,550 | 1,870 passing, 37 skipped, 0 failing |
-| `frontend/src/` | 89 `.ts`/`.tsx` | 17,128 | React 19 dashboard — see caveat below |
-| `scripts/` | 24 | 11,853 | Live loop, paper loop, sweeps, reporting |
-| `research/` | 27 `.py` | 5,440 | DSR, effective-K, cost model, biographies |
+| `src/` application | 167 `.py` | 49,184 | API, risk, execution, indicators, strategies |
+| `tests/` | 134 `.py` | 36,876 | 1,931 tests: 1,894 pass, 37 skip, 0 fail |
+| `frontend/src/` | 90 `.ts`/`.tsx` | 17,187 | React 19 dashboard — see caveat below |
+| `scripts/` | 25 | 11,900 | Live loop, paper loop, sweeps, reporting |
+| `research/` | 32 `.py` | 6,461 | DSR, effective-K, cost model, feature store |
+
+*Figures as of 2026-08-13. Regenerate with `python scripts/doc_stats.py`.*
 
 Highlights:
 
@@ -230,8 +275,8 @@ Highlights:
   is not blocked; fails *closed* on a clear non-ready verdict.
 - **19 indicators**, each independently tested at 88-100% coverage.
 - **29 signal generators**, of which 0 are validated. That ratio is the point.
-- **120 dated architectural decisions** with rationale and rejected
-  alternatives, referenced by 69 distinct IDs from source comments.
+- **122 dated architectural decisions** with rationale and rejected
+  alternatives, referenced by 71 distinct IDs from source comments.
 
 ---
 
@@ -286,18 +331,22 @@ Stated plainly, because a reviewer will find all of it anyway.
   network calls. Every other page renders static seed data and the simulated
   ticker is labelled as such in code. It is honest in the source and it is not
   finished.
-- **Not machine learning.** There is no model here. This is systems engineering
-  and quantitative research methodology. The overlap with AI engineering is the
-  evaluation discipline, not the algorithms.
-- **Not fully clean.** 9 tests fail on `master`, 32 network-dependent
-  integration tests error rather than skip without exchange credentials, and
-  static analysis reports outstanding errors against a config that claims strict
-  typing. All of it is enumerated in
-  [docs/PRODUCTION_READINESS_ASSESSMENT.md](docs/PRODUCTION_READINESS_ASSESSMENT.md),
-  which was written to be uncomfortable rather than flattering.
-- **Not built alone in the conventional sense.** It was built by one person
-  working with AI coding assistants throughout. What that was actually like,
-  including six specific defects it produced and how long each survived, is in
+- **No trained model.** There is no estimator here. The work adjacent to machine
+  learning is the infrastructure and the evaluation discipline: point-in-time
+  feature resolution, leakage audits, multiple-comparisons correction, holdout
+  hygiene, negative results published rather than filed away.
+- **The frontend is not finished.** Six pages still need wiring to the API, and
+  the dashboard has no tests. The build and type-check are gated in CI; the lint
+  is advisory with 84 known issues.
+- **Not everything is fixed.** `orchestrator.py` is a fully built, tested main
+  loop that nothing calls — the deployed path reimplements it, and the two have
+  not been reconciled. Six methodology defects in the research layer remain open
+  and severity-ranked. Both are enumerated in
+  [docs/PRODUCTION_READINESS_ASSESSMENT.md](docs/PRODUCTION_READINESS_ASSESSMENT.md)
+  and [docs/research/RESEARCH_FIXLIST.md](docs/research/RESEARCH_FIXLIST.md).
+- **Not built alone in the conventional sense.** One person working with AI
+  coding assistants throughout. Where that approach held up, where it broke, and
+  what had to be built to catch the breaks is in
   [docs/AI_ASSISTED_DEVELOPMENT.md](docs/AI_ASSISTED_DEVELOPMENT.md).
 
 ---
@@ -306,6 +355,7 @@ Stated plainly, because a reviewer will find all of it anyway.
 
 **Start here**
 
+- [docs/README.md](docs/README.md) — documentation index and reading order
 - [docs/PROJECT_CONTEXT.md](docs/PROJECT_CONTEXT.md) — complete briefing; readable without opening a source file
 - [docs/research/RESEARCH_PROTOCOL.md](docs/research/RESEARCH_PROTOCOL.md) — the method, and what it forbids
 - [docs/AI_ASSISTED_DEVELOPMENT.md](docs/AI_ASSISTED_DEVELOPMENT.md) — what AI-assisted development actually broke
@@ -319,7 +369,7 @@ Stated plainly, because a reviewer will find all of it anyway.
 **Engineering**
 
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) · [docs/API_CONTRACT.md](docs/API_CONTRACT.md) · [docs/INDICATOR_SPECIFICATION.md](docs/INDICATOR_SPECIFICATION.md)
-- [.claude/DECISIONS.md](.claude/DECISIONS.md) — 120 decisions with rationale and rejected alternatives
+- [.claude/DECISIONS.md](.claude/DECISIONS.md) — 122 decisions with rationale and rejected alternatives
 - [docs/operations/](docs/operations/) — kill-switch runbook, scheduled jobs
 - [docs/PRODUCTION_READINESS_ASSESSMENT.md](docs/PRODUCTION_READINESS_ASSESSMENT.md) — measured gaps and the plan
 
@@ -332,10 +382,33 @@ pytest                                        # full suite
 pytest -m unit                                # fast path
 pytest --cov=src --cov=research --cov-report=term
 
-ruff check src/ research/ scripts/
-mypy src/
-black src/ tests/
+ruff check src/ research/ scripts/ tests/
+mypy src/ research/features/
+python scripts/doc_stats.py                   # regenerate the figures above
 ```
+
+Network-dependent tests skip by default. Set `PARAVANT_RUN_NETWORK_TESTS=1` to
+run them against Binance testnet.
+
+### Continuous integration
+
+`.github/workflows/ci.yml` gates every push and pull request:
+
+| Job | Enforces |
+|---|---|
+| Lint | `ruff` over `src`, `research`, `scripts` **and** `tests` |
+| Type check | `mypy` over `src/` and `research/features/` |
+| Tests | Python 3.11, 3.12, 3.13 |
+| Coverage | Floor at 62% (measured 63%) |
+| **Quickstart** | Fresh install, `init_db`, `verify_db`, boot the API, assert `/health` — on **Linux and Windows** |
+| Frontend | `tsc -b` and production build |
+
+The quickstart job exists because the documented first command of this README
+once exited 1 with a traceback on Windows, and 1,900 passing tests said nothing
+about it: tests import modules and call functions, and nobody had run the
+entrypoint. Frontend lint runs advisory-only while 84 known issues are
+outstanding — an amber check that means something, rather than a green one that
+does not.
 
 ---
 

@@ -275,6 +275,25 @@ therefore never built. The research paid for itself by preventing work.
 PARA-04 deserves particular note here: it is the same class of error as the one
 in Section 3. The list was written before that error was caught, and named it.
 
+### A leak found after these results were produced
+
+A thirteenth defect was found on 2026-08-13, after the results above were
+generated. Two data channels stamped values with the start of the interval that
+produced them while the value came from the interval's end, so a query could
+receive a price up to 59 minutes ahead of itself. It affected H-2026-06-010 and
+H-2026-06-011.
+
+It changes nothing here, and the direction matters: lookahead inflates apparent
+performance. Both affected hypotheses were rejected at PF 0.35 and 0.44 against
+a break-even of 1.0 — with the leak helping them. Removing it can only make
+those rejections more conservative.
+
+The response was structural rather than local. `research/features/` now requires
+every feature to declare its kind, interval and publication lag, computes when
+each observation became knowable, and refuses to return anything the query
+instant could not have seen. Causality is no longer a property each channel
+asserts about itself. Recorded as PARA-13 and DEC-2026-08-13-001.
+
 ---
 
 ## 7. The pre-registered stop
