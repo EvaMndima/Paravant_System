@@ -352,3 +352,53 @@ class TestScipyCrossCheck:
             assert normal_ppf(p) == pytest.approx(
                 float(scipy_stats.norm.ppf(p)), abs=1e-6
             )
+
+
+class TestDegenerateDispersionGuard:
+    """A near-constant return series must not read as an overwhelming edge.
+
+    sample_sharpe originally guarded only on EXACTLY zero variance. A series
+    differing by floating-point residue passed that guard and was then divided
+    by the residue: a perturbation of 1e-12 on a series of 2.0s produced a
+    Sharpe of 3.9e12, which deflates to dsr_p_value == 0.0 -- the strongest
+    possible claim of edge, from a series carrying no information at all.
+
+    This surfaced as a Python-version discrepancy. With identical dependencies
+    (numpy 2.4.2, pandas 3.0.0, scipy 1.17.1) the cost-model arithmetic landed
+    on opposite sides of the cliff: Sharpe 0.0 on 3.12+, ~1e12 on 3.11 -- the
+    version the Dockerfile deploys. The version difference was the symptom; the
+    cliff was the defect. See DEC-2026-08-13-002.
+    """
+
+    def test_exactly_constant_series_is_zero(self) -> None:
+        """The original guard, still correct."""
+        assert sample_sharpe([2.0] * 40) == 0.0
+
+    def test_floating_point_residue_does_not_become_an_edge(self) -> None:
+        """The regression. 1e-12 of noise must not yield a Sharpe of 1e12."""
+        returns = [2.0 - (i % 2) * 1e-12 for i in range(40)]
+        assert sample_sharpe(returns) == 0.0
+
+    def test_guard_is_relative_not_absolute(self) -> None:
+        """A small-magnitude series with real dispersion is still measured.
+
+        The tolerance is relative to the mean, so a series of tiny returns that
+        genuinely vary is not silently zeroed.
+        """
+        returns = [1e-6 * (1.0 + 0.3 * ((-1) ** i)) for i in range(40)]
+        assert sample_sharpe(returns) != 0.0
+
+    def test_real_dispersion_is_unaffected(self) -> None:
+        """Ordinary return series are well clear of the bound."""
+        returns = [2.0 + (i % 5) * 0.25 for i in range(40)]
+        sharpe = sample_sharpe(returns)
+        assert 0.0 < sharpe < 100.0
+
+    def test_conservative_case_cannot_beat_the_base_case(self) -> None:
+        """The invariant the py3.11 failure violated.
+
+        More cost must never produce a more optimistic verdict.
+        """
+        base = [2.0] * 40
+        conservative = [r - 1e-12 * (i % 2) for i, r in enumerate(base)]
+        assert sample_sharpe(conservative) <= sample_sharpe(base) + 1e-9

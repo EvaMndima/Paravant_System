@@ -203,6 +203,13 @@ def normal_ppf(p: float) -> float:
     )
 
 
+# Relative dispersion below which a return series is treated as degenerate.
+# std <= |mean| * this means the variation is floating-point residue rather than
+# real dispersion, and a Sharpe computed from it is not meaningful. Set well
+# above float64 epsilon (~2.2e-16) and far below any real per-trade return
+# spread, which is basis points at minimum.
+_DEGENERATE_DISPERSION_REL_TOL = 1e-9
+
 def sample_sharpe(returns: list[float]) -> float:
     """Per-trade Sharpe ratio = mean / sample-std of per-trade returns.
 
@@ -215,8 +222,9 @@ def sample_sharpe(returns: list[float]) -> float:
         returns: Per-trade percentage (or fractional) returns.
 
     Returns:
-        The per-trade (non-annualised) Sharpe ratio. Returns 0.0 if fewer than
-        two observations or if the standard deviation is zero.
+        The per-trade (non-annualised) Sharpe ratio. Returns 0.0 when there are
+        fewer than two observations, or when the dispersion of the series is
+        negligible relative to its level (see below).
     """
     n = len(returns)
     if n < 2:
@@ -225,7 +233,26 @@ def sample_sharpe(returns: list[float]) -> float:
     variance = sum((r - mean) ** 2 for r in returns) / (n - 1)
     if variance <= 0.0:
         return 0.0
-    return mean / math.sqrt(variance)
+    std = math.sqrt(variance)
+
+    # Guard the degenerate cliff. Testing `variance <= 0.0` alone catches only
+    # an EXACTLY constant series; a series differing by floating-point residue
+    # passes and is then divided by that residue. A perturbation of 1e-12 on a
+    # series of 2.0s yields a Sharpe of 3.9e12, so the verdict flips from "no
+    # evidence of edge" to "certain edge" on a rounding difference -- which is
+    # how this surfaced: identical inputs and dependencies produced Sharpe 0.0
+    # on Python 3.12+ and ~1e12 on 3.11 (DEC-2026-08-13-002).
+    #
+    # Dispersion this small relative to the level is floating-point noise, not
+    # variation, and a Sharpe computed from it is meaningless. Returning 0.0
+    # matches the exactly-constant case: no dispersion, no measurable edge.
+    #
+    # Real return series are unaffected. Genuine per-trade returns differ by
+    # basis points at minimum, which is ~7 orders of magnitude above this bound.
+    if std <= abs(mean) * _DEGENERATE_DISPERSION_REL_TOL:
+        return 0.0
+
+    return mean / std
 
 
 def sample_skewness(returns: list[float]) -> float:
