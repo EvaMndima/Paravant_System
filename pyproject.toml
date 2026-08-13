@@ -101,6 +101,21 @@ target-version = ["py311"]
 line-length = 88
 target-version = "py311"
 
+[tool.ruff.lint]
+# Declared explicitly rather than inherited from a version's defaults. Leaving
+# this unset meant the enforced rule set changed with the installed ruff: 0.15
+# reported a clean tree where 0.16 reported 1,013 findings. The pin in
+# requirements-dev.txt fixes the version; this fixes what it checks.
+#
+#   E4  import placement and shadowing
+#   E7  statement-level errors (comparisons, ambiguous names, one-line blocks)
+#   E9  syntax and runtime errors
+#   F   pyflakes: undefined names, unused imports and variables
+#
+# Broadening this set is worthwhile and is its own commit, since each new rule
+# family produces a diff that should be reviewed rather than auto-applied.
+select = ["E4", "E7", "E9", "F"]
+
 [tool.mypy]
 python_version = "3.11"
 warn_return_any = true
