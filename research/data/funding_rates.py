@@ -158,16 +158,15 @@ def fetch_funding_history(
     cursor = start_ms
     pages = 0
     while cursor <= end_ms:
-        resp = sess.get(
-            _FAPI_FUNDING_URL,
-            params={
-                "symbol": symbol,
-                "startTime": cursor,
-                "endTime": end_ms,
-                "limit": _PAGE_LIMIT,
-            },
-            timeout=25,
-        )
+        # Annotated rather than inline: a literal mixing str and int values
+        # infers as dict[str, object], which requests' params does not accept.
+        params: dict[str, str | int] = {
+            "symbol": symbol,
+            "startTime": cursor,
+            "endTime": end_ms,
+            "limit": _PAGE_LIMIT,
+        }
+        resp = sess.get(_FAPI_FUNDING_URL, params=params, timeout=25)
         resp.raise_for_status()
         batch = resp.json()
         pages += 1

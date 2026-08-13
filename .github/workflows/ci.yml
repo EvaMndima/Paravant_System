@@ -41,7 +41,7 @@ jobs:
         with:
           python-version: "3.11"
           cache: pip
-      - run: pip install -r requirements.txt -r requirements-dev.txt types-psutil
+      - run: pip install -r requirements.txt -r requirements-dev.txt
       - name: mypy
         # pyproject declares disallow_untyped_defs = true. This job is what
         # makes that declaration true rather than aspirational.

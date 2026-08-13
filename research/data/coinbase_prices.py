@@ -145,9 +145,15 @@ def fetch_candles(
     pages = 0
     while cursor <= end_s:
         chunk_end = min(cursor + window_s, end_s)
+        # Annotated rather than inline: see funding_rates for why.
+        params: dict[str, str | int] = {
+            "granularity": _GRANULARITY_S,
+            "start": _iso(cursor),
+            "end": _iso(chunk_end),
+        }
         resp = sess.get(
             url,
-            params={"granularity": _GRANULARITY_S, "start": _iso(cursor), "end": _iso(chunk_end)},
+            params=params,
             headers=_HEADERS,
             timeout=25,
         )

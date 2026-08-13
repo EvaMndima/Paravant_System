@@ -6,4 +6,10 @@ pytest-mock>=3.12.0
 black>=24.1.0
 ruff>=0.1.0
 mypy>=1.8.0
+
+# Type stubs. mypy reports import-untyped without these, so a machine that
+# happens to have them installed passes while a clean CI runner fails.
+types-PyYAML>=6.0.0
+types-psutil>=5.9.0
+types-requests>=2.31.0
 pre-commit>=3.6.0
