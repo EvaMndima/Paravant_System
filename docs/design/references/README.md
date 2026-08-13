@@ -1,20 +1,30 @@
-<div align="center">
-<img width="1200" height="475" alt="GHBanner" src="https://github.com/user-attachments/assets/0aa67016-6eaf-458a-adb2-6e31a0763ed6" />
-</div>
+# Design references (vendored prototype)
 
-# Run and deploy your AI Studio app
+The original visual prototype for the PARAVANT dashboard, built in Google AI
+Studio and kept here as the reference the production frontend was ported from.
 
-This contains everything you need to run your app locally.
+**This is not the application.** The frontend that ships is `frontend/`. These
+files are read-only reference material: component shapes, spacing, colour usage
+and interaction patterns. Nothing here is built, tested or deployed, and it is
+excluded from lint and type-check.
 
-View your app in AI Studio: https://ai.studio/apps/drive/1UKnqtREM5xRUG-YWGGcNUFw7LwfSSHwb
+## Why it is kept
 
-## Run Locally
+The port was not a copy. The prototype was rebuilt onto a real design-token
+system, a theme context with four palettes, path aliases and a type-checked
+build, and later rebuilt again on Tailwind v3 after a v4 dark-mode failure.
+Keeping the source of that port makes the difference between the two inspectable
+rather than a claim.
 
-**Prerequisites:**  Node.js
+The conventions extracted from it are written up in
+[../DESIGN_GUIDE.md](../DESIGN_GUIDE.md).
 
+## Note
 
-1. Install dependencies:
-   `npm install`
-2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
-3. Run the app:
-   `npm run dev`
+This file replaces the AI Studio export's default README, which contained
+generic run instructions and a link to the authoring account's private AI Studio
+workspace. Neither belongs in a public repository, and neither described what
+this directory is for.
+
+Import paths in these files are relative (`../../lib/utils`); the production
+frontend uses the `@/` alias.

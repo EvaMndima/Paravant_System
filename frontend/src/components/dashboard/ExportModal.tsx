@@ -34,10 +34,13 @@ export const ExportModal: React.FC<ExportModalProps> = ({
   title = 'Export Data',
 }) => {
   const [format, setFormat] = useState<ExportFormat>('csv');
+  // Lazy initialisers: calling new Date() directly in the render body is
+  // impure (React Compiler flags it) and recomputes on every render even though
+  // only the first value is used.
   const [startDate, setStartDate] = useState(
-    new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
+    () => new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
   );
-  const [endDate, setEndDate] = useState(new Date().toISOString().split('T')[0]);
+  const [endDate, setEndDate] = useState(() => new Date().toISOString().split('T')[0]);
   const [isExporting, setIsExporting] = useState(false);
 
   const handleExport = async () => {

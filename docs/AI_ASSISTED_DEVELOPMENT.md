@@ -71,6 +71,28 @@ that different assistants could not diverge on what had been decided.
 **The scope lock.** Crypto only, Binance only, spot only, market orders only,
 monolith only. Each locked with a review date rather than a vague intention.
 
+### 2.1 The frontend came from somewhere else
+
+The backend and research layers were written against written specifications in
+this repository. The frontend was not. It began as a visual prototype built in
+Google AI Studio and was then ported here, rebuilt on Tailwind v3 in March 2026
+after a v4 dark-mode failure. The original prototype files are vendored under
+`docs/design/references/` and the extracted conventions are in
+`docs/design/DESIGN_GUIDE.md`.
+
+This is worth stating for two reasons.
+
+It explains the shape of the code. 46 of the outstanding eslint findings are
+`react-hooks/static-components` -- components declared inside other components.
+That is a systematic artifact of how the prototype was generated, not scattered
+carelessness, and it is concentrated in exactly the files that came across.
+
+And it is the honest description of the work. Productionising a generated
+prototype -- porting it onto a real design-token system, a theme context, path
+aliases and a type-checked build -- is real engineering, but it is not the same
+claim as designing a dashboard from scratch, and the two should not be allowed
+to blur.
+
 The rules exist because an assistant that always agrees is a liability. Their
 practical function is to give it grounds to say no -- to a request, and to the
 author.

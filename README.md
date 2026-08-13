@@ -335,9 +335,10 @@ Stated plainly, because a reviewer will find all of it anyway.
   learning is the infrastructure and the evaluation discipline: point-in-time
   feature resolution, leakage audits, multiple-comparisons correction, holdout
   hygiene, negative results published rather than filed away.
-- **The frontend is not finished.** Six pages still need wiring to the API, and
-  the dashboard has no tests. The build and type-check are gated in CI; the lint
-  is advisory with 84 known issues.
+- **The frontend is not mine from scratch.** It began as a visual prototype
+  built in Google AI Studio and was ported here and rebuilt on Tailwind v3.
+  Productionising it was real work; designing it was not. Six pages still need
+  wiring to the API, and the dashboard has no tests.
 - **Not everything is fixed.** `orchestrator.py` is a fully built, tested main
   loop that nothing calls — the deployed path reimplements it, and the two have
   not been reconciled. Six methodology defects in the research layer remain open

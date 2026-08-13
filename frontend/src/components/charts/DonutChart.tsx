@@ -37,6 +37,8 @@ interface TooltipState {
 interface MousePos {
   x: number;
   y: number;
+  /** Container width captured with the cursor, so render never reads the ref. */
+  containerWidth: number;
 }
 
 // Custom Active Shape for Hover Effect
@@ -148,6 +150,7 @@ export const DonutChart: React.FC<DonutChartProps> = ({
     setMousePos({
       x: e.clientX - rect.left,
       y: e.clientY - rect.top,
+      containerWidth: containerRef.current.offsetWidth,
     });
   };
 
@@ -160,8 +163,11 @@ export const DonutChart: React.FC<DonutChartProps> = ({
 
   // Tooltip offset — flip horizontally so it stays inside the container
   const getTooltipStyle = (): React.CSSProperties => {
-    if (!mousePos || !containerRef.current) return {};
-    const containerWidth = containerRef.current.offsetWidth;
+    // Reads state, not the ref. Accessing containerRef.current during render
+    // can leave the tooltip positioned from a stale layout; the width is
+    // captured in the mousemove handler, where refs are legitimate.
+    if (!mousePos) return {};
+    const containerWidth = mousePos.containerWidth;
     const offsetX = 14;
     const offsetY = -40;
     const flipThreshold = containerWidth * 0.6;

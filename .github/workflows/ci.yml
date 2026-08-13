@@ -166,14 +166,22 @@ jobs:
         run: npm run build
 
   frontend-lint:
-    # ADVISORY, NOT A GATE. eslint currently reports 84 errors, mostly
-    # react-hooks rules. Marking this required today would either block every
-    # PR or force a blanket disable, and a green check that means nothing is
-    # worse than an honest amber one. Promote to required once the count is 0.
-    # Tracked in docs/PRODUCTION_READINESS_ASSESSMENT.md Phase 3.
-    name: Frontend lint (advisory)
+    # A real gate as of 2026-08-13: eslint reports 0 errors.
+    #
+    # It was advisory while 84 errors stood. They were resolved by fixing the
+    # two that could produce wrong behaviour (a ref read during render, an
+    # impure useState initialiser), configuring the project's underscore
+    # convention for intentionally-unused bindings, and assigning deliberate
+    # severities to the rest -- documented rule by rule in
+    # frontend/eslint.config.js.
+    #
+    # 80 warnings remain and are expected to. --max-warnings is deliberately
+    # not set to 0: most are react-hooks/static-components in code ported from
+    # a prototype (docs/AI_ASSISTED_DEVELOPMENT.md section 2.1), and the count
+    # should stay visible while it is driven down rather than be hidden by a
+    # blanket disable.
+    name: Frontend lint
     runs-on: ubuntu-latest
-    continue-on-error: true
     defaults:
       run:
         working-directory: frontend
