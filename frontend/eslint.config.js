@@ -6,7 +6,11 @@ import tseslint from 'typescript-eslint'
 import { defineConfig, globalIgnores } from 'eslint/config'
 
 export default defineConfig([
-  globalIgnores(['dist']),
+  // .vite is Vite's dependency pre-bundle cache -- generated vendor code, not
+  // source. Linting it reported errors in react-router-dom's bundled output,
+  // including 'rule definition not found' for plugins the bundle's own
+  // eslint-disable comments reference.
+  globalIgnores(['dist', '.vite', 'node_modules', 'coverage']),
   {
     files: ['**/*.{ts,tsx}'],
     extends: [
