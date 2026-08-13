@@ -2951,9 +2951,9 @@ parameters:
 
 **End of Decisions Log**
 
-**Total Decisions:** 106 active, 0 superseded, 5 locked (1 amended); DEC-2026-06-04-013 amended
+**Total Decisions:** 107 active, 0 superseded, 5 locked (1 amended); DEC-2026-06-04-013 amended
 **Last Updated:** 2026-08-13
-**Next Decision ID:** DEC-2026-08-13-002
+**Next Decision ID:** DEC-2026-08-13-004
 
 ## Phase 5 Decisions (Backtesting & Simulation)
 
@@ -3166,3 +3166,23 @@ parameters:
 - **Affected Files:** the above, plus `tests/research/test_feature_store.py` (24 tests), `test_coinbase_prices.py`, `test_btc_reference.py`, `test_coinbase_premium.py`
 - **Note on the tests:** `test_close_at_is_causal` asserted `close_at(01:30) == 101.0` -- the leak -- with the comment "latest <= ts". A test named for causality was asserting its violation. This is the third instance in this repository of a test written to match a defect rather than the specification; see `docs/AI_ASSISTED_DEVELOPMENT.md` section 4.1.
 - **References:** DEC-2026-06-04-021 (the liquidation collector, whose causal accessor was already correct and served as the model), PARA-03/04 in `docs/research/RESEARCH_FIXLIST.md`.
+
+### DEC-2026-08-13-003: LLM Hypothesis Evaluation Is an Evals Study, Not a Strategy Search
+- **Decision:** Build `research/llm/` as a pre-registered evaluation of whether an LLM can generate trading hypotheses better than the human baseline, and of whether the project's own Stage-1 rubric can tell the difference. The protocol is fixed in advance in `docs/research/LLM_HYPOTHESIS_EVAL_SPEC.md`.
+- **Context:** The repository contains no ML and no LLM integration, which is the largest gap between what it is (systems and quantitative research engineering) and the roles it is being published for. The obvious response -- bolt on a model that predicts prices -- would produce a demo indistinguishable from thousands of others and would contradict this project's own findings.
+- **Rationale:**
+  - **The question is answerable and the answer is useful either way.** The human Stage-1 rubric correlates with realised profit factor at r = +0.146 over seven screened hypotheses, and the higher-scoring of the two flagship hypotheses performed worse. Pointing a text generator that is optimised to satisfy rubrics at a rubric that already appears not to work is a direct, measurable instance of Goodhart's law.
+  - **Power is where the design must be honest.** Novelty rate, hard-gate pass rate, score distribution and mechanism diversity are measurable at n >= 100 without a single backtest. Outcome correlation is not: it caps at n < 10 and is pre-registered as exploratory. Reporting an underpowered correlation as a finding would repeat exactly the error corrected in `RESEARCH_FINDINGS.md` section 3.
+  - **It reuses machinery rather than inventing a parallel stack.** Effective-K counts LLM proposals as trials; the similarity checker detects structural duplicates; the negative-space map supplies the novelty ground truth; the feature store guards leakage. The technical contribution is applying existing multiple-comparisons correction to LLM output, which is not a thing most LLM projects do.
+  - **The harness is the artifact.** Caching for deterministic replay, cost accounting, prompt content-hashing and an explicit failure taxonomy are the properties that make an LLM integration reviewable. They hold their value regardless of which way the result falls.
+- **Alternatives Considered:**
+  - **A price-prediction model:** REJECTED - contradicts the project's own null result, and a model that "works" without the same DSR scrutiny applied to every other strategy would be indefensible here.
+  - **An autonomous research agent:** REJECTED - the human gate at each stage is the point of the protocol; removing it to make a better demo would discard the thing worth showing.
+  - **An ML regime classifier (assessment item 5.1):** DEFERRED - honest and smaller, but it demonstrates conventional supervised learning rather than evaluation engineering, and it does not reuse the statistical machinery that distinguishes this repository.
+  - **Nothing, and reposition to backend/platform roles:** PARTIALLY ADOPTED - the repository is already strong for those roles and should be applied with immediately. This decision does not depend on the LLM work landing.
+- **Status:** ACTIVE
+- **Date Decided:** 2026-08-13
+- **Implemented By:** `docs/research/LLM_HYPOTHESIS_EVAL_SPEC.md` (pre-registration); `research/llm/` (to be built in five phases)
+- **Affected Files:** `docs/research/LLM_HYPOTHESIS_EVAL_SPEC.md`, `docs/research/LLM_EVAL_SESSION_PROMPT.md`
+- **Expected outcome, recorded before the fact:** null. The LLM is expected to score at or above the human median on the rubric while proposing predominantly exhausted mechanism classes. A positive result is to be treated as a suspected defect until leakage and trial accounting are re-checked.
+- **References:** DEC-2026-06-04-008 (DSR floor), DEC-2026-06-04-001 (one-way dependency), `docs/research/HYPOTHESIS_QUALITY_GATE.md`, `docs/research/NEGATIVE_SPACE_MAP.md`, `docs/RESEARCH_FINDINGS.md` section 4.
