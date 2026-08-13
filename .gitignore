@@ -4,27 +4,37 @@ __pycache__/
 *$py.class
 *.so
 .Python
-build/
-develop-eggs/
-dist/
-downloads/
-eggs/
-.eggs/
-lib/
-lib64/
-parts/
-sdist/
-var/
-wheels/
+# Anchored to the repository root with a leading slash. Without it, git matches
+# these names at ANY depth -- `lib/` also matched `frontend/src/lib/`, so
+# utils.ts and animations.ts were never committed and the frontend could not be
+# built from a fresh clone. Local checkouts hid it: the files were on disk.
+/build/
+/develop-eggs/
+/downloads/
+/eggs/
+/.eggs/
+/lib/
+/lib64/
+/parts/
+/sdist/
+/var/
+/wheels/
 *.egg-info/
 .installed.cfg
 *.egg
 
-# Virtual environments
+# Build output, listed explicitly rather than relying on a bare `dist/` that
+# would match anywhere.
+/dist/
+frontend/dist/
+frontend/.vite/
+
+# Virtual environments. Anchored for the same reason as above; an unanchored
+# `env/` would match any directory named env anywhere in the tree.
 .venv/
 venv/
-ENV/
-env/
+/ENV/
+/env/
 
 # IDE
 .idea/
