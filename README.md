@@ -254,8 +254,8 @@ Deeper detail: **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)** ·
 
 | Layer | Files | Lines | Notes |
 |---|---|---|---|
-| `src/` application | 167 `.py` | 49,184 | API, risk, execution, indicators, strategies |
-| `tests/` | 134 `.py` | 36,876 | 1,931 tests: 1,894 pass, 37 skip, 0 fail |
+| `src/` application | 169 `.py` | 49,745 | API, risk, execution, indicators, strategies |
+| `tests/` | 138 `.py` | 38,426 | 2,054 tests: 2,017 pass, 37 skip, 0 fail |
 | `frontend/src/` | 90 `.ts`/`.tsx` | 17,187 | React 19 dashboard — see caveat below |
 | `scripts/` | 25 | 11,900 | Live loop, paper loop, sweeps, reporting |
 | `research/` | 32 `.py` | 6,461 | DSR, effective-K, cost model, feature store |
@@ -324,9 +324,10 @@ Stated plainly, because a reviewer will find all of it anyway.
 - **Not a profitable trading system.** No strategy here passes its own
   validation gates. If it had an edge, this README would be a different
   document and probably would not exist.
-- **Not authenticated.** All 63 API endpoints are open, including 21 that mutate
-  state. Do not expose it to a network you do not control. See
-  [SECURITY.md](SECURITY.md).
+- **Barely authenticated.** The 21 state-mutating endpoints sit behind one
+  shared `X-API-Key` and a burst rate cap; the 42 read endpoints are open, there
+  are no user identities and no key rotation. Do not expose it to a network you
+  do not control. See [SECURITY.md](SECURITY.md).
 - **The dashboard is a prototype.** 17,000 lines of React that make three real
   network calls. Every other page renders static seed data and the simulated
   ticker is labelled as such in code. It is honest in the source and it is not
@@ -400,7 +401,7 @@ run them against Binance testnet.
 | Lint | `ruff` over `src`, `research`, `scripts` **and** `tests` |
 | Type check | `mypy` over `src/` and `research/features/` |
 | Tests | Python 3.11, 3.12, 3.13 |
-| Coverage | Floor at 62% (measured 63%) |
+| Coverage | Floor at 72% (measured 74%), over the **whole** suite |
 | **Quickstart** | Fresh install, `init_db`, `verify_db`, boot the API, assert `/health` — on **Linux and Windows** |
 | Frontend | `tsc -b` and production build |
 

@@ -13,17 +13,44 @@ It is provided with no warranty of any kind. See `LICENSE`.
 These are documented rather than hidden. If you deploy this, you are accepting
 them.
 
-### The API has no authentication
+### API authentication is a single shared key, and reads are not gated
 
-All 63 endpoints are unauthenticated, including 21 that mutate state: placing
-orders, cancelling orders, closing positions, activating and deactivating the
-kill switch, starting and stopping paper sessions, and changing system
-configuration.
+As of 2026-08-14 the 21 state-mutating endpoints require a shared secret in an
+`X-API-Key` header: placing orders, cancelling orders, closing positions,
+activating and deactivating the kill switch, starting and stopping paper
+sessions, creating and mutating strategies and accounts, and starting and
+stopping the system. Set `PARAVANT_API_KEY` to enable it.
 
-**Do not expose this API to any network you do not control.** Bind it to
-localhost, or put it behind an authenticating reverse proxy or a private
-network. Adding authentication is tracked in
-`docs/PRODUCTION_READINESS_ASSESSMENT.md` (Phase 3, item 3.1).
+Outside `ENVIRONMENT=development` the application **refuses to start** when
+`PARAVANT_API_KEY` is unset, and refuses any key shorter than 32 characters in
+every environment. See `src/api/auth.py` and DEC-2026-08-14-001.
+
+What this does **not** give you:
+
+- **The 42 read endpoints are open.** Positions, PnL, order history, strategy
+  configuration and system health are readable by anyone who can reach the
+  port. This is deliberate -- the dashboard is a read-only browser client --
+  but it means the API still leaks your full trading state.
+- **One key, no identities.** There is no per-user attribution, no rotation
+  mechanism, no expiry, and no revocation short of changing the variable and
+  restarting. It authenticates a request, not a person.
+- **Rate limiting is a burst cap, not a defence against a patient attacker.** As of
+  2026-08-14 mutating requests are capped per client (default 30/min, keyed on
+  the client-supplied `X-Forwarded-For` and therefore spoofable) and globally
+  (default 120/min, un-spoofable). A leaked key can still be used indefinitely
+  at 120 mutations per minute. The cap bounds the rate of damage, not the total.
+  State is per process and resets on restart. See `src/api/rate_limit.py` and
+  DEC-2026-08-14-003.
+- **Transport is your responsibility.** The key is sent in a plaintext header.
+  Over plain HTTP it is readable in transit. Terminate TLS in front of it.
+- **In development with no key set, the gate is off** and logs
+  `api_auth_disabled` at startup. This keeps the documented quickstart runnable.
+  It also means a machine running with `ENVIRONMENT=development` on a shared
+  network is fully exposed.
+
+**Do not expose this API to any network you do not control**, even with a key
+set. Bind it to localhost, or put it behind an authenticating reverse proxy or
+a private network.
 
 ### Open methodology defects in the research layer
 
@@ -47,7 +74,12 @@ validation layer has rejected.
 
 - **The live kill switch defaults off.** Live trading requires explicitly
   setting `LIVE_TRADING_ENABLED` in the environment. It is off unless you turn
-  it on.
+  it on. Note that the kill switch is also togglable over the API, which is why
+  those endpoints are behind the key.
+- **The API key gate fails closed on deployment.** Outside development, a
+  missing `PARAVANT_API_KEY` aborts startup rather than serving unauthenticated
+  order-placement endpoints. A crash-looping container is the intended,
+  visible outcome; silent exposure is not.
 - **Use testnet first.** `BINANCE_TESTNET=true` is the safe default. A machine
   that has run with it set to `false` is holding live-capable credentials.
 - **Never commit `.env`.** It is gitignored. `.env.example` is the template.
@@ -87,7 +119,13 @@ In scope:
 
 Out of scope:
 
-- The absence of API authentication, which is documented above and known
+- The limitations of the API key gate that are documented above and known: open
+  read endpoints, and a single shared key with no identities or rotation
+- The limits of the rate limiter that are documented above and known: per-client
+  identity is spoofable via `X-Forwarded-For`, buckets are per process and reset
+  on restart, and a sustained attack within the global cap is not prevented
+- The development-mode bypass when `PARAVANT_API_KEY` is unset, which is
+  deliberate and logged at startup
 - Vulnerabilities in third-party dependencies, unless this repository uses them
   in a way that makes an otherwise-safe library unsafe
 - Findings that require an attacker to already control the host

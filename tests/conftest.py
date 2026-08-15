@@ -30,6 +30,10 @@ _LEAKY_ENV_NAMES = frozenset({
     "MAX_STRATEGIES_LIVE_CONCURRENT",
     "CAPITAL_RESERVE_FRACTION",
     "ALLOWED_ORIGINS",
+    # A developer's real API key must not decide whether the auth gate is
+    # exercised. Tests that need it set it explicitly.
+    # Decision: DEC-2026-08-14-001
+    "PARAVANT_API_KEY",
 })
 
 # Integration modules whose fixtures open a real connection to Binance during

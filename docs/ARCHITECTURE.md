@@ -220,9 +220,72 @@ Middleware: `request_logger` (structured logs with request IDs) and
 an explicit allowlist with no wildcard — fixing what was originally a critical
 vulnerability (DEC-2026-02-08-004).
 
-**There is no authentication.** All 63 endpoints are open, including order
-placement, position closure and kill-switch control. This is the single largest
-gap in the system and is documented in [../SECURITY.md](../SECURITY.md).
+### 8.1 Authentication
+
+The 21 state-mutating endpoints require a shared secret in an `X-API-Key`
+header. The 42 read endpoints do not: the dashboard is a read-only browser
+client, and gating it would break that client for no safety gain.
+
+The gate is **middleware keyed on HTTP method**, not a `Depends` on each route
+(`src/api/auth.py`, DEC-2026-08-14-001). A per-route dependency is the
+idiomatic FastAPI approach and it is fail-open — protection would depend on the
+author of every future endpoint remembering to add it, and nothing would fail
+when they did not. Gating by method is fail-closed: a mutating endpoint added
+tomorrow is covered the day it is written.
+
+The cost is that the requirement does not appear in the OpenAPI schema. The
+compensating control is `tests/unit/api/test_auth.py::TestMutatingRouteCoverage`,
+which enumerates `app.routes` and asserts every mutating route returns 401
+without a key, so an unguarded endpoint is a test failure rather than a silent
+exposure.
+
+Ordering is load-bearing. Starlette makes the last-added middleware outermost,
+so the auth layer is added **before** `CORSMiddleware` in order to sit inside
+it. An auth layer outside CORS returns 401s without CORS headers, which a
+browser reports as an opaque network error rather than an authentication
+failure. `TestMiddlewareOrdering` guards this.
+
+Configuration is `PARAVANT_API_KEY`. Outside `ENVIRONMENT=development` a
+missing key aborts startup; a key under 32 characters is rejected in every
+environment. In development a missing key disables the gate and logs
+`api_auth_disabled`, which keeps the documented quickstart runnable.
+
+**What this is not:** one shared key, no identities, no rotation, no expiry, and
+open reads. It authenticates a request, not a person. The limits are enumerated
+in [../SECURITY.md](../SECURITY.md).
+
+### 8.2 Rate limiting
+
+Mutating requests are additionally capped (`src/api/rate_limit.py`,
+DEC-2026-08-14-003). Two independent token buckets:
+
+| Bucket | Default | Keyed on | Purpose |
+|---|---|---|---|
+| Per-client | 30/min | leftmost `X-Forwarded-For`, else peer IP | Fairness. Best-effort — that header is client-supplied and spoofable |
+| Global | 120/min | nothing | The real cap. Trusts no client value, so it cannot be evaded by rotating a header |
+
+Per-client alone would not work: behind a proxy the real client address arrives
+in a header the client sets, so an attacker rotates it and evades the bucket
+entirely — while also filling the identity map. Hence the global bucket, and
+hence a bounded LRU (1,024 entries) so the map cannot be used to exhaust memory.
+
+**It reuses the `TokenBucket` primitive from
+`src/brokers/binance/rate_limiter.py` (DEC-2026-02-10-002) but not the
+`RateLimiter` policy.** That class blocks with `asyncio.sleep` until tokens free
+up, which is right for outbound calls to Binance where waiting beats a ban. It
+is wrong inbound: a held request occupies a connection and a coroutine, so
+blocking would turn 10,000 requests into 10,000 sleeping tasks — the limiter
+would amplify the flood it exists to absorb. Inbound rejects with `429` and a
+`Retry-After` header.
+
+Ordering: this layer sits **inside** the auth layer, so unauthenticated floods
+are rejected by auth for a cheap 401 and consume no rate budget. Placed outside,
+an anonymous flood could exhaust the global bucket and lock the operator out of
+their own kill switch.
+
+**What this is not:** buckets live in process memory, so limits multiply by
+uvicorn worker count (deployment runs one) and reset on restart. It bounds the
+*rate* of damage from a leaked key, not the *total*.
 
 ---
 

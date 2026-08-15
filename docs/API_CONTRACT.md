@@ -46,10 +46,67 @@ All responses follow this structure:
 - `200 OK` - Request successful
 - `201 Created` - Resource created
 - `400 Bad Request` - Invalid request
+- `401 Unauthorized` - Missing or invalid `X-API-Key` on a mutating request
 - `404 Not Found` - Resource not found
 - `409 Conflict` - Resource conflict (e.g., duplicate)
+- `429 Too Many Requests` - Rate limit exceeded on a mutating request; carries a `Retry-After` header
 - `500 Internal Server Error` - Server error
-- `503 Service Unavailable` - Service unavailable (maintenance, rate limit)
+- `503 Service Unavailable` - Service unavailable (maintenance)
+
+### Authentication
+
+Every request whose method is `POST`, `PUT`, `PATCH` or `DELETE` must carry a
+shared secret in an `X-API-Key` header. `GET` and `OPTIONS` requests are not
+gated -- the dashboard is a read-only client, and `OPTIONS` must stay open or
+CORS preflight fails before the real request is ever sent.
+
+```
+POST /api/v1/orders
+X-API-Key: <the value of PARAVANT_API_KEY>
+Content-Type: application/json
+```
+
+A missing or incorrect key returns `401` with the standard error body. The two
+cases are deliberately indistinguishable in the response; the reason is
+recorded in the server log only.
+
+The gate is applied in middleware keyed on HTTP method, **not** as a per-route
+dependency, so it does **not** appear in the generated OpenAPI schema at
+`/docs`. That is a known and accepted trade-off: method-based gating is
+fail-closed for endpoints added in future, where a per-route dependency is
+fail-open if an author forgets it. See `docs/ARCHITECTURE.md` section 8.1 and
+DEC-2026-08-14-001.
+
+Configured via `PARAVANT_API_KEY` (32 characters minimum). Unset in
+`ENVIRONMENT=development`, the gate is disabled and startup logs
+`api_auth_disabled`; unset in any other environment, startup aborts.
+
+### Rate Limiting
+
+Mutating requests are also rate-capped. Read requests are not.
+
+| Bucket | Env var | Default |
+|---|---|---|
+| Per client | `API_RATE_LIMIT_PER_MINUTE` | 30/min |
+| Global | `API_RATE_LIMIT_GLOBAL_PER_MINUTE` | 120/min |
+
+Exceeding either returns `429` with a `Retry-After` header giving whole seconds
+to wait:
+
+```
+HTTP/1.1 429 Too Many Requests
+Retry-After: 12
+Content-Type: application/json
+
+{"detail": "Rate limit exceeded for state-mutating requests. Retry in 12s."}
+```
+
+Clients should honour `Retry-After` rather than retrying immediately. Set either
+variable to `0` to disable that bucket.
+
+Like the auth gate, this is applied in middleware keyed on HTTP method, so it
+does not appear in the OpenAPI schema. See `docs/ARCHITECTURE.md` section 8.2
+and DEC-2026-08-14-003.
 
 ---
 
@@ -558,15 +615,20 @@ All responses follow this structure:
 
 ### MVP Limitations
 
-1. **No Authentication:** Single-user system
-2. **No Pagination:** Limited to 50-100 results
-3. **No Filtering:** Basic filtering only
-4. **No Sorting:** Results in chronological order
-5. **No Webhooks:** Polling only
+1. **Single shared API key:** one secret, no user identities, no rotation or
+   expiry, and read endpoints are ungated. See the Authentication section above
+2. **Rate limiting is a burst cap only:** per-client identity is spoofable,
+   buckets are per process and reset on restart, and a leaked key can still be
+   used indefinitely within the global cap
+3. **No Pagination:** Limited to 50-100 results
+4. **No Filtering:** Basic filtering only
+5. **No Sorting:** Results in chronological order
+6. **No Webhooks:** Polling only
 
 ### V1 Features
 
-- JWT authentication
+- Per-user authentication with rotation and revocation
+- Shared rate-limit state across processes (currently per worker)
 - Full pagination
 - Advanced filtering
 - WebSocket notifications
