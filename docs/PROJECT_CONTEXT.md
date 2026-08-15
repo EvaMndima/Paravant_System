@@ -279,8 +279,15 @@ uses PostgreSQL on Neon.
 
 ## 6. API surface
 
-FastAPI, 63 endpoints across 14 route modules. **No authentication exists on any of
-them** — this is the top finding in the readiness assessment.
+FastAPI, 63 endpoints across 14 route modules. The 21 state-mutating endpoints
+require a shared `X-API-Key` secret as of 2026-08-14 (DEC-2026-08-14-001); the
+42 read endpoints are open. The gate is method-based middleware rather than a
+per-route dependency, chosen because the latter is fail-open for endpoints
+added later — see `docs/ARCHITECTURE.md` section 8.1. Remaining gaps: one
+shared key with no identities or rotation, open reads. Mutating requests are
+also rate-capped per client and globally (DEC-2026-08-14-003), reusing the
+`TokenBucket` primitive from the Binance adapter but rejecting rather than
+blocking, since blocking inbound would amplify a flood rather than absorb it.
 
 | Module | Endpoints | Notable |
 |---|---|---|
@@ -937,9 +944,16 @@ enforcement mechanism against their own future scope creep.
 > 2026-08-08 record.
 
 ```
-1,900 tests | 1,855 passed | 9 failed | 4 skipped | 32 errors | 132s
-Coverage: 63% (src + research, 15,784 statements)
+As of 2026-08-14:
+2,054 tests | 2,017 passed | 37 skipped | 0 failed | 0 errors | ~95s
+Coverage: 74% (src + research, whole suite), CI floor 72%
 ```
+
+The 2026-08-08 snapshot below read `1,900 tests | 1,855 passed | 9 failed |
+32 errors | 63% coverage`. All nine failures and all thirty-two errors are
+resolved. The 63% figure was also measured over `tests/unit` + `tests/research`
+only, which understated any module tested from `tests/integration/` — see the
+correction under "Poorly covered" below (DEC-2026-08-14-004).
 
 **Structure:** `tests/unit/` (the bulk, by subsystem), `tests/integration/`
 (API, database CRUD, order flow, full system, real-world scenarios),
@@ -949,13 +963,19 @@ Coverage: 63% (src + research, 15,784 statements)
 **Well covered:** risk sizing 100%, risk checks 99%, time filter 100%, indicators
 88-100%, data models 88-100%, health 94%, config 96-97%.
 
-**Poorly covered:** `data/store.py` 28%, `strategy/engine.py` 60%,
-`orchestrator.py` 71%, `risk/controller.py` 74%. `scripts/` — including the
-2,111-line live loop — is largely unmeasured.
+**Poorly covered** (corrected 2026-08-14): the previous entry here read
+"`data/store.py` 28%". That was a measurement artifact — the CI coverage job
+scoped itself to `tests/unit` + `tests/research`, while `DataStore` is tested
+from `tests/integration/`, which the `test` job runs on every commit. Measured
+over the whole suite `store.py` is at **100%**. The job now measures everything
+(DEC-2026-08-14-004). Remaining genuinely thin: `strategy/engine.py`,
+`risk/controller.py`, and `scripts/` — including the 2,111-line live loop —
+which is largely unmeasured.
 
-The 32 errors are network-dependent Binance tests that error rather than skip. The 9
-failures are genuine: 1 environment-leakage, 5 stale assertions, 3 test-environment
-defects. Full detail in the readiness assessment, Section 2.1.
+The 32 errors were network-dependent Binance tests that errored rather than
+skipped; they now skip unless `PARAVANT_RUN_NETWORK_TESTS=1`
+(DEC-2026-08-11-004). The 9 failures are all fixed. Full detail in the
+readiness assessment, Section 2.1.
 
 ---
 
@@ -963,7 +983,7 @@ defects. Full detail in the readiness assessment, Section 2.1.
 
 | Dimension | State |
 |---|---|
-| Backend application | Complete and functional; 63 endpoints; no auth |
+| Backend application | Complete and functional; 63 endpoints; mutating 21 behind a shared `X-API-Key`, reads open |
 | Risk system | Complete, best-tested subsystem in the project |
 | Strategy library | 29 generators built; **0 validated** |
 | Backtest engine | Complete, O(n) optimised, equivalence-gated |
@@ -972,7 +992,7 @@ defects. Full detail in the readiness assessment, Section 2.1.
 | Research layer | Complete and rigorous; the project's differentiator |
 | Research result | All 11 strategies + 2 forward hypotheses rejected |
 | Frontend | Visually complete, functionally a prototype (3 API calls) |
-| Tests | 1,900 tests, 63% coverage, 9 failing |
+| Tests | 2,017 tests, 74% coverage (CI floor 72%), 0 failing |
 | CI | None |
 | Type/lint gates | Configured but unenforced; 50 mypy + 76 ruff errors |
 | Documentation | Extensive but disorganised; README two quarters stale |

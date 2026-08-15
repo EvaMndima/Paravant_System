@@ -82,13 +82,27 @@ jobs:
           cache: pip
       - run: pip install -r requirements.txt -r requirements-dev.txt
       - name: pytest --cov
-        # Floor set just below the measured 63% so ordinary variation does not
+        # Measures the WHOLE suite, not just tests/unit + tests/research.
+        #
+        # It previously measured only those two directories while the `test`
+        # job ran everything. The effect was that any module tested from
+        # tests/integration/ reported near-zero coverage despite being fully
+        # exercised on every commit: src/data/store.py read 28% against a real
+        # 100%, and was ranked as finding #11 in the readiness assessment on
+        # the strength of that number. The measurement was the defect, not the
+        # tests. Narrowing this scope again would re-introduce it.
+        # Decision: DEC-2026-08-14-004
+        #
+        # Network-dependent tests skip unless PARAVANT_RUN_NETWORK_TESTS=1
+        # (DEC-2026-08-11-004), so this is deterministic on a clean runner.
+        #
+        # Floor sits just below the measured 74% so ordinary variation does not
         # break the build. Ratchet it up; never down.
         run: |
-          pytest tests/unit tests/research -q --tb=no \
+          pytest tests/ -q --tb=no \
             --cov=src --cov=research \
             --cov-report=term-missing:skip-covered \
-            --cov-fail-under=62
+            --cov-fail-under=72
 
   quickstart:
     name: Quickstart (${{ matrix.os }})

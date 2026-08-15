@@ -164,6 +164,16 @@ The 9 failures are genuine and fall into three groups:
 
 ### 2.2 Coverage
 
+> **CORRECTED 2026-08-14.** The figures below are measured over `tests/unit`
+> and `tests/research` only, which is what the CI coverage job scoped to. That
+> scope was itself the defect: any module tested from `tests/integration/`
+> reported near-zero coverage while being fully exercised on every commit.
+> `data/store.py` read 28% against a real 100%, and finding #11 was raised on
+> the strength of that number. The coverage job now measures the whole suite
+> (DEC-2026-08-14-004). Current: **74% overall, `store.py` 100%,
+> `api/main.py` 86%.** The weak-module list below is not reliable and is
+> retained only as the record of what was believed.
+
 63% overall across `src/` + `research/` (unit + research suites; 15,784
 statements, 5,828 uncovered).
 
@@ -209,6 +219,18 @@ that has active strategies.** It was not caught because the orchestrator tests
 mock the strategy engine rather than exercising the real signature.
 
 ### 2.5 Security posture
+
+> **UPDATED 2026-08-14.** The finding below described the state at `622ac49`.
+> Item 3.1 has since been implemented (DEC-2026-08-14-001): the 21 mutating
+> endpoints now require a shared `X-API-Key`, enforced by method-based
+> middleware in `src/api/auth.py` and asserted route-by-route by
+> `tests/unit/api/test_auth.py::TestMutatingRouteCoverage`. Outside development
+> a missing key aborts startup. The 42 read endpoints remain open, and there is
+> no per-user identity, and no key rotation. Rate limiting followed on the same
+> day (item 3.2, DEC-2026-08-14-003): mutating requests are capped per client
+> and globally, though the per-client identity is spoofable and the buckets are
+> per process. Finding #1 below is downgraded from Critical to Medium
+> accordingly.
 
 No authentication exists on the API. All 63 endpoints are open, including
 21 mutating endpoints: place order, cancel order, close position, activate and
@@ -295,18 +317,23 @@ Ordered by how quickly a senior reviewer will find it:
 
 | # | Finding | Severity |
 |---|---|---|
-| 1 | No API authentication on 21 mutating endpoints incl. order placement and kill switch | Critical |
-| 2 | No CI — nothing verifies any commit | Critical |
-| 3 | 9 failing tests on `master` | High |
-| 4 | Orchestrator startup check calls a function with 4 wrong kwargs; error swallowed | High |
-| 5 | Tests read the developer's real `.env`; the leaked value selects live mode | High |
-| 6 | 50 mypy + 76 ruff errors against a config that claims strict typing | Medium |
-| 7 | Frontend is a static prototype presented as a dashboard | Medium |
-| 8 | No LICENSE despite two MIT claims | Medium |
-| 9 | 35 AI prompt files + 17 scratch scripts at repo root | Medium (presentation) |
-| 10 | README describes a system two quarters out of date | Medium (presentation) |
-| 11 | `data/store.py` at 28% coverage | Low |
-| 12 | Integration tests error rather than skip without network | Low |
+Status column added 2026-08-14. "Resolved" means verified against the current
+`master`, not merely attempted.
+
+| # | Finding | Severity | Status |
+|---|---|---|---|
+| 1 | No API authentication on 21 mutating endpoints incl. order placement and kill switch | ~~Critical~~ Medium | Partly resolved 2026-08-14 — mutating endpoints gated (DEC-2026-08-14-001) and rate-capped (DEC-2026-08-14-003); reads still open, no identities, no key rotation |
+| 2 | No CI — nothing verifies any commit | Critical | Resolved — 7 jobs in `.github/workflows/ci.yml` |
+| 3 | 9 failing tests on `master` | High | Resolved — 1,899 pass, 0 fail, 0 errors |
+| 4 | Orchestrator startup check calls a function with 4 wrong kwargs; error swallowed | High | Resolved — check is read-only; `TypeError`/`AttributeError` now propagate |
+| 5 | Tests read the developer's real `.env`; the leaked value selects live mode | High | Resolved — `hermetic_environment` fixture in `tests/conftest.py` |
+| 6 | 50 mypy + 76 ruff errors against a config that claims strict typing | Medium | Resolved — 0 and 0, both gated in CI |
+| 7 | Frontend is a static prototype presented as a dashboard | Medium | **Open** — still 3 network calls (item 3.4) |
+| 8 | No LICENSE despite two MIT claims | Medium | Resolved — MIT `LICENSE` added |
+| 9 | 35 AI prompt files + 17 scratch scripts at repo root | Medium (presentation) | Resolved — 0 and 0 |
+| 10 | README describes a system two quarters out of date | Medium (presentation) | Resolved — rewritten |
+| 11 | ~~`data/store.py` at 28% coverage~~ **Measurement defect, not a coverage gap** | Low | Resolved 2026-08-14 — the module was at 100% all along; the CI coverage job excluded `tests/integration/`. Job scope fixed, floor 62→72 (DEC-2026-08-14-004) |
+| 12 | Integration tests error rather than skip without network | Low | Resolved — skip on `PARAVANT_RUN_NETWORK_TESTS` |
 
 ### 3.3 Positioning note
 
@@ -418,10 +445,22 @@ and how to run it, without opening a second file.
 - [ ] 2.8 Add `.github/workflows/ci.yml`: matrix on Python 3.11/3.12, running
       `ruff check`, `mypy src/`, `pytest --cov`, and `cd frontend && npm ci &&
       npm run build && npm run lint`. Fail the build on any of them.
-- [ ] 2.9 Add coverage reporting to CI and a real badge. Set a floor
-      (start at the current 63%, ratchet up) and fail below it.
-- [ ] 2.10 Raise `data/store.py` from 28%. It is the widest-blast-radius module
-      in the codebase and the least tested. Target 80%.
+- [x] 2.9 Coverage job added with an enforced floor. Note the scope correction
+      in 2.10 below: the job originally measured only `tests/unit` +
+      `tests/research`, which made the floor a misleading number. It now
+      measures the whole suite; floor is 72%.
+- [x] 2.10 **DONE 2026-08-14** (DEC-2026-08-14-004), but not as written. The
+      premise was wrong: `data/store.py` was never at 28%. It was at 100%,
+      measured over the whole suite — the CI coverage job scoped itself to
+      `tests/unit` + `tests/research` while `DataStore` is tested from
+      `tests/integration/`, which the `test` job runs on every commit. Writing
+      unit tests to move 28% → 80% would have duplicated existing coverage to
+      move a number, which is the same error this repository's research layer
+      exists to catch. **Fixed the measurement instead:** the coverage job now
+      runs `pytest tests/` and the floor moved 62 → 72. Separately, 36 tests in
+      `tests/unit/data/test_store_queries.py` close the paths that genuinely
+      had no coverage from any suite (order query variants, partial-update
+      validators, symbol registry, paper session persistence).
 - [ ] 2.11 Add `.pre-commit-config.yaml` wiring ruff, black, and mypy.
       `pre-commit` is already declared in `requirements-dev.txt` but unused.
 
@@ -433,14 +472,25 @@ coverage floor enforced.
 **Goal:** the dashboard shows real system state. This is the largest gap between
 what the repo looks like and what it is.
 
-- [ ] 3.1 Add API authentication. For a single-operator system, a static API key
-      in an `X-API-Key` header validated by a FastAPI dependency is sufficient
-      and honest — document the choice and its limits in `ARCHITECTURE.md`.
-      Apply it to all mutating routes at minimum. Do not ship JWT/OAuth theatre
-      for a single-user system; a reviewer respects a justified simple choice
-      more than an over-engineered one.
-- [ ] 3.2 Add rate limiting on mutating endpoints (`slowapi` or a small custom
-      dependency reusing the existing token-bucket in the Binance adapter).
+- [x] 3.1 **DONE 2026-08-14** (DEC-2026-08-14-001). Static `X-API-Key` on all 21
+      mutating routes. Implemented as method-based middleware
+      (`src/api/auth.py`) rather than the per-route FastAPI dependency
+      originally specified here: a per-route dependency is fail-open, since
+      protection would depend on the author of every future endpoint
+      remembering it. Gating by HTTP method is fail-closed.
+      `tests/unit/api/test_auth.py::TestMutatingRouteCoverage` enumerates
+      `app.routes` and asserts the property for all 21, so a regression is a
+      test failure. Limits documented in `docs/ARCHITECTURE.md` section 8.1 and
+      `SECURITY.md`. **Blocks 3.8** — a public demo could not have shipped
+      before this.
+- [x] 3.2 **DONE 2026-08-14** (DEC-2026-08-14-003). Took the second option:
+      reuses the `TokenBucket` primitive from the Binance adapter rather than
+      adding `slowapi`, per the dependency-discipline rule. It reuses the
+      primitive but **not** the `RateLimiter` policy — that one blocks with
+      `asyncio.sleep`, which is right outbound and would be a DoS amplifier
+      inbound. Two buckets: per-client (fairness, spoofable) and global (the
+      un-evadable cap). Sits inside the auth layer so anonymous floods consume
+      no rate budget. 27 tests in `tests/unit/api/test_rate_limit.py`.
 - [ ] 3.3 Generate a typed API client for the frontend from the OpenAPI schema
       (`openapi-typescript`). This kills an entire class of drift between the
       63 endpoints and the UI types.
