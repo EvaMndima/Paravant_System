@@ -644,7 +644,7 @@ These decisions are **LOCKED** per MVP scope control rules until specified revie
 ---
 
 **Last Updated:** 2026-05-08
-**Total Decisions:** 128 active, 0 superseded, 5 locked
+**Total Decisions:** 129 active, 0 superseded, 5 locked
 **Next Decision ID:** DEC-2026-05-08-005
 
 ---
@@ -2951,9 +2951,9 @@ parameters:
 
 **End of Decisions Log**
 
-**Total Decisions:** 128 active, 0 superseded, 5 locked (1 amended); DEC-2026-06-04-013 amended
-**Last Updated:** 2026-08-15
-**Next Decision ID:** DEC-2026-08-15-002
+**Total Decisions:** 129 active, 0 superseded, 5 locked (1 amended); DEC-2026-06-04-013 amended
+**Last Updated:** 2026-08-16
+**Next Decision ID:** DEC-2026-08-16-002
 
 > Count corrected 2026-08-14. This footer read "107 active" while the file held
 > 124 real decision entries -- the count had drifted as decisions were appended
@@ -3351,3 +3351,30 @@ parameters:
 - **Affected Files:** `docker-compose.yml`, `.github/dependabot.yml` (new), `README.md` (badges), `DEVELOPMENT_SETUP.md`, `docs/PRODUCTION_READINESS_ASSESSMENT.md`.
 - **Verification status, stated honestly:** `docker compose config` validates and `scripts/init_db.py` was confirmed to succeed and to be idempotent across restarts. **The container was NOT observed serving `/health`** -- the Docker daemon was not running on the machine where this landed. Item 4.1 stays marked partial until someone watches it come up. Recording an unverified claim as verified would be the precise failure this repository's research layer exists to prevent.
 - **References:** DEC-2026-08-11-003 (pre-publication hygiene; same defect class), DEC-2026-08-11-004 (hermetic environment; same leak, different door), DEC-2026-05-27-001 (kill switch defaults OFF), DEC-2026-08-14-001 (API key gate the compose file leaves optional in development), DEC-2026-08-14-005 (an ignored signal is worse than none).
+
+---
+
+### DEC-2026-08-16-001: Frontend Test Infrastructure First, Then the Dependency Upgrades It Made Safe
+- **Decision:** Add Vitest + React Testing Library + jsdom with 59 tests covering the shared formatters, the regime hook, `PositionsTable`'s gain/loss handling, `EmergencyPanel`'s typed confirmation gate, and a router API contract test. Wire `npm test` into CI as a blocking job with **no coverage floor**. Then, with that net in place, upgrade `react-router-dom` 6.30.3 -> 7.18.2 and add a blocking `pip-audit` job. Vitest runs test files sequentially (`fileParallelism: false`).
+- **Context:** Assessment items 3.7 and 3.2. The operator declined item 3.4 (wiring pages to real data) out of concern for breaking the frontend, which was the correct call and identified the real blocker: the frontend had **zero** tests. CI ran `tsc -b`, which proves types line up and says nothing about behaviour, so 17,000 lines of UI were unverifiable.
+- **Rationale:**
+  - **The assessment's ordering was wrong and the operator caught it.** It lists 3.4 (rewire) before 3.7 (tests). Tests are what make rewiring safe, so they come first. This decision inverts that order and the react-router upgrade is the immediate proof: the upgrade was performed against a green baseline of 59 tests rather than against nothing.
+  - **The canary was written before the change, not after.** `src/App.routing.test.tsx` exercises exactly the seven react-router symbols the app imports and was confirmed green on 6.30.3 **before** the bump. A test written after a migration only proves the migration's end state is self-consistent; written before, it proves behaviour did not change.
+  - **The upgrade was safe because the app had already opted in.** `BrowserRouter` carried `future={{ v7_startTransition, v7_relativeSplatPath }}`, which are precisely the v6->v7 behaviour changes. In v7 both are the default and the prop no longer exists, so `tsc -b` failed on it and the fix was a deletion with no runtime change.
+  - **Sequential test execution is a correctness fix, not a performance tuning.** Vitest defaults to one worker per core, each with its own jsdom; the combined heap footprint produced a FATAL out-of-memory that killed a DIFFERENT test file on each run -- 47 of 59 tests one run, 15 the next. A non-deterministic OOM in CI is indistinguishable from a real failure and trains everyone to hit re-run, the same failure mode as DEC-2026-08-14-005. The react-router bump added the module weight that surfaced it; the cause was always the worker count.
+  - **No frontend coverage floor, deliberately.** Five test files over a prototype would report a number either meaningless or immediately blocking. A gate that is routinely overridden teaches people to override gates. Add one when the suite covers a defensible surface.
+  - **Two known defects are documented by test rather than fixed.** `useRegimeState` discards the last good regime on any failed poll, because the guard in its catch block reads a `regime` captured from the first render and therefore always null. `PositionsTable` falls back to hardcoded equity positions (NVDA, MSFT, TSLA) when `data` is undefined, in a crypto-only system. Both are labelled KNOWN ISSUE / KNOWN FOOTGUN in the tests, with instructions to delete the test when fixed. Fixing them here would have mixed behaviour changes into a test-infrastructure commit.
+  - **pip-audit blocks rather than advises.** An advisory security job is a job people learn to scroll past. It audits `requirements.txt` only: a CVE in a linter that never sees untrusted input is not a reason to block a merge.
+- **Alternatives Considered:**
+  - **Wiring pages to real data first (item 3.4):** REJECTED by the operator, correctly. Refactoring untested UI is how a working prototype quietly stops working.
+  - **Rendering `App` itself in the routing test:** REJECTED - it mounts four providers and ten lazy pages, several fetching on mount. It would fail for reasons unrelated to routing. `App.tsx`'s own route table is covered by `tsc -b` and the production build.
+  - **Asserting the confirmation dialog disappears after EXECUTE:** REJECTED - `AnimatePresence` keeps the exiting node mounted for its transition, so that assertion races framer-motion. The tests assert the outcome (the action fired / did not fire) instead.
+  - **Raising the V8 heap via `NODE_OPTIONS` instead of serialising:** DEFERRED - it hides the growth rather than bounding it, and the suite runs in ~41s sequentially. It is the next lever if that stops being true.
+  - **`npm audit fix --force`:** REJECTED - it performs semver-major bumps unattended. The upgrade was done deliberately, with a baseline and a verification pass.
+- **Status:** ACTIVE
+- **Date Decided:** 2026-08-16
+- **Implemented By:** Assessment plan items 3.7 and 3.2
+- **Affected Files:** `frontend/vitest.config.ts` (new), `frontend/src/test/setup.ts` (new), `frontend/src/lib/utils.test.ts` (new), `frontend/src/hooks/useRegimeState.test.ts` (new), `frontend/src/components/dashboard/PositionsTable.test.tsx` (new), `frontend/src/components/dashboard/EmergencyPanel.test.tsx` (new), `frontend/src/App.routing.test.tsx` (new), `frontend/package.json`, `frontend/src/App.tsx` (future prop removed), `requirements-dev.txt`, `.github/workflows/ci.yml` (frontend-test and audit jobs).
+- **Measured:** frontend 0 -> 59 tests, deterministic across three consecutive runs; `npm audit --omit=dev` 3 moderate -> **0** vulnerabilities; production bundle 416.74 kB -> 435.81 kB (+19 kB, the v7 cost); eslint unchanged at 0 errors / 80 warnings; `tsc -b` and `vite build` green.
+- **Verification gap, stated honestly:** the `pip-audit` job has never been observed running. The machine it landed on could not reach pypi.org (TLS chain failure), so its baseline is unknown and it may be red on first CI run. Triage the findings rather than reaching for `--ignore-vuln`.
+- **References:** DEC-2026-08-14-005 (a non-deterministic signal trains people to ignore the channel -- the reasoning behind serialising the runner), DEC-2026-08-15-001 (Dependabot; pip-audit is the blocking half of the same trade), `docs/PRODUCTION_READINESS_ASSESSMENT.md` items 3.2, 3.4 and 3.7.
