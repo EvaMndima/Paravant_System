@@ -49,6 +49,35 @@ jobs:
         # store, where a type error is a correctness risk, not a style one.
         run: mypy src/ research/features/
 
+  audit:
+    name: Dependency audit (pip-audit)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - run: pip install -r requirements-dev.txt
+      - name: pip-audit
+        # Audits the pinned production set against the PyPI advisory database.
+        #
+        # Blocking rather than advisory. An advisory security job is a job
+        # people learn to scroll past, which is the failure mode called out for
+        # flaky tests in DEC-2026-08-14-005 -- a signal that is always present
+        # and never actionable trains you to ignore the channel.
+        #
+        # requirements.txt only: a CVE in a linter that never runs against
+        # untrusted input is not a reason to block a merge, and including dev
+        # tooling would generate exactly the noise this is trying to avoid.
+        #
+        # NOTE: the baseline was never established locally -- the machine this
+        # landed on could not reach pypi.org (TLS chain failure), so this job
+        # has not been observed passing. If it is red on first run, triage the
+        # findings; do not reach for --ignore-vuln without reading them.
+        # Decision: DEC-2026-08-16-001
+        run: pip-audit -r requirements.txt --progress-spinner off
+
   test:
     name: Tests (py${{ matrix.python-version }})
     runs-on: ubuntu-latest
@@ -178,6 +207,37 @@ jobs:
         # `npm run build` runs `tsc -b` before vite, so this is a real type gate
         # for the frontend as well as a build check.
         run: npm run build
+
+  frontend-test:
+    # Added 2026-08-16. Before this the frontend had no test of any kind: CI
+    # ran `tsc -b`, which proves the types line up and says nothing about
+    # behaviour. 17,000 lines of UI were unverifiable, which is why wiring
+    # pages to real data (item 3.4) was deferred until this existed.
+    #
+    # Scope is the parts where a silent regression is costly: the shared
+    # formatters, the regime hook (one of only three real API calls), the
+    # positions table's gain/loss handling, and EmergencyPanel's typed
+    # confirmation gate.
+    #
+    # No coverage floor here on purpose. A handful of tests over a prototype
+    # would report a number low enough to be either meaningless or immediately
+    # blocking, and a gate that is routinely overridden teaches the team to
+    # override gates. Add one when the suite covers a defensible surface.
+    # Decision: DEC-2026-08-16-001
+    name: Frontend tests
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci
+      - run: npm test
 
   frontend-lint:
     # A real gate as of 2026-08-13: eslint reports 0 errors.
