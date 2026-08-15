@@ -182,6 +182,36 @@ allow_origins=["*"]  # NEVER DO THIS
 
 ## 4. Documentation Requirements
 
+### 4A. DOCUMENTATION FRESHNESS (MANDATORY)
+
+**A change is not finished until the documentation describing it is true.**
+
+If a change makes any sentence in a tracked `.md` file untrue, that sentence is
+updated in the **same commit**. Not a follow-up, not a TODO. This applies
+whether or not the user asks for it -- "update the docs" is part of "make the
+change", not a separate request.
+
+Before reporting any behaviour-changing task complete:
+
+1. **Grep for the OLD claim**, not the new one. The old claim is what is now
+   wrong: `grep -rniE "<concept>|<old-config-key>" --include=*.md .`
+2. **Check the owning document** for each category the change touched (security,
+   architecture, API contract, deployment, config template, decisions).
+3. **Update paired files together** -- `.claude/` and `.agent/` copies.
+4. **Never delete a documented limitation** when partially fixing it. Replace it
+   with what is now true AND what is still not.
+5. **State in your summary** which documents you updated and which you
+   deliberately left alone.
+
+`docs/archive/` is exempt -- those are historical snapshots, deliberately frozen.
+
+**See:** `.agent/rules/documentation-freshness.md` for the full rules,
+the canonical document map, and the discovery procedure.
+
+**THIS IS NON-NEGOTIABLE.** Stale documentation is worse than absent
+documentation: absent docs make a reader check, stale docs make a reader trust
+a false claim. In this repository those claims govern real money.
+
 ### All functions/classes MUST have:
 1. **Docstrings** explaining purpose (Google style)
 2. **Type hints** on all parameters and returns
@@ -395,7 +425,7 @@ API_KEY = "abc123secret"  # NEVER DO THIS
 **AFTER completing implementation:**
 
 - [ ] All relevant decisions followed
-- [ ] New decisions documented in `.claude/DECISIONS.md`
+- [ ] New decisions documented in `.claude/DECISIONS.md` AND `.agent/DECISIONS.md`
 - [ ] Tests written and passing
 - [ ] Type hints complete (100% coverage)
 - [ ] Docstrings added
@@ -404,6 +434,10 @@ API_KEY = "abc123secret"  # NEVER DO THIS
 - [ ] Structured logging added
 - [ ] Error handling comprehensive
 - [ ] Code follows Zero-Technical-Debt rules
+- [ ] **Grepped tracked `.md` files for the OLD claim and updated every stale one**
+- [ ] **`.env.example` updated if configuration changed**
+- [ ] **`DEPLOYMENT.md` carries an upgrade note if anything breaks existing deployments**
+- [ ] **Summary names which documents were updated and which were left alone**
 - [ ] Production audit shows no new issues
 
 ---
@@ -413,6 +447,7 @@ API_KEY = "abc123secret"  # NEVER DO THIS
 ### Essential Files
 - `.claude/DECISIONS.md` - All architectural decisions
 - `.claude/rules/decision-consistency.md` - Decision enforcement
+- `.claude/rules/documentation-freshness.md` - Keeping `.md` files true after changes
 - `.claude/rules/zero-technical-debt.md` - Code quality rules
 - `.claude/rules/mvp-scope-control.md` - MVP scope boundaries
 - `docs/README.md` - Documentation index and reading order
