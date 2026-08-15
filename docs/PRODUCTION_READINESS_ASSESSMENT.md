@@ -520,9 +520,18 @@ what the repo looks like and what it is.
 
 **Goal:** make "production ready" a demonstrable claim rather than an adjective.
 
-- [ ] 4.1 Add `docker-compose.yml` that brings up API + Postgres + frontend with
-      one command, seeded with demo data. This is the single highest-leverage
-      thing for a reviewer who wants to try it.
+- [~] 4.1 **PARTIAL 2026-08-15.** `docker compose up --build` now brings up the
+      API on a fresh clone. It previously failed outright: `env_file: .env`
+      made a gitignored file a hard requirement, and nothing created the
+      database schema, so the API would have booted and failed every query.
+      Both fixed, plus `LIVE_TRADING_ENABLED` and `BINANCE_TESTNET` hardcoded
+      rather than interpolated — Compose reads a local `.env` for `${VAR}`
+      substitution, which had a demo container resolving to mainnet.
+      **Still outstanding:** Postgres, the frontend, and seeded demo data
+      (item 4.2). **Runtime not yet verified end to end** — the Docker daemon
+      was unavailable when this landed; `docker compose config` validates and
+      `scripts/init_db.py` was verified idempotent, but nobody has watched the
+      container serve `/health`. Do that before claiming this item complete.
 - [ ] 4.2 Add a seed script producing a realistic demo dataset so a fresh clone
       is not an empty dashboard.
 - [ ] 4.3 Add `/metrics` (Prometheus format) exposing the metrics the

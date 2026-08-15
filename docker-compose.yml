@@ -1,42 +1,94 @@
-version: '3.8'
+# Local single-command run of the PARAVANT API.
+#
+#   docker compose up --build
+#   curl http://localhost:8000/health
+#
+# This must work on a FRESH CLONE with no other setup. It previously did not,
+# for two reasons that are worth recording because both are the same class of
+# defect -- a documented path nobody had actually walked:
+#
+#   1. `env_file: .env` made a gitignored file a hard requirement, so the first
+#      command a reviewer runs failed with "env file not found". Variables are
+#      now declared inline with `${VAR:-default}`. Compose still reads a local
+#      `.env` for interpolation when one exists, so an operator's real settings
+#      are picked up, and a fresh clone falls back to working defaults.
+#   2. Nothing created the database schema. `init_db()` in src/data/database.py
+#      is a function that only scripts/init_db.py calls, so the API booted and
+#      then failed every query with "no such table". The command below runs the
+#      initialiser before handing off to uvicorn.
+#
+# The obsolete top-level `version:` key was also removed -- Compose v2 warns
+# about it and ignores it.
+#
+# Scope: this brings up the API only. API + Postgres + frontend with seeded
+# demo data is item 4.1 in docs/PRODUCTION_READINESS_ASSESSMENT.md.
 
 services:
-  trading-system:
+  api:
     build: .
-    container_name: paravant-trading
+    container_name: paravant-api
     ports:
-      - "8000:8000"
+      - "${API_PORT:-8000}:8000"
     volumes:
+      # SQLite lives here, so the database survives `docker compose down`.
       - ./data:/app/data
       - ./logs:/app/logs
       - ./config:/app/config:ro
-    env_file:
-      - .env
     environment:
-      - DATABASE_URL=sqlite:///data/trading.db
+      DATABASE_URL: ${DATABASE_URL:-sqlite:///data/trading.db}
+      # development keeps the API key gate optional so this command works with
+      # no secrets configured. Set PARAVANT_API_KEY to turn it on; set
+      # ENVIRONMENT to anything else and startup REQUIRES it.
+      # Decision: DEC-2026-08-14-001
+      ENVIRONMENT: ${ENVIRONMENT:-development}
+      PARAVANT_API_KEY: ${PARAVANT_API_KEY:-}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      TRADING_MODE: ${TRADING_MODE:-paper}
+      # Live-trading configuration is HARDCODED, never interpolated. Compose
+      # reads a local `.env` for `${VAR}` substitution, so `BINANCE_TESTNET:
+      # ${BINANCE_TESTNET:-true}` resolved to "false" on a developer machine
+      # whose .env selects mainnet -- a local demo container silently pointed
+      # at real markets. Same leak the test suite had before its hermetic
+      # fixture (DEC-2026-08-11-004), through a different door.
+      # No BINANCE_API_KEY or BINANCE_SECRET_KEY is passed through either, so
+      # the container cannot reach a funded account regardless.
+      # Decision: DEC-2026-05-27-001 -- the kill switch defaults OFF.
+      LIVE_TRADING_ENABLED: "false"
+      BINANCE_TESTNET: "true"
+    # `exec` so uvicorn receives SIGTERM directly and shuts down gracefully
+    # rather than being killed after the shell's grace period.
+    command: >
+      sh -c "python scripts/init_db.py &&
+      exec uvicorn src.api.main:app --host 0.0.0.0 --port 8000"
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 30s
       timeout: 10s
       retries: 3
-      start_period: 10s
+      # Covers image start plus schema creation on an empty volume.
+      start_period: 20s
 
-  # Optional: For development with hot reload
-  trading-system-dev:
+  # Hot-reload variant for local development. Opt in with:
+  #   docker compose --profile dev up
+  api-dev:
     build: .
-    container_name: paravant-trading-dev
+    container_name: paravant-api-dev
     ports:
-      - "8001:8000"
+      - "${API_DEV_PORT:-8001}:8000"
     volumes:
       - .:/app
       - ./data:/app/data
       - ./logs:/app/logs
-    env_file:
-      - .env
     environment:
-      - DATABASE_URL=sqlite:///data/trading.db
-      - ENVIRONMENT=development
-    command: uvicorn src.api.main:app --host 0.0.0.0 --port 8000 --reload
+      DATABASE_URL: ${DATABASE_URL:-sqlite:///data/trading.db}
+      ENVIRONMENT: development
+      PARAVANT_API_KEY: ${PARAVANT_API_KEY:-}
+      LOG_LEVEL: ${LOG_LEVEL:-DEBUG}
+      LIVE_TRADING_ENABLED: "false"
+      BINANCE_TESTNET: "true"
+    command: >
+      sh -c "python scripts/init_db.py &&
+      exec uvicorn src.api.main:app --host 0.0.0.0 --port 8000 --reload"
     profiles:
       - dev

@@ -1,5 +1,9 @@
 # PARAVANT
 
+[![CI](https://github.com/EvaMndima/Paravant_System/actions/workflows/ci.yml/badge.svg)](https://github.com/EvaMndima/Paravant_System/actions/workflows/ci.yml)
+[![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-blue)](pyproject.toml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
+
 **An autonomous crypto trading system, and a validation layer built to prove
 its own strategies don't work.**
 

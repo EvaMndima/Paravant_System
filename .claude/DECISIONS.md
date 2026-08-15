@@ -644,7 +644,7 @@ These decisions are **LOCKED** per MVP scope control rules until specified revie
 ---
 
 **Last Updated:** 2026-05-08
-**Total Decisions:** 127 active, 0 superseded, 5 locked
+**Total Decisions:** 128 active, 0 superseded, 5 locked
 **Next Decision ID:** DEC-2026-05-08-005
 
 ---
@@ -2951,9 +2951,9 @@ parameters:
 
 **End of Decisions Log**
 
-**Total Decisions:** 127 active, 0 superseded, 5 locked (1 amended); DEC-2026-06-04-013 amended
-**Last Updated:** 2026-08-14
-**Next Decision ID:** DEC-2026-08-14-006
+**Total Decisions:** 128 active, 0 superseded, 5 locked (1 amended); DEC-2026-06-04-013 amended
+**Last Updated:** 2026-08-15
+**Next Decision ID:** DEC-2026-08-15-002
 
 > Count corrected 2026-08-14. This footer read "107 active" while the file held
 > 124 real decision entries -- the count had drifted as decisions were appended
@@ -3329,3 +3329,25 @@ parameters:
 - **Affected Files:** `tests/unit/test_rate_limiter_edge_cases.py` only. `src/brokers/binance/rate_limiter.py` is UNCHANGED -- the defect was in the test, not the subject.
 - **Verification:** ran ten consecutive times in isolation and once in the full 2,054-test suite; deterministic in all eleven.
 - **References:** DEC-2026-02-10-002 (the TokenBucket under test), DEC-2026-08-14-004 (the whole-suite run that exposed this), DEC-2026-08-11-004 (hermetic tests -- same principle applied to environment rather than time).
+
+---
+
+### DEC-2026-08-15-001: `docker compose up` Must Work on a Fresh Clone, and Must Not Inherit Live Configuration
+- **Decision:** `docker-compose.yml` declares every variable inline with `${VAR:-default}` instead of requiring `env_file: .env`, runs `scripts/init_db.py` before handing off to uvicorn, and **hardcodes** `LIVE_TRADING_ENABLED=false` and `BINANCE_TESTNET=true` rather than interpolating them. Dependabot is enabled for pip, npm, github-actions and docker. The README carries CI, Python and licence badges.
+- **Context:** Pre-publication review of what a reviewer meets in the first five minutes. `docker compose up` is the most likely "let me try this" command and it failed outright on a clean clone.
+- **Rationale:**
+  - **Two independent failures, both the same class as the `init_db.py` Windows crash (DEC-2026-08-11-003): a documented path nobody had walked.** First, `env_file: .env` made a gitignored file a hard requirement, so the command errored before starting anything. Second, nothing created the schema -- `init_db()` in `src/data/database.py` is a function only `scripts/init_db.py` calls, so the API would have booted and failed every query with "no such table". A reviewer would have concluded the system does not work, and been right about the evidence available to them.
+  - **The mainnet leak is the serious finding.** `BINANCE_TESTNET: ${BINANCE_TESTNET:-true}` looks safe and is not. Compose reads a local `.env` for `${VAR}` substitution independently of `env_file`, so on a developer machine whose `.env` sets `BINANCE_TESTNET=false`, `docker compose config` resolved to `"false"` -- a local demo container pointed at real markets. This is the same leak the test suite had before its hermetic fixture (DEC-2026-08-11-004), arriving through a different door, which is why it is recorded rather than quietly fixed. Live-affecting settings are now hardcoded, and no `BINANCE_API_KEY` or `BINANCE_SECRET_KEY` is passed into the container, so it cannot reach a funded account even if a setting were wrong.
+  - **Pinning and Dependabot are two halves of one trade.** Exact pins (requirements.txt, 2026-08-13) removed surprise upgrades but moved the burden of noticing advisories onto a human who will not reliably notice. Dependabot makes upgrades visible while pins keep them deliberate. Updates are grouped and rate-limited because an unbounded stream of single-dependency PRs on a solo project gets ignored, and an ignored alert is worse than none -- the same reasoning as the flaky test in DEC-2026-08-14-005.
+  - **The CI badge is the highest signal-per-character item in the repository.** Seven CI jobs existed and the front page did not say so.
+- **Alternatives Considered:**
+  - **`env_file: [{path: .env, required: false}]`:** REJECTED - correct, but needs Compose 2.24+, and inline defaults are readable without knowing that.
+  - **Committing a working `.env`:** REJECTED - trains the habit of committing a file that holds credentials.
+  - **Calling `init_db()` from the API startup event:** REJECTED - schema creation is a deployment step, not a request-serving concern, and it would silently create a schema against a misconfigured production `DATABASE_URL`.
+  - **Adding Postgres and the frontend now:** DEFERRED to item 4.1 proper. Fixing the broken path is separable from widening it, and mixing them would violate one-change-one-intent.
+- **Status:** ACTIVE
+- **Date Decided:** 2026-08-15
+- **Implemented By:** Assessment plan item 4.1 (partial)
+- **Affected Files:** `docker-compose.yml`, `.github/dependabot.yml` (new), `README.md` (badges), `DEVELOPMENT_SETUP.md`, `docs/PRODUCTION_READINESS_ASSESSMENT.md`.
+- **Verification status, stated honestly:** `docker compose config` validates and `scripts/init_db.py` was confirmed to succeed and to be idempotent across restarts. **The container was NOT observed serving `/health`** -- the Docker daemon was not running on the machine where this landed. Item 4.1 stays marked partial until someone watches it come up. Recording an unverified claim as verified would be the precise failure this repository's research layer exists to prevent.
+- **References:** DEC-2026-08-11-003 (pre-publication hygiene; same defect class), DEC-2026-08-11-004 (hermetic environment; same leak, different door), DEC-2026-05-27-001 (kill switch defaults OFF), DEC-2026-08-14-001 (API key gate the compose file leaves optional in development), DEC-2026-08-14-005 (an ignored signal is worse than none).
