@@ -644,7 +644,7 @@ These decisions are **LOCKED** per MVP scope control rules until specified revie
 ---
 
 **Last Updated:** 2026-05-08
-**Total Decisions:** 129 active, 0 superseded, 5 locked
+**Total Decisions:** 130 active, 0 superseded, 5 locked
 **Next Decision ID:** DEC-2026-05-08-005
 
 ---
@@ -2951,9 +2951,9 @@ parameters:
 
 **End of Decisions Log**
 
-**Total Decisions:** 129 active, 0 superseded, 5 locked (1 amended); DEC-2026-06-04-013 amended
+**Total Decisions:** 130 active, 0 superseded, 5 locked (1 amended); DEC-2026-06-04-013 amended
 **Last Updated:** 2026-08-16
-**Next Decision ID:** DEC-2026-08-16-002
+**Next Decision ID:** DEC-2026-08-16-003
 
 > Count corrected 2026-08-14. This footer read "107 active" while the file held
 > 124 real decision entries -- the count had drifted as decisions were appended
@@ -3378,3 +3378,29 @@ parameters:
 - **Measured:** frontend 0 -> 59 tests, deterministic across three consecutive runs; `npm audit --omit=dev` 3 moderate -> **0** vulnerabilities; production bundle 416.74 kB -> 435.81 kB (+19 kB, the v7 cost); eslint unchanged at 0 errors / 80 warnings; `tsc -b` and `vite build` green.
 - **Verification gap, stated honestly:** the `pip-audit` job has never been observed running. The machine it landed on could not reach pypi.org (TLS chain failure), so its baseline is unknown and it may be red on first CI run. Triage the findings rather than reaching for `--ignore-vuln`.
 - **References:** DEC-2026-08-14-005 (a non-deterministic signal trains people to ignore the channel -- the reasoning behind serialising the runner), DEC-2026-08-15-001 (Dependabot; pip-audit is the blocking half of the same trade), `docs/PRODUCTION_READINESS_ASSESSMENT.md` items 3.2, 3.4 and 3.7.
+
+---
+
+### DEC-2026-08-16-002: The Project Is a Validation System That Returns `no`, Not a System Built to Fail -- and Cross-Document Consistency Is Enforced by Test
+- **Decision:** Reframe the headline from "a validation layer built to prove its own strategies don't work" to "a validation layer that decides whether a strategy has a real edge, and is built to return `no` when the evidence is not there". The null result stays in the second line, bold and unqualified. Separately, extend `documentation-freshness.md` with Rules 10-13 (one owner per claim, repeated numbers derived and asserted, correction style by informativeness, one concept one name) and add `tests/unit/test_doc_consistency.py` to enforce them mechanically.
+- **Context:** Raised by the operator: the previous framing "might give the wrong idea about building a system that doesn't work". Separately, they asked that documentation stop drifting and stop saying different things in different places.
+- **Rationale:**
+  - **The old framing was inaccurate, which is the real objection.** Nobody builds a trading system *in order to* prove its strategies fail. The project was built to find out whether edge existed, with honest validation so the answer would mean something. The null result is the OUTCOME, not the design goal. Stating it as the goal misdescribes the artifact, and a reviewer who notices that discounts everything else.
+  - **The artifact is the harness, and it is reusable.** "Point it at a strategy and it tells you whether the result survives multiple-comparisons correction and realistic costs" describes something with standing value. "We proved ours don't work" describes a postmortem. The first is true and more useful.
+  - **The positioning follows from the accuracy, not the other way round.** Evaluation engineering -- pre-registration, multiple-comparisons correction, holdout hygiene, Goodhart resistance, negative-space tracking -- is directly the skill set LLM evals work requires, and the repository genuinely contains it. The reframe is not spin toward that; it is a more accurate description that happens to land there.
+  - **The null result must not soften, and that is the specific risk this change carried.** A reviewer who finds the headline hedged distrusts everything else, and the honesty is the differentiator. `TestNarrativeConsistency` asserts "None has a validated edge" survives in `README.md` and its counterpart in `RESEARCH_FINDINGS.md`, and fails on phrases that would contradict the null result. The framing may change again; the result may not quietly.
+  - **Cross-document consistency is a distinct failure mode from staleness.** Rules 1-9 keep a document true against the code. They do nothing about five documents that are each individually plausible and collectively contradictory. Every restatement of a claim is an independent thing to remember, so the rule is: the owning document states it, others link.
+  - **The rule was written against a real instance, not a hypothetical.** `PROJECT_CONTEXT.md` and the readiness assessment claimed "14 route modules"; `ARCHITECTURE.md` said 13. Ground truth was 13 -- including at `622ac49`, the commit the assessment was written against. It was wrong when written and had been copied twice. Ground truth for a repeated count must be the code, never another document.
+  - **Rule 12 sharpens Rule 6 rather than replacing it.** "Mark, do not erase" was producing pressure to annotate trivia. The line is now whether the error is informative: a withdrawn research result gets marked because "we got this wrong and caught it" is part of the document's value; a miscount of files gets fixed inline, with the history in the commit message where it belongs.
+- **Alternatives Considered:**
+  - **Leave the framing alone:** REJECTED - it is inaccurate, which is a stronger objection than it being unflattering.
+  - **Drop or soften the null result while reframing:** REJECTED, and actively guarded against by test. It would trade the repository's one genuinely distinguishing property for a marginally better first impression.
+  - **A separate `documentation-consistency.md` rules file:** REJECTED - four rules files already exist and the domain is the same ("documentation must be true"). Freshness is truth against the code; consistency is truth against other documents.
+  - **Asserting test counts and coverage across documents:** REJECTED per Rule 11.3 - they churn every commit, so the test would fail on unrelated work and would be deleted. Stated once, dated, in the owning document.
+  - **A general prose-similarity or LLM-based consistency check:** REJECTED - unfalsifiable and unmaintainable. Narrow regex claims with computed ground truth fail loudly and for one legible reason.
+- **Status:** ACTIVE
+- **Date Decided:** 2026-08-16
+- **Implemented By:** Operator request, 2026-08-16
+- **Affected Files:** `README.md` (headline), `docs/PROJECT_CONTEXT.md` (section 1 framing, route-module count x2), `docs/PRODUCTION_READINESS_ASSESSMENT.md` (route-module count), `.claude/rules/documentation-freshness.md` + `.agent/` copy (Rules 10-13), `tests/unit/test_doc_consistency.py` (new, 19 tests).
+- **Defects found while writing the enforcement:** the "14 route modules" error in three places across two documents, wrong since it was first written. Two test-design errors of my own were caught by the same run and are recorded because both are traps for the next person: a pattern matching `(\d+) endpoints` also matched "21 endpoints mutate state", reporting a contradiction between two correct claims about different things; and asserting a literal phrase against raw text failed because the repository hard-wraps prose at ~80 columns and a newline sat inside the phrase.
+- **References:** DEC-2026-08-14-002 (documentation freshness, extended here), DEC-2026-08-14-004 (a number that is enforced is not the same as a number that is true -- the same lesson, applied to prose), `.claude/rules/zero-technical-debt.md` Rule 3 (naming drift in code; Rule 13 is its prose counterpart), `docs/RESEARCH_FINDINGS.md` (the owning document for the null result).

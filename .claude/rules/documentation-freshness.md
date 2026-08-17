@@ -265,6 +265,129 @@ Before reporting any behaviour-changing task complete:
 
 ---
 
+## Rule 10: One Owner Per Claim, and Everyone Else Links
+
+Rules 1-9 keep a document true against the **code**. Rules 10-13 keep documents
+true against **each other**. These are different failure modes and neither
+catches the other: every document can be individually plausible while
+collectively contradictory.
+
+### Rule 10.1: The owning document states it; others reference it
+
+The Rule 3 map assigns an owner to every category of claim. The owner states
+the claim in full. Other documents **link to the owner** rather than restating.
+
+```markdown
+Authentication is a single shared key on mutating endpoints.
+See [SECURITY.md](SECURITY.md) for what it does and does not cover.
+```
+
+Not:
+
+```markdown
+Authentication is a single shared key on mutating endpoints, with no per-user
+identity, no rotation, and open read endpoints.
+```
+
+The second version is correct today and becomes a second thing to remember on
+the day the key gains rotation. Every restatement is a future divergence.
+
+### Rule 10.2: Where restatement is unavoidable, keep it short and derived
+
+Some duplication is legitimate. A README that refuses to state the headline
+result is useless, and a self-contained briefing document exists precisely to
+be readable without following links.
+
+Where a claim must appear in more than one place:
+
+- State the **minimum** in the non-owning copy — the fact, not the caveats.
+- Never let the non-owning copy carry detail the owner does not.
+- If the claim is a number, it must be checkable. See Rule 11.
+
+### Rule 10.3: Contradiction is a defect, not a difference of emphasis
+
+If two tracked documents make incompatible claims about the same thing, that is
+a bug with the same severity as a failing test. Fix it in the same change that
+finds it. Do not leave a note reconciling the two — delete the wrong one.
+
+---
+
+## Rule 11: Numbers Repeated Across Documents Must Be Derived and Asserted
+
+A number stated in one place is a claim (Rule 1.3). The same number stated in
+five places is five claims that drift independently.
+
+### Rule 11.1: Ground truth is the code, never another document
+
+Counts of endpoints, modules, generators, indicators, tests and decisions are
+all derivable from the repository. Derive them. A number copied from another
+document inherits its errors — the "14 route modules" error propagated from the
+readiness assessment into two places in `PROJECT_CONTEXT.md`, and was wrong in
+all three from the day it was written. There were always 13.
+
+### Rule 11.2: Assert repeated counts by test
+
+`tests/unit/test_doc_consistency.py` computes each count from the codebase and
+asserts every documented mention matches. Adding a route module and not
+updating the docs is a test failure.
+
+Extend it when a new number starts appearing in more than one document. A
+number stated once, in its owning document, does not need a test — it needs
+Rule 1.3.
+
+### Rule 11.3: Prefer a range or a date to a number that will churn
+
+Some numbers move every commit. Test counts and coverage percentages are not
+worth asserting to the digit across every document; state them once, dated, in
+the owning document, and elsewhere say "see the CI badge".
+
+---
+
+## Rule 12: Correct Inline or Mark, by Whether the Error Is Informative
+
+Rule 6 says outdated claims are updated in place and wrong claims are marked.
+That needs a sharper line, because marking every typo turns documents into
+changelogs.
+
+**Mark it** when the error itself carries information:
+
+- A research result that was reported and then withdrawn
+- A methodology flaw that affected a published conclusion
+- A verdict a reader may have already acted on
+- Anything where "we got this wrong and here is how we caught it" is part of
+  the value of the document
+
+**Fix it inline** when the error carries none:
+
+- A miscount of files or modules
+- A stale file path or a renamed symbol
+- A typo, a broken link, a wrong date
+
+The test: would a reader be worse informed if they never learned the earlier
+version existed? If yes, mark it. If no, fix it and say so in the commit
+message, which is where that history belongs.
+
+---
+
+## Rule 13: One Concept, One Name, Across Documents
+
+`zero-technical-debt.md` Rule 3 forbids naming drift in code. The same applies
+to prose, and it is violated more easily because prose invites synonyms.
+
+- A concept named in code keeps that name in documentation. `SubRegime` is not
+  "sub-regime state" in one document and "market micro-regime" in another.
+- A component has one name. The `regime router` is not also "the strategy
+  dispatcher".
+- A status has one vocabulary. `INSUFFICIENT_DATA` is not "unmeasured" in one
+  document and "not enough data" in another, where those are meant to be the
+  same classification.
+
+Where a document deliberately introduces a plain-English gloss for a technical
+term, it should name the technical term once alongside it, and then use the
+technical term.
+
+---
+
 ## Integration with Other Rules
 
 - **`decision-consistency.md`** -- Rule 0 there requires `DECISIONS.md` sync;
@@ -279,11 +402,14 @@ Before reporting any behaviour-changing task complete:
 
 ## Summary
 
-**A change is not finished until the documentation describing it is true.**
+**A change is not finished until the documentation describing it is true --
+true against the code, and true against every other document.**
 
-Search for the old claim. Update the owning document. Keep the paired files in
-sync. Replace warnings rather than deleting them. Mark corrections rather than
-erasing them. Say what you updated and what you deliberately did not.
+Search for the old claim. Update the owning document and let the others link to
+it. Derive repeated numbers from the code and assert them by test. Keep the
+paired files in sync. Replace warnings rather than deleting them. Mark a
+correction when the error is informative and fix it inline when it is not. Use
+one name per concept. Say what you updated and what you deliberately did not.
 
 ---
 

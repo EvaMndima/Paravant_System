@@ -4,22 +4,31 @@
 [![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-blue)](pyproject.toml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
-**An autonomous crypto trading system, and a validation layer built to prove
-its own strategies don't work.**
+**An autonomous crypto trading system, built around a validation layer that
+decides whether a strategy has a real edge — and is built to return `no` when
+the evidence is not there.**
 
-It worked, and the most instructive thing it did was catch an error in its own
-reporting.
+Twenty-nine signal generators have been through it over four months. **None has
+a validated edge.**
 
-After four months and 29 signal generators, **no strategy in this repository has
-a validated edge.** Eight subjects were rejected outright at a sample size where
-the verdict carries information. Ten more were initially reported as rejected —
-until the system's own guard established that they had never had enough data to
+That is the finding, not a malfunction. The validation layer is the artifact:
+gates pre-registered before results are seen, Deflated Sharpe correction for the
+number of trials actually run, a deliberately pessimistic cost model, and a map
+of where edge has been shown to be absent. Point it at a strategy and it tells
+you whether the result survives multiple-comparisons correction and realistic
+costs — or whether you were reading noise. It happens that everything pointed at
+it so far has been noise.
+
+The most instructive thing it did was catch an error in its own reporting. Eight
+subjects were rejected outright at a sample size where the verdict carries
+information. Ten more were initially reported as rejected — until the system's
+own minimum-evidence guard established that they had never had enough data to
 reject at all, and reclassified them as *unmeasurable*.
 
 The difference between "proven worthless" and "never actually measured" is the
-whole discipline. Getting it wrong in the safe direction, then catching it, is
-the result this repository exists to report. The trading engine is the
-supporting cast.
+whole discipline. A validation layer that catches its own over-claim — in the
+direction that makes its own headline weaker — is the strongest evidence
+available that it is measuring something rather than confirming something.
 
 ---
 

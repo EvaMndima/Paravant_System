@@ -28,7 +28,7 @@ Git history: 102 commits, 2026-02-08 through 2026-06-11, single author.
 
 ### 1.2 Backend application (`src/`)
 
-**API layer** — FastAPI, 14 route modules, 63 endpoints (21 state-mutating).
+**API layer** — FastAPI, 13 route modules, 63 endpoints (21 state-mutating).
 `accounts`, `backtest`, `dashboard`, `events`, `execution`, `orders`,
 `paper_trading`, `pnl`, `positions`, `regime`, `risk`, `strategies`, `system`.
 Middleware: structured request logging, global error handler. Explicit CORS

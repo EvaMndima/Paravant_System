@@ -30,12 +30,16 @@ tracks the outcome — in backtest, in paper simulation, and (behind a default-o
 switch) with real capital.
 
 Its distinguishing feature is not the trading engine. It is the **research and
-validation layer** built around the trading engine, whose explicit purpose is to
-reject the system's own strategies. The project treats "we found a profitable
-strategy" as a claim requiring statistical proof, and it implements the machinery to
-test that claim honestly: Deflated Sharpe Ratio, effective-trial counting,
-pre-registered gates, regime-conditional attribution, and a written protocol that
-forbids moving a gate to make a strategy pass.
+validation layer** built around the trading engine, whose purpose is to decide
+whether a strategy has a real edge — and to return `no` when the evidence is not
+there, including for the system's own strategies. The project treats "we found a
+profitable strategy" as a claim requiring statistical proof, and it implements the
+machinery to test that claim honestly: Deflated Sharpe Ratio, effective-trial
+counting, pre-registered gates, regime-conditional attribution, and a written
+protocol that forbids moving a gate to make a strategy pass.
+
+That the answer has so far been `no` for every strategy is a finding, not a
+malfunction of the layer. See Section 14.
 
 ### 1.1 The founding question
 
@@ -106,7 +110,7 @@ records that this amendment ultimately produced the finding that spot long-only
 ```
 Paravant_System/
 ├── src/                      170 .py, 49,294 lines — the application
-│   ├── api/                  FastAPI: 14 route modules, 63 endpoints, 2 middleware
+│   ├── api/                  FastAPI: 13 route modules, 63 endpoints, 2 middleware
 │   ├── brokers/binance/      Exchange client, execution adapter, rate limiter
 │   ├── core/
 │   │   ├── alerting/         Telegram channel, triggers, scheduler, escalation
@@ -279,7 +283,7 @@ uses PostgreSQL on Neon.
 
 ## 6. API surface
 
-FastAPI, 63 endpoints across 14 route modules. The 21 state-mutating endpoints
+FastAPI, 63 endpoints across 13 route modules. The 21 state-mutating endpoints
 require a shared `X-API-Key` secret as of 2026-08-14 (DEC-2026-08-14-001); the
 42 read endpoints are open. The gate is method-based middleware rather than a
 per-route dependency, chosen because the latter is fail-open for endpoints
