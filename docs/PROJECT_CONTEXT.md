@@ -1,8 +1,16 @@
 # PARAVANT — Complete Project Context
 
-**Version:** 1.0
-**Compiled:** 2026-08-08
-**Repository state:** `master` @ `622ac49`
+**Version:** 1.1
+**Compiled:** 2026-08-08. **Revised:** 2026-08-16.
+**Repository state:** branch `api-hardening-and-coverage` (147 commits)
+
+> Section 0 originally read "every factual claim was verified against the
+> codebase on 2026-08-08". That remained true of the claims and stopped being
+> true of the codebase: between 2026-08-11 and 2026-08-16 the API gained
+> authentication and rate limiting, the test suite went from 9 failures to 0,
+> coverage measurement was corrected, and the frontend gained its first tests.
+> Counts and status claims were re-verified on 2026-08-16 and the revision
+> dates below mark what changed.
 **Companion document:** `docs/PRODUCTION_READINESS_ASSESSMENT.md` (gaps, defects, and the
 publication plan). This document covers *what exists and why*; that one covers
 *what is wrong and what to do about it*.
@@ -16,8 +24,15 @@ finish it able to reason about the system's design, its history, its current sta
 and its open questions. Nothing here requires opening a source file, though file
 paths are given throughout as anchors.
 
-Every factual claim was verified against the codebase on 2026-08-08. Where a claim
-is a design intention rather than a verified behaviour, it is marked as such.
+Every factual claim was verified against the codebase on 2026-08-08 and
+re-verified on 2026-08-16. Where a claim is a design intention rather than a
+verified behaviour, it is marked as such.
+
+The counts in Section 3 are additionally asserted by
+`tests/unit/test_doc_consistency.py`, which computes each from the repository
+and fails if any document disagrees. That test exists because three documents
+here once claimed "14 route modules" when there had only ever been 13 — a
+number copied between documents rather than derived from the code.
 
 ---
 
@@ -59,7 +74,7 @@ Three commitments shape almost every decision in the codebase:
 2. **Capital preservation over return.** The risk layer is the most complete and
    best-tested subsystem. Every order passes seven independent pre-trade checks and
    five circuit breakers.
-3. **Decisions are written down.** 113 dated architectural decisions with rationale,
+3. **Decisions are written down.** 131 dated architectural decisions with rationale,
    alternatives considered, and status. Code is required to match them.
 
 ### 1.3 Locked scope
@@ -101,7 +116,8 @@ records that this amendment ultimately produced the finding that spot long-only
 | 2026-06-05 | Retrospective DSR run. **All 11 strategies rejected** |
 | 2026-06-08 to 06-11 | Forward hypothesis loop. Two more hypotheses rejected |
 
-102 commits total, single author. Roughly four months of sustained work.
+147 commits, single author. Roughly four months of build work (2026-02 to 2026-06)
+plus a pre-publication hardening pass (2026-08).
 
 ---
 
@@ -109,8 +125,8 @@ records that this amendment ultimately produced the finding that spot long-only
 
 ```
 Paravant_System/
-├── src/                      170 .py, 49,294 lines — the application
-│   ├── api/                  FastAPI: 13 route modules, 63 endpoints, 2 middleware
+├── src/                      169 .py, 49,745 lines — the application
+│   ├── api/                  FastAPI: 13 route modules, 63 endpoints, 4 middleware
 │   ├── brokers/binance/      Exchange client, execution adapter, rate limiter
 │   ├── core/
 │   │   ├── alerting/         Telegram channel, triggers, scheduler, escalation
@@ -130,20 +146,20 @@ Paravant_System/
 │   │   └── orchestrator.py   1,800 lines — the main loop
 │   ├── data/                 15 ORM models, DataStore, market data, validators, cache
 │   └── utils/                Logging, time, config, geo-block
-├── research/                 27 .py, 5,411 lines — the research library
+├── research/                 32 .py, 6,493 lines — the research library
 │   ├── backtest/             Cost model, regime tagging
 │   ├── biographies/          Strategy biography schema
 │   ├── data/                 Funding, ETF flows, Coinbase premium, liquidations
 │   ├── generators/           7 crypto-native hypothesis generators
 │   ├── promotion/            Tier classifier
 │   └── validation/           Deflated Sharpe, effective-K
-├── scripts/                  24 files, 11,865 lines — operational entrypoints
-├── tests/                    134 files, 36,221 lines, 1,900 tests
-├── frontend/                 100 .ts/.tsx, 17,230 lines — React dashboard
-├── docs/                     50 tracked .md
+├── scripts/                  25 files, 12,048 lines — operational entrypoints
+├── tests/                    139 files, 38,710 lines, 2,036 tests (+62 frontend)
+├── frontend/                 98 .ts/.tsx, 18,139 lines — React dashboard
+├── docs/                     72 tracked .md
 ├── config/                   settings.yaml, risk_profiles.yaml, 14 strategy templates
 ├── alembic/                  6 migrations
-└── .claude/ + .agent/        DECISIONS.md (113 decisions, dual-maintained) + rules
+└── .claude/ + .agent/        DECISIONS.md (131 decisions, dual-maintained) + rules
 ```
 
 ---
@@ -882,7 +898,19 @@ type-only imports must use `import type` or they crash at runtime.
 (`/api/v1/regime/current`, `/api/v1/regime/paper-sessions`,
 `/api/v1/strategies/{id}/backtest/results`). Every other page renders hardcoded
 arrays; `PortfolioPage` generates its equity curve with `Math.sin() + Math.random()`.
-There are no frontend tests. See the readiness assessment, Phase 3.
+Wiring the remaining pages to real data is item 3.4 of the readiness assessment
+and is the largest single gap between what this repository looks like and what
+it is.
+
+**Updated 2026-08-16:** it now has 62 tests (Vitest + React Testing Library),
+covering the shared formatters, the regime hook, the positions table, the
+`EmergencyPanel` confirmation gate, and a react-router API contract. They were
+added deliberately *before* the rewiring, because refactoring untested UI is how
+a working prototype quietly stops working. Writing them immediately exposed two
+defects that had been invisible: the regime hook discarded its last good reading
+on any failed poll, and the positions table rendered fabricated equity holdings
+(NVDA, MSFT, TSLA) whenever its `data` prop was undefined — in a crypto-only
+system. Both are fixed (DEC-2026-08-16-003).
 
 ---
 
@@ -914,7 +942,7 @@ not yet — see readiness assessment 4.4.
 
 ### 18.1 The decision log
 
-113 dated architectural decisions, 2,998 lines, maintained identically in
+131 dated architectural decisions, 3,432 lines, maintained identically in
 `.claude/DECISIONS.md` and `.agent/DECISIONS.md` (verified byte-identical). Each entry
 records: decision, context, rationale, alternatives considered, status, date,
 implementing section, affected files, references.
@@ -995,7 +1023,7 @@ readiness assessment, Section 2.1.
 | Live trading | Built; kill switch OFF; no strategy passes the promotion gate |
 | Research layer | Complete and rigorous; the project's differentiator |
 | Research result | All 11 strategies + 2 forward hypotheses rejected |
-| Frontend | Visually complete, functionally a prototype (3 API calls) |
+| Frontend | Visually complete; still 3 API calls, but now 62 tests and no fabricated data |
 | Tests | 2,017 tests, 74% coverage (CI floor 72%), 0 failing |
 | CI | None |
 | Type/lint gates | Configured but unenforced; 50 mypy + 76 ruff errors |
