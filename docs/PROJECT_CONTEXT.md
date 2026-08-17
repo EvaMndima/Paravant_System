@@ -31,8 +31,8 @@ verified behaviour, it is marked as such.
 The counts in Section 3 are additionally asserted by
 `tests/unit/test_doc_consistency.py`, which computes each from the repository
 and fails if any document disagrees. That test exists because three documents
-here once claimed "14 route modules" when there had only ever been 13 — a
-number copied between documents rather than derived from the code.
+here once claimed fourteen route modules when there had only ever been thirteen
+— a number copied between documents rather than derived from the code.
 
 ---
 

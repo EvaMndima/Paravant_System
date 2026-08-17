@@ -18,6 +18,14 @@ percentages) are deliberately NOT asserted here. They are stated once, dated, in
 their owning document. Asserting them across five files would produce a test
 that fails on every unrelated commit, and a test like that gets deleted.
 
+**Known limitation, and it has already caught someone out (me).** These patterns
+match prose, so they cannot distinguish a live claim from a *quotation of a
+retired one*. Writing "three documents once claimed 14 route modules" in a
+document fails this test, correctly by its own rules and unhelpfully in intent.
+Spell such references as words -- "fourteen route modules" -- rather than
+loosening the pattern. A narrow pattern with an occasional awkward workaround is
+worth more than a broad one that stops catching the thing it was written for.
+
 Decision: DEC-2026-08-16-002 - Cross-document consistency is enforced by test
 """
 from __future__ import annotations
