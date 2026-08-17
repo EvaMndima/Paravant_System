@@ -166,19 +166,14 @@ describe('useRegimeState', () => {
     expect(result.current.regime?.state).toBe('trending_bull');
   });
 
-  it('KNOWN ISSUE: a failed poll discards the last good regime', async () => {
-    // Documents current behaviour rather than endorsing it.
-    //
-    // The guard in the catch block reads `regime`, which is captured from the
-    // first render because the effect has an empty dependency array. It is
-    // therefore always null, so the fallback always fires -- including after a
-    // successful poll. One transient network blip replaces a valid regime with
-    // "unknown", and the router reads regime state to decide whether
-    // strategies activate.
-    //
-    // Not fixed here: this is a behaviour change and belongs in its own commit.
-    // Delete this test when it is fixed; `test('clears a previous error')`
-    // above already covers recovery.
+  it('keeps the last good regime when a later poll fails', async () => {
+    // Regression guard for a fixed defect. The catch block used to read
+    // `regime` from the first render's closure (the effect has an empty
+    // dependency array), so it was always null and the "fall back to unknown"
+    // branch always fired. One transient network blip discarded a valid regime
+    // and replaced it with "unknown" -- and the router reads regime state to
+    // decide whether strategies activate. Better a stale reading, clearly
+    // flagged as errored, than a wrong one.
     vi.useFakeTimers();
     vi.mocked(fetch)
       .mockResolvedValueOnce(jsonResponse({ state: 'trending_bull' }))
@@ -190,7 +185,21 @@ describe('useRegimeState', () => {
 
     await advance(POLL_INTERVAL_MS);
 
-    expect(result.current.regime?.state).toBe('unknown');
+    // Regime preserved, and the failure is still surfaced rather than hidden.
+    expect(result.current.regime?.state).toBe('trending_bull');
     expect(result.current.error).toBe('network blip');
+  });
+
+  it('still falls back to unknown when the very first poll fails', async () => {
+    // The fallback must survive for the case it was written for: no reading
+    // has ever succeeded, so there is nothing to preserve.
+    vi.useFakeTimers();
+    vi.mocked(fetch).mockRejectedValue(new Error('down from the start'));
+
+    const { result } = renderHook(() => useRegimeState());
+    await advance(0);
+
+    expect(result.current.regime?.state).toBe('unknown');
+    expect(result.current.error).toBe('down from the start');
   });
 });

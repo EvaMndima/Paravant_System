@@ -10,7 +10,7 @@
  * It also pins the mock-data fallback, which is a real footgun rather than a
  * feature -- see the test that documents it.
  */
-import { render, screen, within } from '@testing-library/react';
+import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 
@@ -147,24 +147,37 @@ describe('PositionsTable', () => {
     });
   });
 
-  describe('mock-data fallback', () => {
-    it('KNOWN FOOTGUN: renders hardcoded demo positions when data is undefined', () => {
-      // Documents current behaviour rather than endorsing it.
-      //
-      // `data` undefined falls back to a hardcoded list containing NVDA, MSFT
-      // and TSLA -- equities this system cannot trade, in a crypto-only
-      // codebase. That is fine as prototype seed data and dangerous as a
-      // failure mode: if a future data fetch fails and passes undefined, the
-      // table silently presents fabricated positions as real ones.
-      //
-      // The distinction that saves it is that an empty array is NOT undefined,
-      // so a genuine "no positions" API response shows the empty state --
-      // asserted separately above. Wiring this to real data (assessment item
-      // 3.4) should remove the fallback rather than preserve it.
+  describe('absent data', () => {
+    it('shows the empty state when data is omitted entirely', () => {
+      // Regression guard for a removed footgun. This component used to fall
+      // back to six hardcoded equity positions (NVDA, MSFT, TSLA...) when
+      // `data` was undefined -- in a crypto-only system. A fetch that returned
+      // undefined would have presented fabricated holdings as real, with
+      // plausible P&L. Omitting data must now be indistinguishable from having
+      // none.
       render(<PositionsTable />);
 
-      const table = screen.getByRole('table');
-      expect(within(table).getByText('NVDA')).toBeInTheDocument();
+      expect(screen.getByText('No positions found')).toBeInTheDocument();
+    });
+
+    it('renders no equity symbols anywhere, with or without data', () => {
+      // The mock list is gone rather than merely unreachable. If it is ever
+      // reintroduced, this fails.
+      const { container } = render(<PositionsTable />);
+
+      for (const symbol of ['NVDA', 'MSFT', 'TSLA', 'AAPL', 'GOOGL']) {
+        expect(container.textContent).not.toContain(symbol);
+      }
+    });
+
+    it('treats an omitted data prop the same as an empty array', () => {
+      const omitted = render(<PositionsTable />);
+      const omittedText = omitted.container.textContent;
+      omitted.unmount();
+
+      const empty = render(<PositionsTable data={[]} />);
+
+      expect(empty.container.textContent).toBe(omittedText);
     });
   });
 });

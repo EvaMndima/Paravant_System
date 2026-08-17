@@ -644,7 +644,7 @@ These decisions are **LOCKED** per MVP scope control rules until specified revie
 ---
 
 **Last Updated:** 2026-05-08
-**Total Decisions:** 130 active, 0 superseded, 5 locked
+**Total Decisions:** 131 active, 0 superseded, 5 locked
 **Next Decision ID:** DEC-2026-05-08-005
 
 ---
@@ -2951,9 +2951,9 @@ parameters:
 
 **End of Decisions Log**
 
-**Total Decisions:** 130 active, 0 superseded, 5 locked (1 amended); DEC-2026-06-04-013 amended
+**Total Decisions:** 131 active, 0 superseded, 5 locked (1 amended); DEC-2026-06-04-013 amended
 **Last Updated:** 2026-08-16
-**Next Decision ID:** DEC-2026-08-16-003
+**Next Decision ID:** DEC-2026-08-16-004
 
 > Count corrected 2026-08-14. This footer read "107 active" while the file held
 > 124 real decision entries -- the count had drifted as decisions were appended
@@ -3364,6 +3364,7 @@ parameters:
   - **Sequential test execution is a correctness fix, not a performance tuning.** Vitest defaults to one worker per core, each with its own jsdom; the combined heap footprint produced a FATAL out-of-memory that killed a DIFFERENT test file on each run -- 47 of 59 tests one run, 15 the next. A non-deterministic OOM in CI is indistinguishable from a real failure and trains everyone to hit re-run, the same failure mode as DEC-2026-08-14-005. The react-router bump added the module weight that surfaced it; the cause was always the worker count.
   - **No frontend coverage floor, deliberately.** Five test files over a prototype would report a number either meaningless or immediately blocking. A gate that is routinely overridden teaches people to override gates. Add one when the suite covers a defensible surface.
   - **Two known defects are documented by test rather than fixed.** `useRegimeState` discards the last good regime on any failed poll, because the guard in its catch block reads a `regime` captured from the first render and therefore always null. `PositionsTable` falls back to hardcoded equity positions (NVDA, MSFT, TSLA) when `data` is undefined, in a crypto-only system. Both are labelled KNOWN ISSUE / KNOWN FOOTGUN in the tests, with instructions to delete the test when fixed. Fixing them here would have mixed behaviour changes into a test-infrastructure commit.
+    - **AMENDED 2026-08-16:** both were fixed the same day in DEC-2026-08-16-003, and the two KNOWN ISSUE / KNOWN FOOTGUN tests were converted into regression guards. The reasoning above stands as the reason they were not fixed *in this commit*; it is no longer a description of the code.
   - **pip-audit blocks rather than advises.** An advisory security job is a job people learn to scroll past. It audits `requirements.txt` only: a CVE in a linter that never sees untrusted input is not a reason to block a merge.
 - **Alternatives Considered:**
   - **Wiring pages to real data first (item 3.4):** REJECTED by the operator, correctly. Refactoring untested UI is how a working prototype quietly stops working.
@@ -3404,3 +3405,28 @@ parameters:
 - **Affected Files:** `README.md` (headline), `docs/PROJECT_CONTEXT.md` (section 1 framing, route-module count x2), `docs/PRODUCTION_READINESS_ASSESSMENT.md` (route-module count), `.claude/rules/documentation-freshness.md` + `.agent/` copy (Rules 10-13), `tests/unit/test_doc_consistency.py` (new, 19 tests).
 - **Defects found while writing the enforcement:** the "14 route modules" error in three places across two documents, wrong since it was first written. Two test-design errors of my own were caught by the same run and are recorded because both are traps for the next person: a pattern matching `(\d+) endpoints` also matched "21 endpoints mutate state", reporting a contradiction between two correct claims about different things; and asserting a literal phrase against raw text failed because the repository hard-wraps prose at ~80 columns and a newline sat inside the phrase.
 - **References:** DEC-2026-08-14-002 (documentation freshness, extended here), DEC-2026-08-14-004 (a number that is enforced is not the same as a number that is true -- the same lesson, applied to prose), `.claude/rules/zero-technical-debt.md` Rule 3 (naming drift in code; Rule 13 is its prose counterpart), `docs/RESEARCH_FINDINGS.md` (the owning document for the null result).
+
+---
+
+### DEC-2026-08-16-003: Fix the Two Frontend Defects the New Tests Exposed
+- **Decision:** Fix both defects DEC-2026-08-16-001 documented rather than fixed. `useRegimeState` now falls back to `REGIME_DEFAULTS` via the updater form `setRegime((current) => current ?? REGIME_DEFAULTS)`, so a failed poll preserves the last good reading. `PositionsTable` loses its hardcoded mock-position fallback entirely; `data` defaults to `[]`, so omitting it shows the empty state. Both KNOWN ISSUE / KNOWN FOOTGUN tests become regression guards.
+- **Context:** The tests added in DEC-2026-08-16-001 documented both defects deliberately, to keep behaviour changes out of a test-infrastructure commit. With that commit landed, they are their own change.
+- **Rationale:**
+  - **Discarding a good regime on a transient failure is the worse of two failure modes.** The router reads regime state to decide whether strategies activate, and `UNKNOWN` means `regime_tags`-tagged strategies do not fire (DEC-2026-05-28-003). One network blip therefore silenced strategy activation until the next successful poll. A stale reading with the error still surfaced is strictly better than a wrong one: the operator sees both the last known regime and the fact that the last fetch failed.
+  - **The updater form is the fix, not a `regime` dependency.** Adding `regime` to the dependency array would have re-created the interval on every regime change, which is what the original comment was avoiding. `setRegime((current) => ...)` reads the current value without making the effect depend on it, so the empty dependency array becomes genuinely correct rather than suppressed -- the `eslint-disable react-hooks/exhaustive-deps` was removed and eslint's warning count did not change, which confirms it.
+  - **The fallback stays for the case it was written for.** A first poll that fails still yields `unknown`, because there is nothing to preserve. Both branches are now asserted separately; the previous single test could not distinguish them.
+  - **Fabricated positions are a hazard, not seed data, once a real fetch exists.** `PositionsTable` rendered NVDA, MSFT, TSLA, AAPL and GOOGL -- equities a crypto-only system cannot trade -- whenever `data` was undefined, with plausible quantities and P&L. Harmless while every caller passed data; a silent falsification the moment a fetch returns undefined. Removing it now, before item 3.4 wires real data, means the wiring cannot inherit it.
+  - **Verified safe by checking callers, not by assuming.** `CockpitPage`, `PortfolioPage` and `Dev2Page` all pass `data` explicitly; the only call without it is `<PositionsTable isLoading />`, which renders the skeleton. No page's appearance changed.
+  - **Both fixes were mutation-tested.** Reverting the `useRegimeState` change fails exactly one test and leaves the first-poll test passing, confirming the two discriminate. Reintroducing a mock fallback in `PositionsTable` fails three. A fix whose test does not fail without it is not protected.
+  - **`tsc -b` caught a real slip.** Removing the mock left `within` unused in the test file, which `noUnusedLocals` rejected and the build refused. Worth recording as evidence the type gate earns its place on test files too, which is why they are inside `tsconfig.app.json`'s include rather than excluded from it.
+- **Alternatives Considered:**
+  - **Add `regime` to the effect's dependency array:** REJECTED - re-creates the polling interval on every regime change, the exact thing the original code avoided.
+  - **Keep the mock behind an explicit `demo` prop:** REJECTED - no caller wants it, and a prop that fabricates holdings is a footgun with a longer fuse rather than a removed one.
+  - **Leave both until item 3.4:** REJECTED - the operator asked for them, and removing the fallback before the wiring is strictly easier than removing it afterwards.
+- **Status:** ACTIVE
+- **Date Decided:** 2026-08-16
+- **Implemented By:** Operator request following DEC-2026-08-16-001
+- **Affected Files:** `frontend/src/hooks/useRegimeState.ts`, `frontend/src/hooks/useRegimeState.test.ts`, `frontend/src/components/dashboard/PositionsTable.tsx`, `frontend/src/components/dashboard/PositionsTable.test.tsx`, `README.md` (CI table and the stale advisory-lint claim), `.claude/DECISIONS.md` + `.agent/` copy (amendment to DEC-2026-08-16-001).
+- **Documentation swept in the same change:** DEC-2026-08-16-001's "documented by test rather than fixed" bullet became untrue the moment these landed and carries a dated amendment. The README's CI table was also stale on three counts found by the same grep -- it omitted the `audit` and `frontend-test` jobs added earlier the same day, described frontend lint as "advisory-only" when it has been blocking since 2026-08-13, and cited "84 known issues" against an actual 80. All corrected inline per Rule 12: a miscount and an outdated status carry no information worth marking.
+- **Measured:** frontend 59 -> 62 tests, all passing; `tsc -b` and `vite build` green; eslint unchanged at 0 errors / 80 warnings; no change to any page's rendered output.
+- **References:** DEC-2026-08-16-001 (added the tests that exposed both, amended here), DEC-2026-05-28-003 (SubRegime routing -- why a spuriously `UNKNOWN` regime suppresses strategy activation), DEC-2026-08-14-002 Rule 12 (correct inline when the error is not informative), `docs/PRODUCTION_READINESS_ASSESSMENT.md` item 3.4 (the wiring this clears the way for).

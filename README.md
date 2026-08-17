@@ -409,21 +409,29 @@ run them against Binance testnet.
 
 `.github/workflows/ci.yml` gates every push and pull request:
 
+Nine jobs. Every one of them blocks — none is advisory.
+
 | Job | Enforces |
 |---|---|
 | Lint | `ruff` over `src`, `research`, `scripts` **and** `tests` |
 | Type check | `mypy` over `src/` and `research/features/` |
+| Dependency audit | `pip-audit` against the pinned production set |
 | Tests | Python 3.11, 3.12, 3.13 |
 | Coverage | Floor at 72% (measured 74%), over the **whole** suite |
 | **Quickstart** | Fresh install, `init_db`, `verify_db`, boot the API, assert `/health` — on **Linux and Windows** |
 | Frontend | `tsc -b` and production build |
+| Frontend tests | Vitest — formatters, data hook, positions table, confirmation gate |
+| Frontend lint | `eslint`, 0 errors |
 
 The quickstart job exists because the documented first command of this README
 once exited 1 with a traceback on Windows, and 1,900 passing tests said nothing
 about it: tests import modules and call functions, and nobody had run the
-entrypoint. Frontend lint runs advisory-only while 84 known issues are
-outstanding — an amber check that means something, rather than a green one that
-does not.
+entrypoint.
+
+Frontend lint became a real gate on 2026-08-13 once eslint reported 0 errors.
+80 warnings remain and are expected to; `--max-warnings` is deliberately not set
+to 0, so the count stays visible while it is driven down rather than hidden by a
+blanket disable.
 
 ---
 

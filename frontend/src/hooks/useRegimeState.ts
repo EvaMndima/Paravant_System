@@ -51,7 +51,16 @@ export function useRegimeState(): UseRegimeStateResult {
       } catch (err) {
         if (!cancelled && (err as Error).name !== 'AbortError') {
           setError((err as Error).message);
-          if (regime === null) setRegime(REGIME_DEFAULTS);
+          // Fall back to "unknown" ONLY if we have never had a reading.
+          //
+          // This was previously `if (regime === null) setRegime(REGIME_DEFAULTS)`,
+          // which read `regime` from the first render's closure because this
+          // effect has an empty dependency array. It was therefore always null
+          // and the fallback always fired, so a single transient network blip
+          // discarded a perfectly good regime and replaced it with "unknown" --
+          // and the router reads regime state to decide whether strategies
+          // activate. The updater form sees the current value instead.
+          setRegime((current) => current ?? REGIME_DEFAULTS);
         }
       } finally {
         if (!cancelled) setIsLoading(false);
@@ -65,8 +74,9 @@ export function useRegimeState(): UseRegimeStateResult {
       cancelled = true;
       clearInterval(id);
     };
-    // regime intentionally excluded — we don't want to restart the interval when it updates
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // Genuinely no dependencies: the effect reads no reactive value. The
+    // previous `eslint-disable react-hooks/exhaustive-deps` here existed only
+    // to silence the stale `regime` read removed above.
   }, []);
 
   return { regime, isLoading, error };
