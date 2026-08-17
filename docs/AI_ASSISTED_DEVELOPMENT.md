@@ -1,16 +1,18 @@
 # Building PARAVANT with AI Assistance
 
-**Written:** 2026-08-11
-**Covers:** 2026-02-08 to 2026-08-13, 131 commits, one human author
+**Written:** 2026-08-11. **Extended:** 2026-08-17 with a second pass (section 4.9 onward).
+**Covers:** 2026-02-08 to 2026-08-17, 149 commits, one human author
 
 PARAVANT is roughly 120,000 lines written over six months by one person working
 with AI coding assistants. The most transferable thing it produced is not the
 trading system. It is a fairly precise picture of where that way of working
 holds up, where it breaks, and what has to be built to catch the breaks.
 
-Sections 3 and 4 are the ones worth your time. Section 3 is what worked.
-Section 4 is eight failure modes, each with the mechanism that produced it, how
-long it survived, and what now prevents it.
+Sections 3, 4 and 6 are the ones worth your time. Section 3 is what worked.
+Section 4 is fifteen failure modes, each with the mechanism that produced it,
+how long it survived, and what now prevents it. Section 6 is the part that
+generalises: the moves that found them, stated so they can be run against a
+codebase that is not this one.
 
 The repository previously contained 35 `SESSION_*_IMPLEMENTATION_PROMPT.md`
 files at its root -- the raw prompts. They were replaced by this document, and
@@ -22,13 +24,14 @@ remain in git history at tag `pre-cleanup`.
 
 | Layer | Files | Lines |
 |---|---|---|
-| `src/` application | 167 `.py` | 49,184 |
-| `tests/` | 134 `.py` | 36,876 |
-| `frontend/src/` | 90 `.ts`/`.tsx` | 17,187 |
-| `scripts/` operational entrypoints | 25 | 11,900 |
-| `research/` validation library | 32 `.py` | 6,461 |
+| `src/` application | 169 `.py` | 49,745 |
+| `tests/` | 139 `.py` | 38,718 |
+| `frontend/src/` | 98 `.ts`/`.tsx` | 18,139 |
+| `scripts/` operational entrypoints | 25 | 12,056 |
+| `research/` validation library | 32 `.py` | 6,493 |
 
-*As of 2026-08-13; `python scripts/doc_stats.py` regenerates this table.*
+*As of 2026-08-17; `python scripts/doc_stats.py` regenerates this table. That
+script had an off-by-one in one of its figures until 2026-08-17 -- see 4.12.*
 
 A crypto trading system: Binance data ingestion, 19 indicators, 29 signal
 generators, a layered risk system, an order state machine, backtest and paper
@@ -54,12 +57,12 @@ while the work was live.
 
 Three things sat underneath every session and did most of the real work:
 
-**`.claude/DECISIONS.md`** -- 122 dated decision entries across 3,169 lines,
+**`.claude/DECISIONS.md`** -- 131 dated decision entries across 3,433 lines,
 each recording the decision, its context, its rationale, the alternatives
 considered and rejected, and its status. Maintained identically in `.agent/` so
 that different assistants could not diverge on what had been decided.
 
-**`.claude/rules/`** -- three enforcement files:
+**`.claude/rules/`** -- four enforcement files:
 
 - `decision-consistency.md` requires reading the decision log *before*
   implementing, and requires refusing work that contradicts an active decision.
@@ -67,6 +70,10 @@ that different assistants could not diverge on what had been decided.
   behaviour-preserving refactors, one-intent-per-change, and rollback readiness.
 - `mvp-scope-control.md` lists locked scope decisions and gives an explicit
   template for rejecting out-of-scope requests.
+- `documentation-freshness.md` (added 2026-08-14) requires that a change which
+  invalidates a written claim updates that claim in the same commit, and that
+  repeated figures are derived from the code rather than copied between
+  documents. It was written after 4.11.
 
 **The scope lock.** Crypto only, Binance only, spot only, market orders only,
 monolith only. Each locked with a review date rather than a vague intention.
@@ -103,7 +110,7 @@ author.
 
 ### 3.1 Written decisions with rejected alternatives
 
-The single highest-value artifact. 71 distinct decision IDs are referenced in
+The single highest-value artifact. 74 distinct decision IDs are referenced in
 source comments, so the rationale is reachable from the code rather than only
 from a document nobody opens.
 
@@ -144,8 +151,8 @@ backtest path returns results identical to the O(n^2) path it replaced.
 
 ## 4. Where it failed, and how each was caught
 
-Eight failure modes. All eight were found by a systematic pre-publication
-review of this repository -- reading the code against its own claims, running
+Sections 4.1-4.8 are the first pass: eight failure modes, all found by a
+systematic pre-publication review of this repository -- reading the code against its own claims, running
 its documented commands, and asking one uniform question of subsystems that had
 only ever been reviewed individually. None was reported by a user, and none was
 found by the test suite.
@@ -158,7 +165,10 @@ They share a shape: **locally correct code that is globally disconnected, plus
 verification that agreed with the code instead of checking it.**
 
 Seven of the eight are fixed, each with a mechanism that prevents recurrence
-rather than a one-off patch. The eighth is open and documented.
+rather than a one-off patch. The eighth -- 4.2 -- is open and documented.
+
+Section 4B covers a second pass a week later, and what the mechanisms built
+here then caught.
 
 ### 4.1 Verification shaped like the defect
 
@@ -290,6 +300,157 @@ it.
 
 ---
 
+## 4B. The second pass, and what the first pass missed
+
+Sections 4.1-4.8 came from one systematic review in August 2026. Sections
+4.9-4.15 came from a second pass a week later, hardening the repository for
+publication: adding API authentication, rate limiting, frontend tests, and
+dependency scanning.
+
+Two things about the second batch are worth more than the defects themselves.
+
+**The mechanisms built in the first pass found most of the second batch.** The
+consistency test written after 4.11 caught 4.12. The frontend tests written to
+make refactoring safe immediately exposed 4.14 and 4.15. The first pass produced
+the instruments; the second pass is what they detected.
+
+**Three of the seven were errors in the fixes from the first pass**, not in the
+original code. 4.4 was fixed by generating figures rather than typing them, and
+4.12 is an error in the generator. That is the honest shape of this work:
+remediation introduces its own defects, at a lower rate, and needs the same
+scrutiny as the thing it remediates.
+
+### 4.9 A metric that measured something other than its name
+
+The CI coverage job ran `pytest tests/unit tests/research`. The CI test job ran
+`pytest tests/`. Any module whose tests live in `tests/integration/` therefore
+reported near-zero coverage while being fully exercised on every commit.
+
+`src/data/store.py` -- a 1,332-line data facade -- read **28%** against an
+actual **100%**. On the strength of that number it was ranked as a finding in an
+otherwise careful readiness assessment, with a task to "raise it to 80%".
+
+The dangerous property is that the number was precise, official, enforced by a
+CI floor, and wrong in one consistent direction. The work it prescribed was to
+write unit tests duplicating coverage that already existed -- days of effort
+whose only effect would have been to move a number.
+
+Caught by measuring before writing, which took ninety seconds. Fixed by scoping
+the coverage job to the whole suite and raising the floor 62 -> 72.
+
+### 4.10 Configuration that reads as safe
+
+`docker-compose.yml` contained `BINANCE_TESTNET: ${BINANCE_TESTNET:-true}`.
+
+Docker Compose interpolates `${VAR}` from a local `.env` **independently of the
+`env_file:` key**. On a development machine whose `.env` selects mainnet, that
+line resolved to `"false"`. A container intended as a local demo was configured
+against real markets.
+
+The default is not what makes it safe; the absence of an override is. The line
+looks like a safe default and behaves like an inherited one. Nothing about
+reading it suggests otherwise, which is why it survived review.
+
+Fixed by hardcoding live-affecting settings rather than interpolating them, and
+by passing no exchange credentials into the container at all, so the failure
+mode requires two independent mistakes rather than one.
+
+### 4.11 A number that was wrong from birth and spread by copying
+
+The readiness assessment stated "14 route modules". `PROJECT_CONTEXT.md`
+repeated it twice. `ARCHITECTURE.md` said 13.
+
+There were thirteen -- in every commit, including the one the assessment was
+written against. It was not drift. It was wrong when written and had been copied
+into two more documents by an author reading the assessment rather than the
+repository.
+
+Three documents agreeing is not corroboration when two are transcriptions of the
+third. The same failure had already occurred in a second place nobody was
+looking: `.agent/rules/mvp-scope-control.md` was missing an amendment its
+`.claude/` twin carried, so non-Claude assistants were reading a scope rule that
+forbade work which had been permitted for eleven weeks.
+
+Fixed by `tests/unit/test_doc_consistency.py`, which computes each repeated
+figure from the repository and fails if any document disagrees, and by
+`tests/unit/test_governance_sync.py`, which asserts the paired rule files are
+identical.
+
+### 4.12 The generated figure with the error generated into it
+
+Section 4.4's fix was "figures now generated, not typed" -- `scripts/doc_stats.py`
+regenerates the table in section 1.
+
+That script counted decisions with the pattern `^### DEC-`, which also matches
+the `### DEC-YYYY-MM-DD-XXX: Decision Title` **template** near the top of
+`DECISIONS.md`. It reported 132 where there were 131. The same off-by-one had
+already been made by hand once, in the `DECISIONS.md` footer, and corrected
+there -- while remaining in the tool built to prevent hand-maintained figures
+from being wrong.
+
+Caught by cross-checking the script against an independent count while writing
+this section, which is the only reason it surfaced at all.
+
+The lesson is not "automate less". It is that **replacing a human-maintained
+number with a generated one moves the error into the generator, where it is
+harder to see because it is trusted.** The generator needs the scrutiny the
+figure used to get.
+
+### 4.13 A tolerance narrower than the platform's resolution
+
+`test_bucket_refill_partial_second` slept 10ms and asserted the token bucket had
+refilled by no more than 0.15 tokens -- 5ms of slack, against a default Windows
+timer granularity of roughly 15.6ms.
+
+It passed alone and failed under load. It had presumably been failing
+intermittently since it was written, on a machine idle enough that nobody saw it.
+
+Fixed by driving a controlled clock instead of sleeping, so the assertion tests
+the refill arithmetic rather than the scheduler, and can be exact rather than a
+tolerance band. Widening the tolerance was the tempting fix and would have
+removed the test's ability to distinguish correct refill from approximately
+correct refill.
+
+A related failure surfaced in the same suite: Vitest defaults to one worker per
+core, each with its own jsdom, and the combined heap footprint produced a fatal
+out-of-memory that killed a *different* test file on each run. A
+non-deterministic failure in CI is indistinguishable from a real one and teaches
+everybody to press re-run.
+
+### 4.14 Prototype seed data that became a failure mode
+
+`PositionsTable` rendered six hardcoded equity positions -- NVDA, MSFT, TSLA,
+AAPL, GOOGL -- whenever its `data` prop was `undefined`. In a system that trades
+crypto only.
+
+As prototype seed data this is reasonable and it is how the component was
+generated. As a failure mode it is a silent falsification: any future fetch that
+returned `undefined` would have presented fabricated holdings, with plausible
+quantities and P&L, as real positions. An empty array correctly showed the empty
+state, so the defect was invisible in every case anybody had exercised.
+
+Found by writing the component's first test. Fixed by removing the fallback
+before wiring real data, so the wiring could not inherit it.
+
+### 4.15 A guard that only ever read its initial value
+
+`useRegimeState` fell back to an "unknown" regime on a failed poll, guarded by
+`if (regime === null)` so that a transient failure would not discard a good
+reading. The effect's dependency array is empty, so `regime` was captured from
+the first render and was always `null`. The guard never guarded anything.
+
+One network blip therefore replaced a valid regime with `unknown` -- and the
+strategy router reads regime state to decide whether strategies activate, where
+`UNKNOWN` means they do not. A blip silenced trading until the next successful
+poll.
+
+Ordinary as a React defect. Notable for how it was found: by writing the first
+test that had ever existed for that hook. **The first test for untested code is
+a diagnostic instrument before it is a safety net**, and it pays for itself
+before it protects anything.
+
+---
+
 ## 5. What this suggests
 
 1. **Mocks are where AI-assisted verification goes to die.** A mock accepts any
@@ -328,9 +489,85 @@ it.
    and produced a green suite. The pressure to make a red test green is exactly
    when the bug is easiest to bury.
 
+10. **Check what a metric measured, not what it is called.** A coverage figure
+    is a claim about a measurement, not about the code. Section 4.9's was
+    precise, enforced, and wrong by 72 percentage points, and it had already
+    generated a work item. Measuring before acting cost ninety seconds and
+    saved several days of writing tests for code that was already covered.
+
+11. **Automating a maintained figure moves the error into the generator.**
+    Section 4.12 is the fix for 4.4 carrying its own off-by-one. Generated
+    numbers are trusted more and inspected less, which is the whole benefit and
+    the whole risk. Cross-check a generator against an independent count at
+    least once.
+
+12. **Seed data becomes a lie the moment a real code path can produce absence.**
+    Section 4.14 was harmless for as long as every caller passed data, and would
+    have become a fabricated portfolio the first time a fetch failed. Remove the
+    fallback before wiring the real source, not after.
+
+13. **Write the first test for untested code before you change it.** In sections
+    4.14 and 4.15 the tests exposed the defects immediately -- not by failing,
+    but by forcing someone to state what the code was supposed to do. The first
+    test is a diagnostic instrument before it is a safety net.
+
 ---
 
-## 6. Disclosure
+## 6. What transfers to an unfamiliar codebase
+
+Almost none of this is about trading. The defects above were found by a small
+number of moves that work on any system whose claims have not been checked
+recently -- which describes most systems, and nearly all rapidly generated ones.
+
+In rough order of yield per hour:
+
+1. **Run the documented entrypoint on a clean machine.** Not the test suite --
+   the first command in the README. Section 4.8 was a project whose own
+   quickstart exited 1 with a traceback on the author's platform, for months,
+   under 1,900 passing tests. Also try `docker compose up`: in this repository
+   it failed on a fresh clone because a gitignored file was a hard requirement.
+
+2. **Read the project's claims about itself, then check three at random.** Its
+   README, its assessment, its architecture document. In this repository the
+   assessment's own ranked finding #11 evaporated on measurement (4.9), and a
+   figure repeated across three documents had never been true (4.11). Documents
+   are the cheapest place to find out whether anybody has been checking.
+
+3. **Ask what would fail if this module were deleted.** If the answer is "only
+   its own tests", it is not integrated. This repository has 1,850 lines of
+   orchestrator, coherent and 71%-covered, that nothing calls -- while the
+   process that actually deploys reimplements the same loop (4.2).
+
+4. **Find the mocks at interface boundaries.** A mock accepts any call with any
+   arguments, so a test built on one asserts that the code agrees with itself.
+   Section 4.1 survived six months that way, and the fixture had been written to
+   match the defect rather than the model.
+
+5. **Grep the test names for workarounds.** A test whose name describes a
+   compensation -- padding, tolerance, retry, fallback -- is often a design flaw
+   that was noticed and accommodated. Section 4.7 was named for its workaround
+   and passed for months while the general case was broken.
+
+6. **Check what each CI gate actually gates.** Scope, not existence. Section 4.9
+   was a coverage job measuring a subset of what the test job ran. A gate that
+   measures the wrong thing is worse than no gate, because it is cited.
+
+7. **Read the configuration for inherited values.** Anything of the form
+   "default unless overridden" needs to be checked against what actually
+   overrides it in each environment. Section 4.10 read as a safe default and
+   behaved as an inherited one.
+
+8. **Write the first test where there are none, before changing anything.** Not
+   for coverage. For diagnosis -- see lesson 13.
+
+What this does not transfer to: any claim that the resulting system is correct.
+Every defect above was found by one of these moves, and the honest conclusion
+after two passes is that a third would find more. The value of the method is
+that it converts unknown unknowns into a list, not that it empties the list.
+
+---
+
+## 7. Disclosure
 
 The code in this repository was written by one person working with AI coding
 assistants throughout. The architecture, the scope decisions, the research
@@ -343,7 +580,7 @@ source. Every figure in Section 1 is reproducible with
 `python scripts/doc_stats.py`. Every defect in Section 4 was confirmed by
 reading the code before it was written up.
 
-Status of the eight:
+Status of the fifteen:
 
 | | Failure mode | Status |
 |---|---|---|
@@ -355,8 +592,21 @@ Status of the eight:
 | 4.6 | An AI audit that read a signature but not a body | Caught in review; the recommended fix was not applied |
 | 4.7 | A test documenting a workaround instead of a bug | Fixed; partition key corrected, two regression tests |
 | 4.8 | Nobody ran the quickstart | Fixed; CI now runs it on Linux and Windows |
+| 4.9 | A metric that measured something other than its name | Fixed; coverage job scoped to the whole suite, floor 62 -> 72 |
+| 4.10 | Configuration that reads as safe | Fixed; live-affecting settings hardcoded, no credentials in the container |
+| 4.11 | A number wrong from birth, spread by copying | Fixed; counts derived from the repository and asserted by test |
+| 4.12 | The generated figure with the error generated in | Fixed; full ID pattern, cross-checked against an independent count |
+| 4.13 | A tolerance narrower than the platform's resolution | Fixed; controlled clock, and the test runner serialised |
+| 4.14 | Prototype seed data that became a failure mode | Fixed; fallback removed before real data was wired |
+| 4.15 | A guard that only ever read its initial value | Fixed; updater form, with both branches asserted separately |
 
 Each fix is a mechanism rather than a patch: a real-engine test, a CI job that
 executes the documented quickstart, a feature store that computes knowability
-instead of trusting it. The distinction matters, because every one of these
-defects survived a green test suite.
+instead of trusting it, a test that derives documented figures from the code.
+The distinction matters, because every one of these defects survived a green
+test suite.
+
+Three of the second batch were defects in fixes from the first. That is
+reported rather than smoothed over, because it is the load-bearing caveat: this
+method reduces the defect rate of remediation, it does not zero it, and a third
+pass would find more.

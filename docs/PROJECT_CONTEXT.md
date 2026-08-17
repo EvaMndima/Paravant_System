@@ -1,15 +1,17 @@
 # PARAVANT — Complete Project Context
 
 **Version:** 1.1
-**Compiled:** 2026-08-08. **Revised:** 2026-08-16.
-**Repository state:** branch `api-hardening-and-coverage` (147 commits)
+**Compiled:** 2026-08-08. **Revised:** 2026-08-17.
+**Repository state:** branch `api-hardening-and-coverage`. Run
+`python scripts/doc_stats.py` for current figures -- a commit count hardcoded in
+prose is stale by the next commit (documentation-freshness Rule 11.3).
 
 > Section 0 originally read "every factual claim was verified against the
 > codebase on 2026-08-08". That remained true of the claims and stopped being
 > true of the codebase: between 2026-08-11 and 2026-08-16 the API gained
 > authentication and rate limiting, the test suite went from 9 failures to 0,
 > coverage measurement was corrected, and the frontend gained its first tests.
-> Counts and status claims were re-verified on 2026-08-16 and the revision
+> Counts and status claims were re-verified on 2026-08-17 and the revision
 > dates below mark what changed.
 **Companion document:** `docs/PRODUCTION_READINESS_ASSESSMENT.md` (gaps, defects, and the
 publication plan). This document covers *what exists and why*; that one covers
@@ -25,7 +27,7 @@ and its open questions. Nothing here requires opening a source file, though file
 paths are given throughout as anchors.
 
 Every factual claim was verified against the codebase on 2026-08-08 and
-re-verified on 2026-08-16. Where a claim is a design intention rather than a
+re-verified on 2026-08-17. Where a claim is a design intention rather than a
 verified behaviour, it is marked as such.
 
 The counts in Section 3 are additionally asserted by
@@ -116,8 +118,9 @@ records that this amendment ultimately produced the finding that spot long-only
 | 2026-06-05 | Retrospective DSR run. **All 11 strategies rejected** |
 | 2026-06-08 to 06-11 | Forward hypothesis loop. Two more hypotheses rejected |
 
-147 commits, single author. Roughly four months of build work (2026-02 to 2026-06)
-plus a pre-publication hardening pass (2026-08).
+Single author throughout. Roughly four months of build work (2026-02 to 2026-06)
+plus a pre-publication hardening pass (2026-08). `python scripts/doc_stats.py`
+reports the current commit count.
 
 ---
 
@@ -143,7 +146,7 @@ Paravant_System/
 │   │   ├── event_bus.py      Pub/sub
 │   │   ├── exceptions.py     868-line exception hierarchy
 │   │   ├── health.py         Health checks
-│   │   └── orchestrator.py   1,800 lines — the main loop
+│   │   └── orchestrator.py   1,850 lines — the main loop
 │   ├── data/                 15 ORM models, DataStore, market data, validators, cache
 │   └── utils/                Logging, time, config, geo-block
 ├── research/                 32 .py, 6,493 lines — the research library
@@ -234,7 +237,7 @@ tracking. This is what makes paper results meaningful as a promotion gate.
 
 ### 4.3 The orchestrator
 
-`src/core/orchestrator.py` (1,800 lines) is the async coordinator. It provides:
+`src/core/orchestrator.py` (1,850 lines) is the async coordinator. It provides:
 
 - **8-step startup validation** — database reachable, config valid, broker reachable,
   account state loadable, strategies constructible, risk limits sane, kill switch

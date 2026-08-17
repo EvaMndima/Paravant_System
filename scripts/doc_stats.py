@@ -123,7 +123,15 @@ def collect() -> dict[str, object]:
         "commits": int(_git("rev-list", "--count", "HEAD")),
         "first_commit": _git("log", "--reverse", "--format=%ad", "--date=short").splitlines()[0],
         "last_commit": _git("log", "-1", "--format=%ad", "--date=short"),
-        "decisions": len(re.findall(r"^### DEC-", decisions_text, re.MULTILINE)),
+        # The ID pattern is matched in full, not just the `### DEC-` prefix.
+        # The loose form counted the `### DEC-YYYY-MM-DD-XXX: Decision Title`
+        # TEMPLATE near the top of DECISIONS.md as a decision, so this script --
+        # written so figures would be generated rather than typed -- reported
+        # 132 where there were 131. An off-by-one in the anti-drift tool is
+        # worse than an off-by-one in prose, because it is trusted.
+        "decisions": len(
+            re.findall(r"^### DEC-\d{4}-\d{2}-\d{2}-\d{3}:", decisions_text, re.MULTILINE)
+        ),
         "decisions_lines": decisions_text.count("\n") + 1,
         "decision_ids_in_source": len(
             set(re.findall(r"DEC-20\d\d-\d\d-\d\d-\d\d\d",
