@@ -362,10 +362,30 @@ positioning work.
 
 **Goal:** nothing embarrassing or dangerous becomes public.
 
-- [ ] 0.1 Scan full git history for secrets, not just the working tree
-      (`gitleaks detect --log-opts="--all"` or `trufflehog git file://.`).
-      `.env` was never committed, but verify keys were never pasted into a
-      markdown file or a notebook.
+- [~] 0.1 **SCANNED 2026-08-20, clean — but not with the named tools.** Neither
+      `gitleaks` nor `trufflehog` is installed, and the machine has no outbound
+      TLS, so neither could be installed. A stand-in scan was run instead over
+      **every blob reachable from every ref** (2,289 objects after path
+      filtering; 1,388 text blobs scanned; the 5 skipped files over 512KB are
+      all design PDFs, i.e. binary):
+
+      - 11 detector families: private-key blocks, AWS access keys, GitHub,
+        Slack, Google, Stripe and Telegram tokens, JWTs, URL-embedded
+        passwords, 64-character mixed-case keys (the Binance shape), and
+        secret-named assignments to long literals.
+      - **Three candidates, all benign** — literal `user:pass` placeholders in
+        `DEPLOYMENT.md` (x2) and a URL-validation fixture in
+        `tests/unit/utils/test_config.py`.
+      - The only `.env*` path ever added in any commit is `.env.example`.
+
+      **Still worth doing before publication.** `gitleaks` ships a far larger
+      rule set, and `trufflehog --results=verified` *calls the provider* to
+      test whether a candidate is live — neither of which this scan replicates.
+      Run both once on a networked machine. Item stays open until then.
+
+      Independently of the scan result, rotate the Binance and Telegram
+      credentials per 0.2: they exist in a working-tree `.env` on a machine
+      that has run with `BINANCE_TESTNET=false`.
 - [ ] 0.2 Rotate the Binance API keys and the Telegram bot token regardless of
       scan result. They exist in a local `.env` on a machine that has run
       `BINANCE_TESTNET=false`.
