@@ -4,6 +4,18 @@
 [![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-blue)](pyproject.toml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
+> ## Do not run the live trading script against real capital
+>
+> `scripts/run_live_trading.py` enforces three of the eight pre-trade checks
+> this repository documents — it reaches no circuit breaker, no dead man's
+> switch, no position sizer and no time, event or volatility filter, sizes every
+> position at a flat 25% of equity without reference to stop distance, and is
+> 22% covered by tests.
+>
+> The risk package those controls live in is real and well tested. It is not
+> connected to the loop that places orders. See
+> [What actually runs, and what does not](#what-actually-runs-and-what-does-not).
+
 **An autonomous crypto trading system, built around a validation layer that
 decides whether a strategy has a real edge — and is built to return `no` when
 the evidence is not there.**
@@ -206,32 +218,106 @@ published conclusion changes. Recorded as `DEC-2026-08-13-001`.
 ## Architecture
 
 Three processes from one image: a read/query API, a paper-trading loop, and a
-live loop behind a default-off kill switch. Paper and live share the entire code
-path and diverge only at the execution interface, which is what makes paper
-results usable as a promotion gate.
+live loop behind a default-off kill switch.
+
+The diagram below is what `scripts/run_live_trading.py` does, traced from the
+source rather than from the design. Until 2026-08-21 this section carried a
+different diagram — one that routed every order through `RiskController`, five
+circuit breakers and `PositionSizer`. None of those appears anywhere in the
+deployed loop. The next section is the accounting.
 
 ```mermaid
 flowchart TD
     A[Binance REST] --> B[MarketDataFetcher]
     B --> C[OHLCVSeries, cached]
     C --> D[IndicatorFactory, cached]
-    D --> E[SignalGenerator]
-    E --> F{RegimeRouter<br/>allowed in this regime?}
-    F -->|no| Z[No trade]
-    F -->|yes| G{RiskController}
-    G --> H[kill switch, checked first<br/>daily / weekly loss<br/>max drawdown<br/>open positions<br/>concentration<br/>position size<br/>portfolio correlation<br/>5 circuit breakers]
-    H -->|rejected| Y[Logged + alerted]
-    H -->|approved| I[PositionSizer]
-    I --> J[OrderManager<br/>state machine]
-    J --> K[ExecutionInterface]
-    K --> L[BinanceExecution]
-    K --> M[PaperExecution]
-    L --> N[PositionTracker]
-    M --> N
-    N --> O[(DataStore)]
-    O --> P[ExecutionQuality<br/>slippage, fill rate]
-    O --> Q[Telegram alerts]
+    D --> E[SignalGenerator<br/>4 tiers, hardcoded]
+    E --> F{_tier_regime_match<br/>regime allows entry?}
+    F -->|no| Z[No entry]
+    F -->|yes| G{decorrelation cap<br/>MAX_CONCURRENT_SAME_DIRECTION}
+    G -->|at cap| Z
+    G -->|under cap| H{_check_risk_guards<br/>3 checks, not 8}
+    H --> H1[1 - kill switch<br/>DB read, fails CLOSED on error]
+    H --> H2[2 - daily loss<br/>vs MAX_DAILY_LOSS_PCT]
+    H --> H3[3 - max drawdown<br/>vs MAX_DRAWDOWN_PCT]
+    H -->|rejected| Y[Logged + Telegram]
+    H -->|approved| I[calculate_quantity<br/>flat 25% of equity<br/>stop distance is not an input]
+    I --> J[BinanceExecutionAdapter<br/>market order, no DB write]
+    J --> K[(paper_trading_sessions<br/>written after the fill)]
+    K --> Q[Telegram alerts]
 ```
+
+Three details in that diagram are worth reading twice.
+
+**The kill switch blocks exits, not only entries.** `_check_risk_guards` is
+consulted before every order including the one that closes a losing position,
+and the exit paths at lines 1325 and 1399 branch on `"kill_switch" in
+block_reason` and skip the close. Activating it with a position open disables
+the stop-loss and leaves the position running. It is a trading halt, not a flat
+button.
+
+**Position size does not consider the stop.** `calculate_quantity(current_equity,
+price)` takes no stop-loss argument, so risk per trade is unbounded by stop
+width. The `PositionSizer` that computes size from stop distance is at 100%
+coverage and is not called.
+
+**The order is placed before anything is persisted.** `submit_market_order`
+writes no database row; the record appears later, in `save_state`. A crash or an
+HTTP timeout between those two points leaves a position on the exchange with no
+record of it, and no reconciliation code exists.
+
+### What actually runs, and what does not
+
+The risk package in `src/core/risk/` is the best-tested subsystem in the
+repository. The live loop reaches three of its twelve controls, and reaches
+those three by reimplementing them inline rather than by importing them — so
+even the three that run are not the tested code.
+
+| Control | Built | Coverage | Reached by the live loop |
+|---|---|---|---|
+| Kill switch | yes | 96% | **yes** — via an inline DB read, not via `RiskController` |
+| Daily loss limit | yes | 99% | **yes** — reimplemented inline against `MAX_DAILY_LOSS_PCT` |
+| Max drawdown | yes | 99% | **yes** — reimplemented inline against `MAX_DRAWDOWN_PCT` |
+| 5 circuit breakers | yes | 95% | no |
+| Dead man's switch | yes | 100% | no |
+| Time filter | yes | 100% | no |
+| Event filter | yes | 100% | no |
+| Volatility filter | yes | 97% | no |
+| `PositionSizer` | yes | 100% | no — flat 25% fraction instead |
+| Weekly loss limit | yes | 99% | no |
+| Concentration check | yes | 99% | no |
+| `RiskController` (the pipeline) | yes | 74% | no |
+
+Verify it in one command:
+
+```bash
+grep -cE "RiskController|circuit_breaker|dead_man|time_filter|event_filter|VolatilityAnalyzer|PositionSizer|concentration|weekly" scripts/run_live_trading.py
+# 0
+```
+
+`src/core/orchestrator.py` is the loop that *was* meant to wire these together.
+Nothing calls it, and it never wired the circuit breakers, the filters or the
+sizer either — so "the deployed path reimplements the orchestrator" understates
+it in both directions.
+
+**Paper and live are separate implementations, and the promotion gate depends on
+their not being.** This section previously claimed they "share the entire code
+path and diverge only at the execution interface". They are two scripts of 2,110
+and 946 lines sharing exactly one module-level function name, `main`. Paper
+delegates execution to `PaperTradingEngine`; live reimplements stop and
+take-profit inline, its correctness asserted only by a docstring claiming
+consistency with the paper implementation. `run_paper_trading.py` contains zero
+`kill_switch` references. They share the signal path — fetcher, indicators,
+generators, regime detection — and diverge across the whole of execution and
+risk, which is exactly where paper results are being used to predict live
+behaviour.
+
+None of this is repaired here. It is described so that the diagram stops
+describing a system that does not exist. Whether the risk layer is wired, or the
+live loop deleted, is a decision that comes after the running deployment is
+stopped and reconciled — not one to make while it is still up. The findings are
+tracked in
+[docs/PRODUCTION_READINESS_ASSESSMENT.md](docs/PRODUCTION_READINESS_ASSESSMENT.md).
 
 The research layer sits alongside and may import from `src/`, but `src/` may
 never import from `research/`. That one-way boundary means research experiments
@@ -279,7 +365,11 @@ Highlights:
 
 - **Risk layer** — 8 pre-trade checks, 5 circuit breakers with state that
   survives restart, kill switch, dead man's switch, time/event/volatility
-  filters. Position sizing at 100% coverage, checks at 99%.
+  filters. Position sizing at 100% coverage, checks at 99%. **Three of these
+  are reached by the deployed live loop**; the rest are built, tested and not
+  called. This bullet listed them without that qualifier until 2026-08-21,
+  which read as a description of what protects a live order. See
+  [What actually runs, and what does not](#what-actually-runs-and-what-does-not).
 - **Live capital model** — per-strategy capital slicing, a concurrency cap, an
   85% capital reserve, and a minimum-notional guard that calls `sys.exit(1)`
   rather than rounding an order up to the exchange minimum.

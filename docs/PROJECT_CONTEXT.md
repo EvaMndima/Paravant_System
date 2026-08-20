@@ -74,8 +74,12 @@ Three commitments shape almost every decision in the codebase:
    off. Unknown market regime means no strategy activates. A position size below the
    exchange minimum exits the process rather than rounding up.
 2. **Capital preservation over return.** The risk layer is the most complete and
-   best-tested subsystem. Every order passes seven independent pre-trade checks and
-   five circuit breakers.
+   best-tested subsystem, and the live loop reaches three of its checks. Every
+   order *in the designed pipeline* passes seven independent pre-trade checks and
+   five circuit breakers; `scripts/run_live_trading.py` does not call that
+   pipeline. This read "Every order passes seven independent pre-trade checks and
+   five circuit breakers" until 2026-08-21, stated as a fact about live orders.
+   See Section 4.2.
 3. **Decisions are written down.** 131 dated architectural decisions with rationale,
    alternatives considered, and status. Code is required to match them.
 
@@ -196,6 +200,9 @@ Binance REST  ->  MarketDataFetcher  ->  OHLCVSeries (in-memory, cached)
                                               |
                                               v
                         RiskController.validate_order()
+                        [DESIGNED PATH -- the live loop does not call this.
+                         grep -c RiskController scripts/run_live_trading.py -> 0
+                         Deployed path: ../README.md#architecture]
                           - kill switch          (checked FIRST)
                           - daily loss limit
                           - weekly loss limit

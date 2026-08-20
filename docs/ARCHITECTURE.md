@@ -55,6 +55,26 @@ warns against moving code into it.
 
 ## 3. The trading path
 
+> **CORRECTED 2026-08-21.** The diagram below is the **designed** pipeline, as
+> `RiskController` implements it. It is not the path a live order takes.
+>
+> `scripts/run_live_trading.py` does not import `RiskController`. It
+> reimplements three of these checks inline — kill switch, daily loss, max
+> drawdown — and reaches none of the other five, none of the circuit breakers,
+> none of the filters and not `PositionSizer`:
+>
+> ```bash
+> grep -cE "RiskController|circuit_breaker|dead_man|time_filter|event_filter|VolatilityAnalyzer|PositionSizer|concentration|weekly" scripts/run_live_trading.py
+> # 0
+> ```
+>
+> The diagram is kept because it documents what the risk package does when it is
+> invoked, which is accurate and worth having. The correction is marked rather
+> than the diagram redrawn because the gap between this design and the deployed
+> loop is itself the finding — `audit/AUDIT.md` raised it on 2026-08-08 and
+> called it the most serious item for a trading role. The deployed path is drawn
+> in [../README.md](../README.md#architecture).
+
 ```mermaid
 flowchart TD
     A[Binance REST] --> B[MarketDataFetcher]
@@ -63,7 +83,7 @@ flowchart TD
     D --> E[SignalGenerator.generate<br/>TradingSignal or None]
     E --> F{RegimeRouter}
     F -->|not allowed in<br/>this regime| Z[No trade]
-    F -->|allowed| G[RiskController.validate_order]
+    F -->|allowed| G[RiskController.validate_order<br/>NOT called by the live loop]
 
     subgraph checks [Pre-trade checks, in order]
         G1[1. kill switch] --> G2[2. daily loss]
