@@ -643,6 +643,14 @@ These decisions are **LOCKED** per MVP scope control rules until specified revie
 
 ---
 
+> **Superseded intermediate footer.** The block below is a leftover from an
+> earlier merge of this file and sits in the middle of the document rather than
+> at its end. Its "Next Decision ID" was already months out of date, and its
+> count is asserted by nothing -- `test_governance_sync.py` reads the LAST
+> `**Total Decisions:**` match. The authoritative counts are at the end of this
+> file. Marked rather than deleted (Rule 6) because the merge it records is
+> itself part of the log's history. Found 2026-08-21.
+
 **Last Updated:** 2026-05-08
 **Total Decisions:** 131 active, 0 superseded, 5 locked
 **Next Decision ID:** DEC-2026-05-08-005
@@ -2947,13 +2955,34 @@ parameters:
 - **Expectations:** Liquidation cascades large enough to trade are RARE; reaching testable N (>= 30 in HIGH_VOL) will take WEEKS-to-MONTHS of accrual. The liquidation generator (H-004 / H-009) re-enters the lifecycle at the data/implement step and is screened via `regime_dsr` once N is sufficient (Stage-1 already passed). The LONG flush (buy forced-selling) is spot-deployable; the SHORT squeeze-fade stays research-only (DEC-2026-05-28-001).
 - **References:** DEC-2026-06-04-018 (data-channel-on-pass discipline this invokes), DEC-2026-06-04-005 (paid alt-data deferral this routes around with a free source), DEC-2026-06-04-003 (geo-block root cause / deploy gate), DEC-2026-05-28-001 (spot-only live lock - short fade research-only), DEC-2026-06-04-019 (research generator runtime hook the eventual generator will use). Ledger `H-2026-06-004` / `H-2026-06-009` (the unblocked hypotheses); `docs/research/NEGATIVE_SPACE_MAP.md` (meta-finding). PRD Section 5.2 (one-way dependency), Section 11.1 (free Binance data). Session prompt 2026-06-11 (PROMPT_LIQUIDATION_COLLECTOR).
 
+### DEC-2026-08-21-001: Untrack per-machine assistant config; do NOT rewrite git history
+- **Decision:** Remove `.claude/mcp_config.json`, `.claude/settings.local.json` and `.agent/mcp.json` from tracking with `git rm --cached` and add them to `.gitignore`, so they stop being published going forward. **Do not** rewrite git history to purge their previous contents.
+- **Context:** These three files were tracked from early in the project until 2026-08-20. They are per-machine tooling, not project artifacts. `.claude/mcp_config.json` in particular carried an interpreter path under a different Windows account (`C:\Users\Dell\anaconda3`) and pointed two MCP servers -- `PYTHONPATH` and the filesystem server root -- at an unrelated predecessor project, `D:\Eva\Projects\MultiAgentTradingSystem`. It reads as config copied between projects and never reviewed, which is what it was. **No credentials are involved:** the `${GITHUB_TOKEN}`-style entries are interpolation placeholders, not values, and the full-history secret scan recorded in `b4cb1b8` (gitleaks + trufflehog) found nothing. The question this decision answers is therefore not "how do we contain a leak" but "is a filesystem path worth rewriting history for".
+- **Rationale:**
+  - **The exposed content is not a secret, so erasure buys nothing.** A username and a predecessor project's directory name cannot be revoked, reused, or escalated. Nothing is safer after a rewrite than before one. Contrast a real credential, where rewriting is *also* insufficient -- rotation is the actual remedy and the rewrite is cosmetic.
+  - **A rewrite would break the traceability that is the point of the decision log.** `git filter-repo` changes every SHA from the first affected commit onward. This log references commits by SHA, and `docs/audit/AUDIT.md` is explicitly pinned -- "written against commit `622ac49`" -- with a preamble explaining that its stale links are left unedited because "rewriting an audit so its findings appear never to have applied would defeat its purpose". A history rewrite would make that pin unresolvable and silently falsify every SHA reference in both documents. Trading a real, load-bearing audit trail for the removal of a directory name is a bad exchange.
+  - **A force-push over published history is a worse signal than the paths are.** It breaks every existing clone, it is visible in the repository's own reflog and in any fork, and to a reviewer it reads as either panic or as something worth hiding. The paths read as untidy. Untidy and disclosed beats tidy and suspicious.
+  - **Disclosure is the treatment this repository already uses for non-secrets.** `documentation-freshness.md` Rule 6 distinguishes an outdated claim (update in place) from a wrong one (mark it, keep the record). The same instinct applies to history: the fix for something embarrassing but harmless is to say what it was and stop doing it, not to pretend it never happened. `.gitignore` carries that explanation inline, at the ignore rules themselves, where the next person to wonder why will look.
+  - **The rule this establishes is conditional, not absolute.** History is not rewritten for a non-secret. A real credential would change the answer -- and would require rotation first, with the rewrite as an optional second step whose cost is then clearly worth paying.
+- **Alternatives Considered:**
+  - **`git filter-repo` to purge the three files from all history:** REJECTED - invalidates every SHA reference in this log and the pinned commit in `docs/audit/AUDIT.md`, breaks existing clones, and removes a directory name that is not sensitive. Cost is concrete and permanent; benefit is cosmetic.
+  - **Leave them tracked:** REJECTED - they are local tooling with no reader value, they leak filesystem layout, and `.claude/settings.local.json` is by name a local override file. What *is* deliberately tracked under `.claude/` and `.agent/` -- `DECISIONS.md`, `CLAUDE.md` / `SYSTEM.md`, and `rules/` -- belongs to the project and stays.
+  - **Squash the whole history into one commit before publishing:** REJECTED - destroys the 153-commit record, which is a substantial part of what this repository demonstrates, to solve a problem the ignore rules already solve.
+- **Status:** ACTIVE
+- **Date Decided:** 2026-08-21
+- **Implemented By:** Phase 1 publication hygiene (group 1.3)
+- **Affected Files:** `.gitignore` (ignore rules plus the inline explanation), `.claude/mcp_config.json`, `.claude/settings.local.json`, `.agent/mcp.json` (all three untracked, retained on disk), `docs/PRODUCTION_READINESS_ASSESSMENT.md` (hygiene finding recorded).
+- **References:** `b4cb1b8` (full-history gitleaks + trufflehog scan, found nothing), `docs/audit/AUDIT.md` (pinned to `622ac49`; the reference a rewrite would break), `SECURITY.md` (disclosure posture), DEC-2026-08-14-002 Rule 6 (mark a correction rather than erasing the record).
+
+---
+
 ---
 
 **End of Decisions Log**
 
-**Total Decisions:** 131 active, 0 superseded, 5 locked (1 amended); DEC-2026-06-04-013 amended
-**Last Updated:** 2026-08-16
-**Next Decision ID:** DEC-2026-08-16-004
+**Total Decisions:** 132 active, 0 superseded, 5 locked (1 amended); DEC-2026-06-04-013 amended
+**Last Updated:** 2026-08-21
+**Next Decision ID:** DEC-2026-08-21-002
 
 > Count corrected 2026-08-14. This footer read "107 active" while the file held
 > 124 real decision entries -- the count had drifted as decisions were appended

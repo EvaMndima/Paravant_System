@@ -297,23 +297,89 @@ more valuable one.
 
 ---
 
+### 2.9 Audit findings, 2026-08-20
+
+A read-only audit of the whole repository was run on 2026-08-20. Most of what it
+found is recorded as rows 13-31 in the table in 3.2. Four findings need more than
+a table row, because each is a class rather than an instance.
+
+**The risk package is not connected to the loop that places orders.** The live
+loop enforces three of the twelve controls in `src/core/risk/` -- kill switch,
+daily loss, max drawdown -- and reaches those three by reimplementing them inline
+in `_check_risk_guards` (`scripts/run_live_trading.py:945`) rather than by
+importing them. Circuit breakers, dead man's switch, time, event and volatility
+filters, `PositionSizer`, weekly loss, concentration and `RiskController` itself
+are unreachable:
+
+```bash
+grep -cE "RiskController|circuit_breaker|dead_man|time_filter|event_filter|VolatilityAnalyzer|PositionSizer|concentration|weekly" scripts/run_live_trading.py
+# 0
+```
+
+Position size is a flat 25% of equity; `calculate_quantity(current_equity,
+price)` takes no stop-loss argument, so risk per trade is unbounded by stop
+width, while the `PositionSizer` that derives size from stop distance sits at
+100% coverage and is never called. `audit/AUDIT.md` raised this on 2026-08-08
+and ranked it the most serious item for a trading role. It stayed open, and the
+README, `ARCHITECTURE.md` and this document's companion all continued to draw
+the designed pipeline as though it were the live path until 2026-08-21. The
+diagrams are now corrected; the wiring is not.
+
+**The kill switch is a trading halt, not a flat button.** `_check_risk_guards`
+runs before every order including the one that closes a position, and the exit
+paths at lines 1325 and 1399 branch on `"kill_switch" in block_reason` and skip
+the close. Activating it while a position is open disables the stop-loss and
+leaves the position running, re-alerting every poll. This matters most in the
+scenario the control exists for, and it is not covered by any test.
+
+**Nothing reconciles the database against the exchange.** `submit_market_order`
+writes no database row; the record appears later, in `save_state`. A process
+death or an HTTP timeout between the fill and that write leaves a position on the
+exchange with no record of it. The inverse also exists: an exit that fills and is
+not recorded leaves the database holding a position that is already closed. No
+startup routine compares the two, and `grep -c reconcile scripts/run_live_trading.py`
+returns 0. Live state is written to `paper_trading_sessions` with a `live_`
+session-id prefix; the `orders` and `positions` tables are not written by the
+live path at all.
+
+**Paper and live are separate implementations.** They are two scripts of 2,110
+and 946 lines sharing exactly one module-level function name, `main`.
+`run_paper_trading.py` contains zero `kill_switch` references. They share the
+signal path -- fetcher, indicators, generators, regime detection -- and diverge
+across the whole of execution and risk. This matters because the promotion gate
+uses paper results to predict live behaviour, and its stated justification was
+that the two share a code path.
+
+**Not carried forward.** The audit also reported SQLite write contention across
+three processes with no WAL mode or busy timeout. That finding is void: the
+production database is PostgreSQL on Neon, not SQLite. The connection-pool
+finding it sat next to survives and is strengthened -- see row 21.
+
+---
+
 ## 3. Assessment
 
 ### 3.1 What is genuinely production-grade
 
-- The risk subsystem: layered checks, circuit breakers, kill switch, dead man's
-  switch, near-total test coverage.
+- The risk subsystem *as a library*: layered checks, circuit breakers, kill
+  switch, dead man's switch, near-total test coverage. The qualifier is
+  load-bearing -- the deployed live loop reaches three of its twelve controls
+  and reimplements those three inline. See 2.9 and row 13. This entry carried
+  no qualifier until 2026-08-21, in the section a reader checks for confidence.
 - The live capital model: fails closed on the min-notional guard, enforces a
   reserve, caps concurrency, and gates promotion on measured paper performance.
 - The research validation layer: DSR, effective-K, pre-registered gates,
   cost modelling, negative-space tracking. This is stronger than what most
   retail quant projects attempt, and it is the differentiator.
-- The decision log: 131 dated decisions with rationale and alternatives.
+- The decision log: 132 dated decisions with rationale and alternatives.
 - The indicator library and data models: well typed, well tested, well factored.
 
 ### 3.2 What blocks a "production ready" verdict
 
-Ordered by how quickly a senior reviewer will find it:
+Rows 1-12 are ordered by how quickly a senior reviewer will find them, which
+was the original framing. Rows 13-35 come from the 2026-08-20 audit (2.9) and
+are ordered by severity instead -- the two orderings are not the same, and
+pretending otherwise would make the list harder to act on.
 
 | # | Finding | Severity |
 |---|---|---|
@@ -334,6 +400,29 @@ Status column added 2026-08-14. "Resolved" means verified against the current
 | 10 | README describes a system two quarters out of date | Medium (presentation) | Resolved — rewritten |
 | 11 | ~~`data/store.py` at 28% coverage~~ **Measurement defect, not a coverage gap** | Low | Resolved 2026-08-14 — the module was at 100% all along; the CI coverage job excluded `tests/integration/`. Job scope fixed, floor 62→72 (DEC-2026-08-14-004) |
 | 12 | Integration tests error rather than skip without network | Low | Resolved — skip on `PARAVANT_RUN_NETWORK_TESTS` |
+| 13 | Live loop reaches 3 of 12 risk controls; circuit breakers, dead man's switch, filters, `PositionSizer` unreachable | Critical | **Open** — see 2.9. Diagrams corrected 2026-08-21; wiring untouched |
+| 14 | SHORT signals emit spot SELL orders against a long-only locked decision | Critical | **Open** — PARA-01. 2 of 4 live tiers construct `SignalDirection.SHORT`; `run_live_trading.py:1494` maps it to `"sell"` |
+| 15 | No migration path: 6 Alembic revisions, no runtime invokes any; `create_all()` never emits `ALTER` | High | **Open** — against a persistent volume a model change surfaces as `no such column` at query time |
+| 16 | Unique constraint on `strategy_assignments (account_id, strategy_id)` exists only in an unrun migration, not on the model | High | **Open** — no running system enforces it; the test named for it commits the duplicate and asserts nothing |
+| 17 | Every real-money control variable is undocumented | High | **Open** — `MAX_DAILY_LOSS_PCT`, `MAX_DRAWDOWN_PCT`, `LIVE_CAPITAL_USDT`, `LIVE_SYMBOL`, `LIVE_TEMPLATE`, `LIVE_STATE_FILE`, `MAX_CONCURRENT_SAME_DIRECTION` appear in no file. `.env.example` documents `DAILY_LOSS_LIMIT_PCT`, which no code reads as an env var |
+| 18 | Paper and live are separate implementations; the promotion gate's justification assumes they are not | High | **Open** — see 2.9 |
+| 19 | 29 signal generators at 13-21% coverage; the only generation test guards every assertion behind `if result is not None:` | High | **Open** — the suite cannot distinguish a failed mechanism from a generator that never signals |
+| 20 | Kill switch blocks exits as well as entries | Medium | **Open** — see 2.9. No test covers it |
+| 21 | No `pool_pre_ping` or `pool_recycle` on the engine | Medium | **Open** — predicted, then observed: `psycopg2.OperationalError: SSL connection has been closed unexpectedly` on 2026-08-15 took down regime persistence |
+| 22 | Auth middleware raises `TypeError` on a non-ASCII `X-API-Key` byte, returning 500 instead of 401 | Medium | **Open** — `secrets.compare_digest` rejects non-ASCII `str`. Distinguishes a malformed key from a wrong one by status code, which `_unauthorized()` documents itself as avoiding. Not reachable from the test client, which refuses to encode the header |
+| 23 | `_check_risk_guards` and `_check_stops_and_tp` have no tests | Medium | **Open** — the live loop's entire risk enforcement and stop/take-profit logic; 0 references in `tests/` |
+| 24 | Telegram is the only alert channel, at 22% coverage, and fails silently when unconfigured | Medium | **Open** — `send_alert` returns early with no log when the token or chat ID is unset. Three skipped tests claim "tested via integration tests"; no such tests exist |
+| 25 | Equity-curve points that fail to deserialise are dropped silently | Medium | **Open** — `paper/engine.py:468`, no log, no count. The curve determines max drawdown and Sharpe, which determine `READY_FOR_LIVE` |
+| 26 | Read endpoints are unauthenticated *and* unrate-limited | Medium | **Open** — `RateLimitMiddleware` gates `MUTATING_METHODS` only. An anonymous 401 flood is also unbounded and writes a log line per request |
+| 27 | Order placed before any record is written; no reconciliation exists | Medium | **Open** — see 2.9 |
+| 28 | `.pre-commit-config.yaml` pins ruff 0.8.4 / mypy 1.14.1; CI pins 0.15.0 / 1.19.1 | Medium | **Open** — the file states it exists so failures are found before the push; it cannot do that at a different version. Its mypy hook also runs without the project's dependencies |
+| 29 | `pyproject.toml` dependencies diverge from `requirements.txt` | Medium | **Open** — omits `psutil`, `scipy`, `requests`, `aiohttp`, `psycopg2-binary`, so `pip install .` is broken. Separately, `scipy` is pinned in production and imported by no production module |
+| 30 | `RESEARCH_FIXLIST.md` marks 1 of 13 defects resolved; `SECURITY.md` names 6 as open | Medium | **Open** — status lives only in the pointing document. A reader following the link cannot tell which entries are live |
+| 31 | `.gitleaks.toml` exists and no CI job or hook runs it; no SAST; Docker image never built; migrations never exercised | Medium | **Open** — a config implying ongoing protection that does not exist |
+| 32 | 7 dashboard components fabricate P&L, equity, drawdown and win/loss with `Math.random()` | Medium | **Open** — 12 files use `Math.random` in total; the 7 under `components/dashboard/` generate financial values |
+| 33 | `set_orchestrator()` is defined and called nowhere, so `/system/start` and `/system/stop` return 503 in every environment | Medium | **Open** — `src/api/routes/system.py:157`, `:271`, `:331` |
+| 34 | `test_unhandled_exception_returns_500` is `pass  # TODO` | Low | **Open** — a named test for the 500 path that contains no test, counted in the passing total |
+| 35 | Three per-machine assistant config files were tracked, leaking a foreign username and a predecessor project path | Low | Resolved 2026-08-21 — untracked and ignored; history deliberately not rewritten (DEC-2026-08-21-001) |
 
 ### 3.3 Positioning note
 
@@ -659,4 +748,46 @@ grep -rn "fetch(\|axios" frontend/src --include=*.ts --include=*.tsx | wc -l
 # Hygiene
 ls .github 2>/dev/null; ls LICENSE* 2>/dev/null
 git ls-files "*.md" | grep -v "/" | grep -cE "SESSION_|PHASE_"
+```
+
+Added 2026-08-21, for the findings in 2.9 and rows 13-35:
+
+```bash
+# Row 13 -- risk controls the live loop can reach. Expect 0.
+grep -cE "RiskController|circuit_breaker|dead_man|time_filter|event_filter|VolatilityAnalyzer|PositionSizer|concentration|weekly" scripts/run_live_trading.py
+
+# Row 14 -- live tiers that can emit SHORT, which becomes a spot SELL.
+grep -n "SignalDirection.SHORT" src/core/strategy/generators/macd_pullback.py src/core/strategy/generators/ichimoku_cloud_trend.py
+
+# Row 15 -- runtimes that invoke Alembic. Expect no output.
+grep -rn "alembic" --include="*.py" --include="*.yml" scripts/ .github/ Dockerfile Procfile railway.toml
+
+# Row 16 -- the constraint is in a migration, not on a model. Expect symbol.py only.
+grep -rn "UniqueConstraint\|unique=True" src/data/models/
+
+# Row 17 -- env vars the live loop reads, to diff against .env.example.
+grep -oE "os\.(getenv|environ\.get)\(\s*\"[A-Z_]+\"" scripts/run_live_trading.py | sort -u
+
+# Row 18 -- module-level functions shared by the paper and live loops. Expect "main".
+comm -12 <(grep -oE "^(async )?def [a-z_]+" scripts/run_live_trading.py | sed 's/async //' | sort -u) <(grep -oE "^(async )?def [a-z_]+" scripts/run_paper_trading.py | sed 's/async //' | sort -u)
+
+# Rows 19, 23 -- coverage of the code that actually trades.
+.venv/Scripts/python.exe -m pytest tests/ -q --tb=no --cov=scripts --cov-report=term
+grep -rn "_check_risk_guards\|_check_stops_and_tp" tests/
+
+# Row 20 -- the kill switch skipping an exit.
+grep -n 'kill_switch" in block_reason' scripts/run_live_trading.py
+
+# Rows 21, 27 -- connection recycling and reconciliation. Both expect no output.
+grep -rn "pool_pre_ping\|pool_recycle" src/
+grep -rn "reconcile" scripts/run_live_trading.py
+
+# Row 31 -- secret scanning that is configured but never run. Expect no output.
+grep -rn "gitleaks\|trufflehog\|bandit\|semgrep" .github/ .pre-commit-config.yaml
+
+# Row 32 -- frontend files fabricating data.
+grep -rl "Math.random" frontend/src --include="*.ts" --include="*.tsx"
+
+# Row 33 -- the orchestrator setter. Expect the definition and no call site.
+grep -rn "set_orchestrator" --include="*.py" src/ scripts/ tests/
 ```

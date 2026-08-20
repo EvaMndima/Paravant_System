@@ -107,6 +107,24 @@ research/data/liquidations/
 .claude/skills/
 .agent/skills/
 
+# Per-machine assistant configuration. These were tracked until 2026-08-20 and
+# should not have been: they are local tooling, not project artifacts, and
+# publishing them leaks the developer's filesystem layout.
+#
+# .claude/mcp_config.json in particular carried an interpreter path under a
+# different Windows account (C:\Users\Dell\anaconda3) and pointed two MCP
+# servers -- PYTHONPATH and the filesystem server root -- at an unrelated
+# predecessor project, D:\Eva\Projects\MultiAgentTradingSystem. No credentials:
+# the ${GITHUB_TOKEN}-style entries are interpolation placeholders. It reads as
+# config that was copied between projects and never reviewed, which is exactly
+# what it was.
+#
+# What IS tracked under .claude/ and .agent/ is deliberate and belongs to the
+# project: DECISIONS.md, CLAUDE.md / SYSTEM.md, and rules/.
+.claude/mcp_config.json
+.claude/settings.local.json
+.agent/mcp.json
+
 # Design source PDFs (21.8 MB). Kept on disk as design references but not
 # tracked -- they are exported artifacts, not source, and the rendered
 # screenshots under docs/design/screenshots/ serve the same purpose at
