@@ -1,0 +1,50 @@
+# gitleaks configuration.
+#
+# Run:
+#   gitleaks detect --source . --log-opts="--all"   # full history
+#   gitleaks dir .                                  # working tree only
+#
+# This extends the default rule set rather than replacing it. Two findings are
+# allowlisted, both inspected line by line before being suppressed, and both
+# from the same feature: the credential-masking utility and its test.
+#
+# Suppressing a finding is a claim that it is safe. Each entry below states the
+# file, the value, and why it is fabricated, so the claim can be re-checked
+# rather than taken on trust. Do not add a path-wide exclusion here -- a rule
+# that hides a whole directory will eventually hide a real key.
+
+title = "PARAVANT"
+
+[extend]
+useDefault = true
+
+[[rules]]
+# Placeholder rule required so the [[rules.allowlist]] blocks below have a
+# parent; the real detectors come from the default set via [extend].
+id = "paravant-noop"
+description = "Never matches. Present only to anchor repository allowlists."
+regex = '''\$\^paravant-never-matches\$'''
+
+[[allowlists]]
+description = """
+Documentation and test fixtures for src/utils/logging.py::mask_sensitive_data,
+the function whose entire purpose is to redact credentials before they reach a
+log. Both values are fabricated illustrations of what the masker does to a key,
+which is why they look like keys.
+
+  1. src/utils/logging.py -- the docstring example
+         "sk_live_1234567890abcdef" -> "**************cdef"
+     Flagged by gitleaks as stripe-access-token. Stripe live keys are
+     sk_live_ followed by 24+ random characters; this is the digits 1-0 then
+     abcdef, in order.
+
+  2. tests/unit/core/test_errors.py -- the fixture that exercises it, sitting
+     next to "password": "mysecretpassword".
+
+TruffleHog 3.97.0 flagged neither, verified or unverified.
+Verified clean 2026-08-20 by reading both call sites.
+"""
+regexes = [
+  '''sk_live_1234567890abcdef''',
+  '''sk-abcdefghij1234567890''',
+]

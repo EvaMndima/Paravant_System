@@ -362,30 +362,48 @@ positioning work.
 
 **Goal:** nothing embarrassing or dangerous becomes public.
 
-- [~] 0.1 **SCANNED 2026-08-20, clean — but not with the named tools.** Neither
-      `gitleaks` nor `trufflehog` is installed, and the machine has no outbound
-      TLS, so neither could be installed. A stand-in scan was run instead over
-      **every blob reachable from every ref** (2,289 objects after path
-      filtering; 1,388 text blobs scanned; the 5 skipped files over 512KB are
-      all design PDFs, i.e. binary):
+- [x] 0.1 **DONE 2026-08-20 with both named tools. Git history is clean.**
 
-      - 11 detector families: private-key blocks, AWS access keys, GitHub,
-        Slack, Google, Stripe and Telegram tokens, JWTs, URL-embedded
-        passwords, 64-character mixed-case keys (the Binance shape), and
-        secret-named assignments to long literals.
-      - **Three candidates, all benign** — literal `user:pass` placeholders in
-        `DEPLOYMENT.md` (x2) and a URL-validation fixture in
-        `tests/unit/utils/test_config.py`.
-      - The only `.env*` path ever added in any commit is `.env.example`.
+      The earlier blocker was misdiagnosed: the tools could not be installed
+      because Python and curl use a bundled CA bundle that this machine's
+      chain breaks, not because there is no network. PowerShell, which uses the
+      Windows certificate store, reaches the internet normally. Both tools were
+      fetched as release binaries and run without installing anything
+      system-wide.
 
-      **Still worth doing before publication.** `gitleaks` ships a far larger
-      rule set, and `trufflehog --results=verified` *calls the provider* to
-      test whether a candidate is live — neither of which this scan replicates.
-      Run both once on a networked machine. Item stays open until then.
+      | Scanner | Scope | Result |
+      |---|---|---|
+      | gitleaks 8.30.1 | 147 commits, `--log-opts="--all"` | **no leaks found**, exit 0 |
+      | TruffleHog 3.97.0 | full history, 3,091 chunks / 11.1 MB | **0 verified, 0 unverified**, exit 0 |
 
-      Independently of the scan result, rotate the Binance and Telegram
-      credentials per 0.2: they exist in a working-tree `.env` on a machine
-      that has run with `BINANCE_TESTNET=false`.
+      gitleaks initially reported two findings. Both were read line by line and
+      are fabricated, and both come from the same feature — the credential
+      *masking* utility and its test:
+
+      - `src/utils/logging.py:76` — the docstring example
+        `"sk_live_1234567890abcdef" -> "**************cdef"`, illustrating what
+        `mask_sensitive_data` does to a key. Flagged as a Stripe token; it is
+        the digits 1-0 followed by `abcdef`.
+      - `tests/unit/core/test_errors.py:457` — the fixture exercising that
+        function, adjacent to `"password": "mysecretpassword"`.
+
+      Both are allowlisted by exact value in `.gitleaks.toml`, with the reason
+      recorded there, so gitleaks now exits 0 and can be used as a gate. No
+      path-wide exclusion was used: a rule that hides a directory will
+      eventually hide a real key.
+
+      A working-tree scan (`gitleaks dir .`) reports 298 findings across
+      435 MB. **Every one is in an untracked file**: 287 in `.venv`, 6 in the
+      vendored third-party skill packs under `.claude/skills` and
+      `.agent/skills`, and 3 in `.env` itself — which is the correct result for
+      a gitignored file holding live credentials.
+
+      **What this does and does not certify.** It certifies that nothing
+      published by this repository contains a credential. It says nothing about
+      whether the credentials themselves are safe: gitleaks confirmed a
+      real-shaped `telegram-bot-api-token` in the working-tree `.env`, on a
+      machine that has run with `BINANCE_TESTNET=false`. Item 0.2 is
+      independent and still open.
 - [ ] 0.2 Rotate the Binance API keys and the Telegram bot token regardless of
       scan result. They exist in a local `.env` on a machine that has run
       `BINANCE_TESTNET=false`.
