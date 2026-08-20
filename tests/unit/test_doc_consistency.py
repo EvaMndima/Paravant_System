@@ -31,6 +31,7 @@ Decision: DEC-2026-08-16-002 - Cross-document consistency is enforced by test
 from __future__ import annotations
 
 import re
+import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -42,6 +43,11 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 # are frozen historical snapshots and are supposed to disagree with the present.
 LIVE_DOCS: tuple[str, ...] = (
     "README.md",
+    # Added 2026-08-21. It was outside this list and drifted to "120 dated
+    # architectural decisions" -- the documentation index, the one file whose
+    # whole job is pointing readers at the right document, carrying a wrong
+    # count of the thing it points at.
+    "docs/README.md",
     "SECURITY.md",
     "DEPLOYMENT.md",
     "DEVELOPMENT_SETUP.md",
@@ -50,6 +56,13 @@ LIVE_DOCS: tuple[str, ...] = (
     "docs/API_CONTRACT.md",
     "docs/RESEARCH_FINDINGS.md",
     "docs/PRODUCTION_READINESS_ASSESSMENT.md",
+    # Added 2026-08-21, and it was the worst offender. Section 3.4, headed
+    # "Mechanical verification of what is mechanically verifiable", cited
+    # "19 indicators at 88-100% coverage" as its evidence that machine-checkable
+    # properties held up. The figure was wrong in both halves and this file --
+    # which asserted the same number elsewhere and passed -- could not see it,
+    # because its own count_indicators() shared the miscount.
+    "docs/AI_ASSISTED_DEVELOPMENT.md",
 )
 
 
@@ -92,15 +105,93 @@ def count_signal_generators() -> int:
     )
 
 
+#: Modules in the indicators package that are not indicators. The ABC, the
+#: factory, the caching wrapper, shared helpers, and the timeframe resampler.
+INDICATOR_SCAFFOLDING = frozenset(
+    {"__init__", "base", "factory", "cached", "utils", "resample"}
+)
+
+
 def count_indicators() -> int:
-    """Indicator modules, including the factory and cached wrappers."""
+    """Indicator implementations, excluding shared scaffolding.
+
+    This counted every module in the package until 2026-08-21 and returned 19,
+    which is what "19 indicators" in README.md and PROJECT_CONTEXT.md was
+    asserted against. The test passed and the documents were still wrong: five
+    of the nineteen are scaffolding. A consistency check is only as good as its
+    definition of the thing being counted, and this one had been asserting that
+    two documents agreed with a miscount.
+
+    Cross-checked against ``IndicatorFactory._registry``, which registers the
+    same 14 classes under 20 keys (six are aliases). Two independent derivations
+    agreeing is what makes 14 defensible where 19 was not.
+    """
     return len(
         [
             p
             for p in (REPO_ROOT / "src/core/indicators").glob("*.py")
-            if p.stem != "__init__"
+            if p.stem not in INDICATOR_SCAFFOLDING
         ]
     )
+
+
+#: Decision-ID shape. Deliberately requires the full ID rather than the
+#: ``### DEC-`` prefix: the loose form matched the template heading near the top
+#: of DECISIONS.md and reported 132 where there were 131. Kept byte-identical to
+#: the pattern in ``scripts/doc_stats.py`` so the tool and this test cannot
+#: disagree -- two anti-drift mechanisms that drift apart are worse than one.
+_DECISION_HEADING = r"^### DEC-\d{4}-\d{2}-\d{2}-\d{3}:"
+_DECISION_ID = r"DEC-20\d\d-\d\d-\d\d-\d\d\d"
+
+#: The same ID shape in POSIX ERE, for ``git grep -E``, which does not
+#: understand the Perl ``\d`` escape and silently matches nothing when handed
+#: one. ``doc_stats.py`` carries both forms for this reason; so does this file.
+_DECISION_ID_ERE = r"DEC-20[0-9]{2}-[0-9]{2}-[0-9]{2}-[0-9]{3}"
+
+#: Trees ``doc_stats.py`` scans for decision references. ``tests/`` is excluded
+#: there and excluded here for the same reason: a decision ID quoted in a test
+#: name is not the code implementing that decision.
+_DECISION_SOURCE_TREES = ("src/*", "scripts/*", "research/*")
+
+
+def count_decisions() -> int:
+    """Dated decision entries in the log."""
+    text = _read(".claude/DECISIONS.md")
+    return len(re.findall(_DECISION_HEADING, text, re.MULTILINE))
+
+
+def count_decision_ids_in_source() -> int:
+    """Distinct decision IDs referenced from the source trees.
+
+    Uses ``git grep`` over TRACKED files with the same pathspec and pattern as
+    ``scripts/doc_stats.py``, rather than a filesystem walk. That is deliberate.
+
+    A ``rglob("*.py")`` walk returns 72 where the tool returns 74, because 20 of
+    the referencing files are strategy biographies and the hypothesis ledger --
+    ``research/biographies/*.yaml`` and ``research/hypotheses/ledger.yaml``. Two
+    anti-drift mechanisms measuring the same name differently is the defect this
+    file exists to catch, so the test mirrors the tool exactly instead of
+    forming its own opinion.
+    """
+    result = subprocess.run(
+        ["git", "grep", "-ohE", _DECISION_ID_ERE, "--", *_DECISION_SOURCE_TREES],
+        cwd=REPO_ROOT,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    found = set(re.findall(_DECISION_ID, result.stdout))
+
+    # Guard the guard. `git grep` exits 1 on "no matches", which is also what a
+    # bad pathspec, a missing git, or a Perl escape handed to -E produces. An
+    # empty result must fail loudly rather than silently assert against zero --
+    # the first version of this function did exactly that and reported a
+    # repository containing 0 decision IDs.
+    assert found, (
+        "git grep returned no decision IDs. This is a broken measurement, not a "
+        f"repository with none. stderr: {result.stderr.strip()!r}"
+    )
+    return len(found)
 
 
 def count_api_endpoints() -> int:
@@ -166,6 +257,33 @@ CLAIMS: tuple[Claim, ...] = (
         "state-mutating endpoints",
         count_mutating_endpoints,
         r"(\d+) state-mutating endpoints",
+    ),
+    # Added 2026-08-21. This number was stated in five places across four
+    # documents and had FOUR different values: 122 twice in README.md, 113 in
+    # PRODUCTION_READINESS_ASSESSMENT.md, 120 in docs/README.md, and 131 -- the
+    # only correct one -- in PROJECT_CONTEXT.md. Nothing failed, because the
+    # count was derivable from the repository and simply was not being derived.
+    # `doc_stats.py` had computed it correctly the whole time.
+    #
+    # The optional `dated` and `architectural` words cover every phrasing in
+    # use: "131 dated architectural decisions", "131 decisions with rationale",
+    # "131 dated decisions with rationale and alternatives", "131 decisions,
+    # dual-maintained".
+    #
+    # The negative lookahead excludes "21 decisions filed in one day" in
+    # PROJECT_CONTEXT.md's timeline, which is a per-day count and not this
+    # claim -- the same technique, and the same reasoning, as the `endpoints`
+    # lookahead above. There is no suffix common to all seven real mentions to
+    # match on positively, so the discriminator has to be negative.
+    Claim(
+        "decisions",
+        count_decisions,
+        r"(\d+) (?:dated )?(?:architectural )?decisions(?! filed)",
+    ),
+    Claim(
+        "decision IDs in source",
+        count_decision_ids_in_source,
+        r"(\d+) distinct IDs",
     ),
 )
 

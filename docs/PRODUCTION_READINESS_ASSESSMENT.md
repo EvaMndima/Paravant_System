@@ -308,7 +308,7 @@ more valuable one.
 - The research validation layer: DSR, effective-K, pre-registered gates,
   cost modelling, negative-space tracking. This is stronger than what most
   retail quant projects attempt, and it is the differentiator.
-- The decision log: 113 dated decisions with rationale and alternatives.
+- The decision log: 131 dated decisions with rationale and alternatives.
 - The indicator library and data models: well typed, well tested, well factored.
 
 ### 3.2 What blocks a "production ready" verdict

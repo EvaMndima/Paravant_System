@@ -135,7 +135,7 @@ Paravant_System/
 │   │   ├── alerting/         Telegram channel, triggers, scheduler, escalation
 │   │   ├── config/           YAML+env loader, templates, risk profiles, backup
 │   │   ├── execution/        Order manager, position tracker, execution quality
-│   │   ├── indicators/       19 technical indicators
+│   │   ├── indicators/       14 technical indicators
 │   │   ├── monitoring/       Monitoring service
 │   │   ├── risk/             11 modules — the safety system
 │   │   ├── strategy/
@@ -295,8 +295,12 @@ financial field, and lambda factories for mutable defaults.
 with SUSPENDED and RETIRED as terminal-ish states, and an OPTIMIZATION status added
 2026-02-22.
 
-Migrations are managed by Alembic (6 revisions). Development uses SQLite; production
-uses PostgreSQL on Neon.
+Six Alembic revisions exist under `alembic/versions/` and **no runtime invokes
+any of them**. Every path that creates a schema calls `init_db()`, which is
+`Base.metadata.create_all()`. See
+[ARCHITECTURE.md](ARCHITECTURE.md#how-the-schema-is-actually-created) for what
+that means for an existing database. Development uses SQLite; production uses
+PostgreSQL on Neon.
 
 ---
 
@@ -945,7 +949,7 @@ not yet — see readiness assessment 4.4.
 
 ### 18.1 The decision log
 
-131 dated architectural decisions, 3,432 lines, maintained identically in
+131 dated architectural decisions, 3,433 lines, maintained identically in
 `.claude/DECISIONS.md` and `.agent/DECISIONS.md` (verified byte-identical). Each entry
 records: decision, context, rationale, alternatives considered, status, date,
 implementing section, affected files, references.
@@ -979,8 +983,8 @@ enforcement mechanism against their own future scope creep.
 > 2026-08-08 record.
 
 ```
-As of 2026-08-14:
-2,054 tests | 2,017 passed | 37 skipped | 0 failed | 0 errors | ~95s
+As of 2026-08-21:
+2,079 tests | 2,042 passed | 37 skipped | 0 failed | 0 errors | ~85s
 Coverage: 74% (src + research, whole suite), CI floor 72%
 ```
 
@@ -995,8 +999,10 @@ correction under "Poorly covered" below (DEC-2026-08-14-004).
 `tests/research/` (24 files covering the research layer),
 `tests/load/`, `tests/performance/`.
 
-**Well covered:** risk sizing 100%, risk checks 99%, time filter 100%, indicators
-88-100%, data models 88-100%, health 94%, config 96-97%.
+**Well covered:** risk sizing 100%, risk checks 99%, time filter 100%, data
+models 88-100%, health 94%, config 96-97%. The 14 indicators run 33-100%, 87%
+in aggregate — this line read "indicators 88-100%" until 2026-08-21, which was
+wrong at both ends and counted five scaffolding modules as indicators.
 
 **Poorly covered** (corrected 2026-08-14): the previous entry here read
 "`data/store.py` 28%". That was a measurement artifact — the CI coverage job
@@ -1004,7 +1010,7 @@ scoped itself to `tests/unit` + `tests/research`, while `DataStore` is tested
 from `tests/integration/`, which the `test` job runs on every commit. Measured
 over the whole suite `store.py` is at **100%**. The job now measures everything
 (DEC-2026-08-14-004). Remaining genuinely thin: `strategy/engine.py`,
-`risk/controller.py`, and `scripts/` — including the 2,111-line live loop —
+`risk/controller.py`, and `scripts/` — including the 2,110-line live loop —
 which is largely unmeasured.
 
 The 32 errors were network-dependent Binance tests that errored rather than

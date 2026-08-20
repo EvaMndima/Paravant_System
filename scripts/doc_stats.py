@@ -112,9 +112,17 @@ def collect() -> dict[str, object]:
         [p for p in _tracked("src/core/strategy/generators", (".py",))
          if p.name != "__init__.py"]
     )
+    # Indicators, excluding the scaffolding that shares the package. Counting
+    # every module reported 19 and put "19 indicators" into two documents; five
+    # of those are the ABC, the factory, the caching wrapper, shared helpers and
+    # the timeframe resampler. None of them is an indicator, and the inflated
+    # figure also dragged the quoted coverage range with it. The remaining 14
+    # match the distinct classes in IndicatorFactory._registry exactly (aliases
+    # excluded), which is the operational definition of "an indicator" here.
+    _INDICATOR_SCAFFOLDING = {"__init__", "base", "factory", "cached", "utils", "resample"}
     indicators = len(
         [p for p in _tracked("src/core/indicators", (".py",))
-         if p.name != "__init__.py"]
+         if p.stem not in _INDICATOR_SCAFFOLDING]
     )
 
     return {

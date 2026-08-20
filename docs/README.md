@@ -67,6 +67,6 @@ than reference. See [archive/README.md](archive/README.md).
 
 ## Decision log
 
-Not under `docs/`. 120 dated architectural decisions with rationale and rejected
+Not under `docs/`. 131 dated architectural decisions with rationale and rejected
 alternatives live in [`.claude/DECISIONS.md`](../.claude/DECISIONS.md),
 maintained byte-identically in `.agent/DECISIONS.md`.

@@ -205,8 +205,38 @@ transitions, so a retired strategy cannot be quietly revived. Reviving one means
 creating a new strategy, which means it re-enters at `draft` and earns its way
 back through every gate.
 
-Transitions are validated by `StrategyEngine`, not assigned freely. Schema is
-managed by Alembic across 6 revisions.
+Transitions are validated by `StrategyEngine`, not assigned freely.
+
+### How the schema is actually created
+
+This section previously read "Schema is managed by Alembic across 6 revisions."
+That was not true, and the correction matters more than the sentence did.
+
+Six Alembic revisions exist under `alembic/versions/`, and **no runtime invokes
+any of them**. `grep -rn "alembic" --include="*.py" --include="*.yml" scripts/
+.github/ Dockerfile Procfile railway.toml` returns nothing. Every path that
+creates a schema calls `init_db()` (`src/data/database.py:29`), whose entire body
+is `Base.metadata.create_all(bind=engine)` at line 31 — `scripts/init_db.py:17`,
+`scripts/run_paper_trading.py:725`, `scripts/run_live_trading.py:1620` and
+`scripts/validation_report.py:424`.
+
+The consequence is the part worth knowing. `create_all()` creates tables that do
+not exist and **silently skips tables that do**; it never emits `ALTER TABLE`.
+Against a database that already has the tables — which on Railway is every
+deploy after the first, because the volume persists — a model change reaches
+nothing. It surfaces later as `no such column` at query time rather than as a
+failure at deploy time.
+
+Two live consequences of this, both recorded rather than fixed in this pass:
+
+- The unique constraint on `strategy_assignments (account_id, strategy_id)`
+  exists only in `alembic/versions/20260209_add_unique_constraint_strategy_assignments.py`
+  and is not declared on the model, so no running system enforces it.
+- Nothing compares the migration chain against the ORM models, so the two are
+  free to diverge without any signal.
+
+Both are tracked in
+[PRODUCTION_READINESS_ASSESSMENT.md](PRODUCTION_READINESS_ASSESSMENT.md).
 
 ---
 

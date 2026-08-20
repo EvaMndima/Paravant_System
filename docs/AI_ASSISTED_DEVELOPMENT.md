@@ -33,7 +33,7 @@ remain in git history at tag `pre-cleanup`.
 *As of 2026-08-17; `python scripts/doc_stats.py` regenerates this table. That
 script had an off-by-one in one of its figures until 2026-08-17 -- see 4.12.*
 
-A crypto trading system: Binance data ingestion, 19 indicators, 29 signal
+A crypto trading system: Binance data ingestion, 14 indicators, 29 signal
 generators, a layered risk system, an order state machine, backtest and paper
 engines sharing the live code path, a FastAPI surface of 63 endpoints, a React
 dashboard, and a statistical research layer whose purpose is to reject the
@@ -143,9 +143,24 @@ evaluator *first*, while you have no results to protect.
 
 ### 3.4 Mechanical verification of what is mechanically verifiable
 
-Where a property could be checked by machine, it held up well: 19 indicators at
-88-100% coverage, risk sizing at 100%, an equivalence test proving an O(n)
-backtest path returns results identical to the O(n^2) path it replaced.
+Where a property could be checked by machine, it held up well: risk sizing at
+100% coverage, an equivalence test proving an O(n) backtest path returns results
+identical to the O(n^2) path it replaced.
+
+> **CORRECTED 2026-08-21.** This paragraph opened with a claim of nineteen
+> indicators at 88-100% coverage. That figure was wrong in both halves. Five of the nineteen are
+> scaffolding -- the ABC, the factory, the caching wrapper, shared helpers, the
+> resampler -- so the real count is 14, and their coverage runs 33-100% (87%
+> aggregate), with Keltner at 33% and Ichimoku at 69%.
+>
+> It is left marked rather than silently replaced because of where it sat. A
+> section arguing that machine-checkable properties held up was itself resting
+> on a figure nobody had checked by machine. `test_doc_consistency.py` asserted
+> the number and passed, because its own `count_indicators()` counted the same
+> five scaffolding modules -- the check and the claim shared a mistake, which is
+> the failure mode a check is supposed to make impossible.
+>
+> The section's argument survives the correction; its example did not.
 
 ---
 
@@ -357,7 +372,7 @@ mode requires two independent mistakes rather than one.
 
 ### 4.11 A number that was wrong from birth and spread by copying
 
-The readiness assessment stated "14 route modules". `PROJECT_CONTEXT.md`
+The readiness assessment stated "fourteen route modules". `PROJECT_CONTEXT.md`
 repeated it twice. `ARCHITECTURE.md` said 13.
 
 There were thirteen -- in every commit, including the one the assessment was

@@ -268,12 +268,12 @@ Deeper detail: **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)** ·
 | Layer | Files | Lines | Notes |
 |---|---|---|---|
 | `src/` application | 169 `.py` | 49,745 | API, risk, execution, indicators, strategies |
-| `tests/` | 138 `.py` | 38,426 | 2,054 tests: 2,017 pass, 37 skip, 0 fail |
-| `frontend/src/` | 90 `.ts`/`.tsx` | 17,187 | React 19 dashboard — see caveat below |
-| `scripts/` | 25 | 11,900 | Live loop, paper loop, sweeps, reporting |
-| `research/` | 32 `.py` | 6,461 | DSR, effective-K, cost model, feature store |
+| `tests/` | 139 `.py` | 38,836 | 2,079 tests: 2,042 pass, 37 skip, 0 fail |
+| `frontend/src/` | 98 `.ts`/`.tsx` | 18,139 | React 19 dashboard — see caveat below |
+| `scripts/` | 25 | 12,064 | Live loop, paper loop, sweeps, reporting |
+| `research/` | 32 `.py` | 6,493 | DSR, effective-K, cost model, feature store |
 
-*Figures as of 2026-08-13. Regenerate with `python scripts/doc_stats.py`.*
+*Figures as of 2026-08-21. Regenerate with `python scripts/doc_stats.py`.*
 
 Highlights:
 
@@ -286,10 +286,20 @@ Highlights:
 - **Promotion gate** — a strategy cannot go live until its pooled paper record
   is classified `READY_FOR_LIVE`. Fails *open* on a database error so a restart
   is not blocked; fails *closed* on a clear non-ready verdict.
-- **19 indicators**, each independently tested at 88-100% coverage.
-- **29 signal generators**, of which 0 are validated. That ratio is the point.
-- **122 dated architectural decisions** with rationale and rejected
-  alternatives, referenced by 71 distinct IDs from source comments.
+- **14 indicators**, independently tested at 33-100% coverage, 87% in aggregate.
+  Keltner at 33% and Ichimoku at 69% are the two that are not carrying their
+  weight. This bullet claimed nineteen indicators at 88-100% until 2026-08-21;
+  that count included `base`, `factory`, `cached`, `utils` and `resample`, which
+  are scaffolding rather than indicators, and the range was wrong at both ends.
+  The miscount is spelled as a word deliberately — `test_doc_consistency.py`
+  asserts every digit-form mention of this figure, and cannot tell a live claim
+  from a quotation of a retired one.
+- **29 signal generators**, of which 0 are validated. That ratio is the point —
+  with the caveat that the generators themselves sit at 13-21% line coverage, so
+  the suite does not independently establish that a null result came from the
+  mechanism rather than the implementation.
+- **131 dated architectural decisions** with rationale and rejected
+  alternatives, referenced by 74 distinct IDs from source comments.
 
 ---
 
@@ -352,7 +362,12 @@ Stated plainly, because a reviewer will find all of it anyway.
 - **The frontend is not mine from scratch.** It began as a visual prototype
   built in Google AI Studio and was ported here and rebuilt on Tailwind v3.
   Productionising it was real work; designing it was not. Six pages still need
-  wiring to the API, and the dashboard has no tests.
+  wiring to the API. It has 62 tests across five files — the shared formatters,
+  the regime hook, the positions table, the emergency-panel confirmation gate,
+  and routing — against 74 components, with no coverage floor. Most of the
+  dashboard is unverified. This line read "the dashboard has no tests" until
+  2026-08-21; that was true when written and was left standing after the Vitest
+  job landed on 2026-08-16, contradicting the CI table further down this file.
 - **Not everything is fixed.** `orchestrator.py` is a fully built, tested main
   loop that nothing calls — the deployed path reimplements it, and the two have
   not been reconciled. Six methodology defects in the research layer remain open
@@ -384,7 +399,7 @@ Stated plainly, because a reviewer will find all of it anyway.
 **Engineering**
 
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) · [docs/API_CONTRACT.md](docs/API_CONTRACT.md) · [docs/INDICATOR_SPECIFICATION.md](docs/INDICATOR_SPECIFICATION.md)
-- [.claude/DECISIONS.md](.claude/DECISIONS.md) — 122 decisions with rationale and rejected alternatives
+- [.claude/DECISIONS.md](.claude/DECISIONS.md) — 131 decisions with rationale and rejected alternatives
 - [docs/operations/](docs/operations/) — kill-switch runbook, scheduled jobs
 - [docs/PRODUCTION_READINESS_ASSESSMENT.md](docs/PRODUCTION_READINESS_ASSESSMENT.md) — measured gaps and the plan
 
