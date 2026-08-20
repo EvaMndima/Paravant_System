@@ -353,8 +353,8 @@ Deeper detail: **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)** ·
 
 | Layer | Files | Lines | Notes |
 |---|---|---|---|
-| `src/` application | 169 `.py` | 49,745 | API, risk, execution, indicators, strategies |
-| `tests/` | 139 `.py` | 38,836 | 2,079 tests: 2,042 pass, 37 skip, 0 fail |
+| `src/` application | 169 `.py` | 49,814 | API, risk, execution, indicators, strategies |
+| `tests/` | 140 `.py` | 38,961 | 2,097 tests: 2,060 pass, 37 skip, 0 fail |
 | `frontend/src/` | 98 `.ts`/`.tsx` | 18,139 | React 19 dashboard — see caveat below |
 | `scripts/` | 25 | 12,064 | Live loop, paper loop, sweeps, reporting |
 | `research/` | 32 `.py` | 6,493 | DSR, effective-K, cost model, feature store |
@@ -388,8 +388,8 @@ Highlights:
   with the caveat that the generators themselves sit at 13-21% line coverage, so
   the suite does not independently establish that a null result came from the
   mechanism rather than the implementation.
-- **132 dated architectural decisions** with rationale and rejected
-  alternatives, referenced by 74 distinct IDs from source comments.
+- **133 dated architectural decisions** with rationale and rejected
+  alternatives, referenced by 75 distinct IDs from source comments.
 
 ---
 
@@ -464,6 +464,21 @@ Stated plainly, because a reviewer will find all of it anyway.
   and severity-ranked. Both are enumerated in
   [docs/PRODUCTION_READINESS_ASSESSMENT.md](docs/PRODUCTION_READINESS_ASSESSMENT.md)
   and [docs/research/RESEARCH_FIXLIST.md](docs/research/RESEARCH_FIXLIST.md).
+- **The engine ran without connection liveness checking for six months, and it
+  cost an outage.** `create_engine` was called with no pool configuration from
+  the first commit. That is invisible against local SQLite and wrong against
+  the managed Postgres production actually runs on: the provider closes idle
+  connections, SQLAlchemy hands out one that is already dead, and the query
+  fails with `psycopg2.OperationalError: SSL connection has been closed
+  unexpectedly`. On 2026-08-15 that took down regime persistence. Fixed
+  2026-08-21 with `pool_pre_ping` and a 300-second `pool_recycle`
+  (DEC-2026-08-21-002). It is recorded here rather than quietly repaired
+  because the sequence is the useful part: an audit predicted the failure from
+  the absence of two keyword arguments, and the failure had already happened.
+  A prediction that is later confirmed is better evidence than either the
+  prediction or the incident alone, and the reason it went unnoticed for six
+  months — development on one database, production on another — is a more
+  general lesson than the fix is.
 - **Not built alone in the conventional sense.** One person working with AI
   coding assistants throughout. Where that approach held up, where it broke, and
   what had to be built to catch the breaks is in
@@ -489,7 +504,7 @@ Stated plainly, because a reviewer will find all of it anyway.
 **Engineering**
 
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) · [docs/API_CONTRACT.md](docs/API_CONTRACT.md) · [docs/INDICATOR_SPECIFICATION.md](docs/INDICATOR_SPECIFICATION.md)
-- [.claude/DECISIONS.md](.claude/DECISIONS.md) — 132 decisions with rationale and rejected alternatives
+- [.claude/DECISIONS.md](.claude/DECISIONS.md) — 133 decisions with rationale and rejected alternatives
 - [docs/operations/](docs/operations/) — kill-switch runbook, scheduled jobs
 - [docs/PRODUCTION_READINESS_ASSESSMENT.md](docs/PRODUCTION_READINESS_ASSESSMENT.md) — measured gaps and the plan
 

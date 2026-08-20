@@ -2976,13 +2976,38 @@ parameters:
 
 ---
 
+### DEC-2026-08-21-002: Connection liveness for managed Postgres (pool_pre_ping + pool_recycle)
+- **Decision:** `create_engine` receives `pool_pre_ping=True` and `pool_recycle=300` for every server-backed database, and neither for SQLite. The choice is made by a new `engine_options(url)` in `src/data/database.py`, which also replaces the substring test `"sqlite" in DATABASE_URL` with SQLAlchemy's own URL parsing.
+- **Context:** Production is PostgreSQL on Neon. A managed Postgres closes idle connections on its own schedule and the client learns of it only on use: SQLAlchemy hands out a pooled connection the server has already dropped, and the query fails with `psycopg2.OperationalError: SSL connection has been closed unexpectedly`. **This is not a predicted failure. It happened on 2026-08-15 and took down regime persistence.** The engine had been constructed with no pool configuration at all since the first commit, which was invisible for as long as development ran against local SQLite.
+- **Rationale:**
+  - **Both settings, because they fail differently.** `pool_recycle` retires connections by age and prevents the common case cheaply. `pool_pre_ping` issues a trivial liveness check at checkout and transparently reconnects, catching what recycle misses -- including a server-side close that arrives well inside the recycle window, which is exactly what a provider that suspends compute on idle produces. Pre-ping alone would be correct and costs one round trip per checkout; recycle alone is cheaper and leaves a window. The window is where the 2026-08-15 outage lived.
+  - **300 seconds, chosen against the provider's behaviour rather than by habit.** It sits under the idle window after which a managed Postgres drops or suspends a connection. The value is a constant with that reasoning attached rather than an environment variable, because adding an undocumented environment variable is the defect recorded as finding 17 in `docs/PRODUCTION_READINESS_ASSESSMENT.md` and this change should not add a fourteenth.
+  - **SQLite deliberately gets neither.** There is no server to close the connection, so a pre-ping is a round trip protecting against nothing. Keeping the branch explicit also documents *why* SQLite is different rather than leaving a reader to infer it.
+  - **The substring test had to go with it.** `"sqlite" in DATABASE_URL` could not fail, but it could silently misclassify: a Postgres host, database or password containing "sqlite" selected the SQLite branch and would have passed `check_same_thread` to psycopg2, which rejects it. Since this change branches on backend to decide pooling, a misfire would now also mean a production database silently running without liveness checking. `make_url(url).get_backend_name()` is the parser SQLAlchemy uses itself.
+  - **Extracted to a function so the choice is testable.** The engine is built at import time from an environment variable, which makes the configuration awkward to assert. `engine_options(url)` is a pure function over a URL. `tests/unit/test_database_engine.py` also asserts that the live `engine` was actually built from it -- a tested component that nothing calls is the failure mode this repository has found repeatedly elsewhere, and it is cheap to rule out here.
+  - **Mutation-tested, both halves.** Removing `pool_pre_ping` fails 4 of the 18 tests; reverting to the substring test fails 2. A fix whose tests still pass without it is not protected.
+- **Alternatives Considered:**
+  - **`pool_pre_ping` only:** REJECTED - correct, but pays a round trip on every checkout for a case `pool_recycle` handles for free. The two together cost less in aggregate.
+  - **`pool_recycle` only:** REJECTED - cheaper, and leaves precisely the gap the 2026-08-15 outage went through. A connection can be closed server-side one second after it is opened.
+  - **Catch `OperationalError` and retry at the call sites:** REJECTED - spreads the fix across every query in the codebase, cannot be verified by inspection, and reimplements what the pool already does correctly one layer down. The audit's finding was that there is no `OperationalError` handling anywhere; the answer is not to add it in 200 places.
+  - **`NullPool` (no pooling):** REJECTED - removes the failure mode by removing the pool, at the cost of a connection setup per request against a database whose connection setup includes a TLS handshake.
+  - **Make the recycle window an environment variable:** REJECTED for now - see rationale. It would be the fourteenth undocumented live-configuration variable.
+- **Status:** ACTIVE
+- **Date Decided:** 2026-08-21
+- **Implemented By:** Phase 1 structural guards (group 1.4)
+- **Affected Files:** `src/data/database.py` (`engine_options`, `POOL_RECYCLE_SECONDS`), `tests/unit/test_database_engine.py` (new, 18 tests), `README.md` (known limitations), `docs/PRODUCTION_READINESS_ASSESSMENT.md` (row 21).
+- **Measured:** 18 new tests; mutation-tested at 4 and 2 failures respectively; full suite 2,042 -> 2,060 passing, 0 failing.
+- **References:** `docs/PRODUCTION_READINESS_ASSESSMENT.md` row 21 (the finding) and finding 17 (why the recycle window is a constant, not an env var), the 2026-08-15 `SSL connection has been closed unexpectedly` incident.
+
+---
+
 ---
 
 **End of Decisions Log**
 
-**Total Decisions:** 132 active, 0 superseded, 5 locked (1 amended); DEC-2026-06-04-013 amended
+**Total Decisions:** 133 active, 0 superseded, 5 locked (1 amended); DEC-2026-06-04-013 amended
 **Last Updated:** 2026-08-21
-**Next Decision ID:** DEC-2026-08-21-002
+**Next Decision ID:** DEC-2026-08-21-003
 
 > Count corrected 2026-08-14. This footer read "107 active" while the file held
 > 124 real decision entries -- the count had drifted as decisions were appended

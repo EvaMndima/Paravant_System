@@ -371,7 +371,7 @@ finding it sat next to survives and is strengthened -- see row 21.
 - The research validation layer: DSR, effective-K, pre-registered gates,
   cost modelling, negative-space tracking. This is stronger than what most
   retail quant projects attempt, and it is the differentiator.
-- The decision log: 132 dated decisions with rationale and alternatives.
+- The decision log: 133 dated decisions with rationale and alternatives.
 - The indicator library and data models: well typed, well tested, well factored.
 
 ### 3.2 What blocks a "production ready" verdict
@@ -408,7 +408,7 @@ Status column added 2026-08-14. "Resolved" means verified against the current
 | 18 | Paper and live are separate implementations; the promotion gate's justification assumes they are not | High | **Open** — see 2.9 |
 | 19 | 29 signal generators at 13-21% coverage; the only generation test guards every assertion behind `if result is not None:` | High | **Open** — the suite cannot distinguish a failed mechanism from a generator that never signals |
 | 20 | Kill switch blocks exits as well as entries | Medium | **Open** — see 2.9. No test covers it |
-| 21 | No `pool_pre_ping` or `pool_recycle` on the engine | Medium | **Open** — predicted, then observed: `psycopg2.OperationalError: SSL connection has been closed unexpectedly` on 2026-08-15 took down regime persistence |
+| 21 | No `pool_pre_ping` or `pool_recycle` on the engine | Medium | Resolved 2026-08-21 — `engine_options()` in `src/data/database.py`, 18 tests, mutation-tested (DEC-2026-08-21-002). Predicted by audit, then found to have already occurred: `psycopg2.OperationalError: SSL connection has been closed unexpectedly` took down regime persistence on 2026-08-15 |
 | 22 | Auth middleware raises `TypeError` on a non-ASCII `X-API-Key` byte, returning 500 instead of 401 | Medium | **Open** — `secrets.compare_digest` rejects non-ASCII `str`. Distinguishes a malformed key from a wrong one by status code, which `_unauthorized()` documents itself as avoiding. Not reachable from the test client, which refuses to encode the header |
 | 23 | `_check_risk_guards` and `_check_stops_and_tp` have no tests | Medium | **Open** — the live loop's entire risk enforcement and stop/take-profit logic; 0 references in `tests/` |
 | 24 | Telegram is the only alert channel, at 22% coverage, and fails silently when unconfigured | Medium | **Open** — `send_alert` returns early with no log when the token or chat ID is unset. Three skipped tests claim "tested via integration tests"; no such tests exist |
