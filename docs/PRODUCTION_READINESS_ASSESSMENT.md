@@ -371,7 +371,7 @@ finding it sat next to survives and is strengthened -- see row 21.
 - The research validation layer: DSR, effective-K, pre-registered gates,
   cost modelling, negative-space tracking. This is stronger than what most
   retail quant projects attempt, and it is the differentiator.
-- The decision log: 133 dated decisions with rationale and alternatives.
+- The decision log: 134 dated decisions with rationale and alternatives.
 - The indicator library and data models: well typed, well tested, well factored.
 
 ### 3.2 What blocks a "production ready" verdict
@@ -419,7 +419,7 @@ Status column added 2026-08-14. "Resolved" means verified against the current
 | 29 | `pyproject.toml` dependencies diverge from `requirements.txt` | Medium | **Open** — omits `psutil`, `scipy`, `requests`, `aiohttp`, `psycopg2-binary`, so `pip install .` is broken. Separately, `scipy` is pinned in production and imported by no production module |
 | 30 | `RESEARCH_FIXLIST.md` marks 1 of 13 defects resolved; `SECURITY.md` names 6 as open | Medium | **Open** — status lives only in the pointing document. A reader following the link cannot tell which entries are live |
 | 31 | `.gitleaks.toml` exists and no CI job or hook runs it; no SAST; Docker image never built; migrations never exercised | Medium | **Open** — a config implying ongoing protection that does not exist |
-| 32 | 7 dashboard components fabricate P&L, equity, drawdown and win/loss with `Math.random()` | Medium | **Open** — 12 files use `Math.random` in total; the 7 under `components/dashboard/` generate financial values |
+| 32 | 7 dashboard components fabricate P&L, equity, drawdown and win/loss with `Math.random()` | Medium | Resolved 2026-08-21 — all seven render a fail-closed "Sample data" badge; `provenance.test.tsx` enumerates dashboard sources and fails on any fabricating component that is not provenance-aware (DEC-2026-08-21-003). The generators remain until item 3.4 wires the pages |
 | 33 | `set_orchestrator()` is defined and called nowhere, so `/system/start` and `/system/stop` return 503 in every environment | Medium | **Open** — `src/api/routes/system.py:157`, `:271`, `:331` |
 | 34 | `test_unhandled_exception_returns_500` is `pass  # TODO` | Low | **Open** — a named test for the 500 path that contains no test, counted in the passing total |
 | 35 | Three per-machine assistant config files were tracked, leaking a foreign username and a predecessor project path | Low | Resolved 2026-08-21 — untracked and ignored; history deliberately not rewritten (DEC-2026-08-21-001) |

@@ -80,7 +80,7 @@ Three commitments shape almost every decision in the codebase:
    pipeline. This read "Every order passes seven independent pre-trade checks and
    five circuit breakers" until 2026-08-21, stated as a fact about live orders.
    See Section 4.2.
-3. **Decisions are written down.** 133 dated architectural decisions with rationale,
+3. **Decisions are written down.** 134 dated architectural decisions with rationale,
    alternatives considered, and status. Code is required to match them.
 
 ### 1.3 Locked scope
@@ -166,7 +166,7 @@ Paravant_System/
 ├── docs/                     72 tracked .md
 ├── config/                   settings.yaml, risk_profiles.yaml, 14 strategy templates
 ├── alembic/                  6 migrations
-└── .claude/ + .agent/        DECISIONS.md (133 decisions, dual-maintained) + rules
+└── .claude/ + .agent/        DECISIONS.md (134 decisions, dual-maintained) + rules
 ```
 
 ---
@@ -956,7 +956,7 @@ not yet — see readiness assessment 4.4.
 
 ### 18.1 The decision log
 
-133 dated architectural decisions, 3,487 lines, maintained identically in
+134 dated architectural decisions, 3,513 lines, maintained identically in
 `.claude/DECISIONS.md` and `.agent/DECISIONS.md` (verified byte-identical). Each entry
 records: decision, context, rationale, alternatives considered, status, date,
 implementing section, affected files, references.

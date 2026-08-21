@@ -9,6 +9,9 @@ import { GlassCard } from '@/components/ui/GlassCard';
 import { AreaChart } from '@/components/charts/AreaChart';
 import { cn, formatCurrency, formatNumber } from '@/lib/utils';
 import type { AreaChartData } from '@/components/charts/AreaChart';
+import { SyntheticDataBadge } from '@/components/ui/SyntheticDataBadge';
+import { requiresSyntheticLabel, resolveProvenance } from '@/lib/provenance';
+import type { ProvenanceProps } from '@/lib/provenance';
 
 export interface TradeDetail {
   id: string;
@@ -36,7 +39,7 @@ export interface TradeDetail {
   priceChart: AreaChartData[];
 }
 
-export interface TradeDetailModalProps {
+export interface TradeDetailModalProps extends ProvenanceProps {
   isOpen: boolean;
   onClose: () => void;
   trade?: TradeDetail;
@@ -108,8 +111,13 @@ export const TradeDetailModal: React.FC<TradeDetailModalProps> = ({
   isOpen,
   onClose,
   trade,
+  dataProvenance,
 }) => {
   const t = trade ?? mockTrade;
+
+  // The intrabar price path rendered below is generated in the browser even
+  // when `trade` is real, so this view always contains fabricated values.
+  const provenance = resolveProvenance(dataProvenance, trade);
   const isProfit = (t.netPnl ?? t.pnl ?? 0) >= 0;
 
   const statusVariant: Record<string, 'success' | 'info' | 'neutral'> = {
@@ -129,6 +137,7 @@ export const TradeDetailModal: React.FC<TradeDetailModalProps> = ({
       <div className="space-y-5">
         {/* Status badges */}
         <div className="flex flex-wrap gap-2">
+          {requiresSyntheticLabel(provenance) && <SyntheticDataBadge compact />}
           <Badge variant={statusVariant[t.status] ?? 'neutral'} size="sm" dot={t.status === 'open'} pulsing={t.status === 'open'}>
             {t.status}
           </Badge>

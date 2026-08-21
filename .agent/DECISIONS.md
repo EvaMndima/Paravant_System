@@ -3001,13 +3001,39 @@ parameters:
 
 ---
 
+### DEC-2026-08-21-003: Fabricated dashboard data is labelled fail-closed
+- **Decision:** Every dashboard component that renders financial values accepts an optional `dataProvenance` prop and shows a `SyntheticDataBadge` unless that prop is explicitly `'live'`. Synthetic data is labelled; **untagged data is also labelled**. `resolveProvenance()` further forces `'synthetic'` whenever a component generated its own data, so a caller cannot declare `'live'` while passing nothing. A test in `frontend/src/components/dashboard/provenance.test.tsx` enumerates dashboard sources via `import.meta.glob`, selects those containing `Math.random`, and fails if any is not provenance-aware.
+- **Context:** Twelve files in the dashboard call `Math.random()`; seven are components that fabricate profit and loss, equity curves, drawdown series and win/loss outcomes. The pages were ported from a visual prototype and six are still not wired to the API. The generators were honestly named -- `generateEquity`, `generateMockTrades`, `mockResult` -- and entirely invisible in the browser. `docs/audit/AUDIT.md` flagged this on 2026-08-08; the 2026-08-20 audit flagged it again. A plausible equity curve with no label is a claim about a real account, and this repository is about to be public.
+- **Rationale:**
+  - **Fail-closed, because the alternative depends on memory.** Tagging the synthetic paths and treating everything else as real would leave the eighth component -- written months from now by someone who has not read any of this -- rendering fabricated values with no label and nothing failing. That is structurally the same choice as a per-route authentication dependency, and `src/api/auth.py` already rejects it in this codebase: "a mutating endpoint added tomorrow is covered on the day it is written". The same reasoning gives the same answer here.
+  - **The guard enumerates the filesystem, not a list.** A hardcoded list of components has to be updated by the person adding the eighth one, who is the same person who forgot the badge. `import.meta.glob('./*.tsx', { query: '?raw' })` finds every dashboard source through the bundler, so the test sees exactly the module set the build sees.
+  - **Mutation-tested, and the mutation is the actual scenario.** Dropping an eighth component that calls `Math.random()` with no badge into the directory fails three tests, each named after the offending file. Removing it returns the suite to green. A structural guard that does not fail on the case it exists for is decoration.
+  - **`resolveProvenance` closes the laundering path.** Without it, `<EquityChart dataProvenance="live" />` with no `data` would render a generated series with no badge -- the caller's claim applied to data the component invented. The helper ignores the declaration when `data` is `undefined`. This is asserted directly.
+  - **The badge is not dismissible and not subtle.** Amber, bordered, with an `AlertTriangle` and the words "Sample data". A label a reader can close, or one rendered in muted grey at the foot of a card, has been technically applied rather than actually communicated.
+  - **`BacktestResultsModal` derives provenance rather than being told.** It chooses between a caller prop, `useBacktestResults` (one of the three real API calls) and `mockResult`. Provenance follows which branch won, so the one path in the dashboard that does fetch real data renders clean without anyone passing a prop.
+  - **A README note was explicitly not the fix.** The operator ruled that out, correctly: a caveat in a file the viewer of the dashboard is not reading does not label the dashboard.
+- **Alternatives Considered:**
+  - **Delete the synthetic generators:** REJECTED for now - six pages are unwired, and removing the fallbacks leaves empty cards that look like a broken product rather than an unfinished one. Item 3.4 in the readiness assessment wires them; the labels can come out per component as that lands.
+  - **Tag synthetic paths, treat untagged as live:** REJECTED - fail-open, see rationale. It is the exact defect this repository has found three times elsewhere (the risk package, the orchestrator, the Alembic chain): protection that exists and is not reached.
+  - **A note in the README:** REJECTED by the operator, and rightly.
+  - **Enforce in the chart primitives (`AreaChart`, `SparklineChart`):** REJECTED for this pass - it would catch more, but those primitives are also used for genuinely live data, and threading provenance through them is a larger change than the one asked for. Worth revisiting if the badge count grows.
+  - **A hardcoded list of components in the test:** REJECTED - see rationale.
+- **Status:** ACTIVE
+- **Date Decided:** 2026-08-21
+- **Implemented By:** Phase 1 structural guards (group 1.4)
+- **Affected Files:** `frontend/src/lib/provenance.ts` (new), `frontend/src/components/ui/SyntheticDataBadge.tsx` (new), `frontend/src/components/dashboard/provenance.test.tsx` (new, 31 tests), and the seven fabricating components: `EquityChart`, `DrawdownChart`, `TradeHistoryTable`, `BacktestResultsModal`, `TradeDetailModal`, `PositionDrawer`, `StrategyDetailDrawer`. Plus `README.md` and `docs/PRODUCTION_READINESS_ASSESSMENT.md` row 32.
+- **Measured:** frontend 62 -> 93 tests, all passing; `tsc -b` and `vite build` green; eslint unchanged at 0 errors / 80 warnings; mutation probe fails 3 tests and only those.
+- **References:** `docs/audit/AUDIT.md` (raised 2026-08-08), `docs/PRODUCTION_READINESS_ASSESSMENT.md` row 32 and item 3.4, DEC-2026-08-14-001 (the fail-closed-by-default reasoning this borrows), DEC-2026-08-16-003 (removal of the fabricated `PositionsTable` fallback, the same problem solved by deletion where deletion was possible).
+
+---
+
 ---
 
 **End of Decisions Log**
 
-**Total Decisions:** 133 active, 0 superseded, 5 locked (1 amended); DEC-2026-06-04-013 amended
+**Total Decisions:** 134 active, 0 superseded, 5 locked (1 amended); DEC-2026-06-04-013 amended
 **Last Updated:** 2026-08-21
-**Next Decision ID:** DEC-2026-08-21-003
+**Next Decision ID:** DEC-2026-08-21-004
 
 > Count corrected 2026-08-14. This footer read "107 active" while the file held
 > 124 real decision entries -- the count had drifted as decisions were appended

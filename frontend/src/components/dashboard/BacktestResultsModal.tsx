@@ -13,6 +13,9 @@ import { DrawdownChart } from '@/components/dashboard/DrawdownChart';
 import { cn, formatCurrency } from '@/lib/utils';
 import type { AreaChartData } from '@/components/charts/AreaChart';
 import type { DrawdownDataPoint } from '@/components/dashboard/DrawdownChart';
+import { SyntheticDataBadge } from '@/components/ui/SyntheticDataBadge';
+import { requiresSyntheticLabel, resolveProvenance } from '@/lib/provenance';
+import type { ProvenanceProps } from '@/lib/provenance';
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -63,7 +66,7 @@ export interface BacktestResult {
   validationErrors?: string[];
 }
 
-export interface BacktestResultsModalProps {
+export interface BacktestResultsModalProps extends ProvenanceProps {
   isOpen: boolean;
   onClose: () => void;
   result?: BacktestResult;
@@ -708,16 +711,28 @@ const TradeLogTab: React.FC<{ r: BacktestResult }> = ({ r }) => {
 
 // ── Main modal ────────────────────────────────────────────────────────────────
 
+
 export const BacktestResultsModal: React.FC<BacktestResultsModalProps> = ({
   isOpen,
   onClose,
   result,
   strategyId,
+  dataProvenance,
 }) => {
   const { data: fetchedResult, isLoading, error } = useBacktestResults(
     result ? null : (strategyId ?? null),
   );
   const r = result ?? fetchedResult ?? mockResult;
+
+  // Three sources with different provenance. `fetchedResult` is one of the
+  // three real API calls in this dashboard; `mockResult` is fabricated. A
+  // caller-supplied `result` is whatever the caller declares, and defaults
+  // to synthetic when it declares nothing.
+  const provenance = result !== undefined
+    ? resolveProvenance(dataProvenance, result)
+    : fetchedResult !== undefined && fetchedResult !== null
+      ? 'live' as const
+      : 'synthetic' as const;
 
   const winRateVariant = r.winRate >= 55 ? 'success' : r.winRate >= 45 ? 'warning' : 'danger';
   const passed         = r.passedValidation ?? true;
@@ -731,6 +746,11 @@ export const BacktestResultsModal: React.FC<BacktestResultsModalProps> = ({
       size="full"
     >
       <div className="space-y-4">
+        {requiresSyntheticLabel(provenance) && (
+          <div className="flex items-center">
+            <SyntheticDataBadge />
+          </div>
+        )}
         {/* Loading state */}
         {isLoading && (
           <div className="flex items-center justify-center gap-2 py-6 text-obsidian-400/50 dark:text-paper-100/40">

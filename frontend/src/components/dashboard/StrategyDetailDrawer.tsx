@@ -11,6 +11,9 @@ import { AreaChart } from '@/components/charts/AreaChart';
 import { cn, formatCurrency } from '@/lib/utils';
 import type { StrategyCardProps, StrategyStatus } from './StrategyCard';
 import type { AreaChartData } from '@/components/charts/AreaChart';
+import { SyntheticDataBadge } from '@/components/ui/SyntheticDataBadge';
+import { requiresSyntheticLabel, resolveProvenance } from '@/lib/provenance';
+import type { ProvenanceProps } from '@/lib/provenance';
 
 export interface StrategySignalEntry {
   id: string;
@@ -35,7 +38,7 @@ export interface StrategyDetailData extends StrategyCardProps {
   recentSignals: StrategySignalEntry[];
 }
 
-export interface StrategyDetailDrawerProps {
+export interface StrategyDetailDrawerProps extends ProvenanceProps {
   isOpen: boolean;
   onClose: () => void;
   strategy?: StrategyDetailData;
@@ -122,11 +125,16 @@ const StatRow: React.FC<StatRowProps> = ({ label, value, positive, negative }) =
   </div>
 );
 
+
 export const StrategyDetailDrawer: React.FC<StrategyDetailDrawerProps> = ({
   isOpen,
   onClose,
   strategy,
+  dataProvenance,
 }) => {
+  // Signal history and the performance series are generated in the browser
+  // even when `strategy` is real.
+  const provenance = resolveProvenance(dataProvenance, undefined);
   const [mounted, setMounted] = useState(false);
   useEffect(() => { setMounted(true); return () => setMounted(false); }, []);
 
@@ -190,6 +198,7 @@ export const StrategyDetailDrawer: React.FC<StrategyDetailDrawerProps> = ({
                     <h2 className="text-xl font-display font-semibold text-deep-teal-800 dark:text-paper-100">
                       {s.name}
                     </h2>
+                    {requiresSyntheticLabel(provenance) && <SyntheticDataBadge compact />}
                   </div>
                   <p className="text-sm font-sans text-obsidian-400/60 dark:text-paper-100/60 max-w-xs">
                     {s.description}

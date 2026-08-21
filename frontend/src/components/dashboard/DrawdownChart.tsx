@@ -12,14 +12,17 @@ import {
 import { SizedResponsiveContainer } from '@/components/charts/SizedResponsiveContainer';
 import { GlassCard } from '@/components/ui/GlassCard';
 import { Badge } from '@/components/ui/Badge';
+import { SyntheticDataBadge } from '@/components/ui/SyntheticDataBadge';
 import { cn } from '@/lib/utils';
+import { requiresSyntheticLabel, resolveProvenance } from '@/lib/provenance';
+import type { ProvenanceProps } from '@/lib/provenance';
 
 export interface DrawdownDataPoint {
   date: string;
   drawdown: number; // Negative value, e.g. -5.2 for -5.2%
 }
 
-export interface DrawdownChartProps {
+export interface DrawdownChartProps extends ProvenanceProps {
   data?: DrawdownDataPoint[];
   height?: number;
   maxDrawdown?: number;
@@ -108,6 +111,7 @@ const ColoredBar = (props: any) => {
 
 export const DrawdownChart: React.FC<DrawdownChartProps> = ({
   data,
+  dataProvenance,
   height = 200,
   maxDrawdown,
   currentDrawdown = 0,
@@ -115,6 +119,9 @@ export const DrawdownChart: React.FC<DrawdownChartProps> = ({
   className,
 }) => {
   const chartData = useMemo(() => data ?? generateDrawdownData(), [data]);
+
+  // Generated data is synthetic no matter what the caller declared.
+  const provenance = resolveProvenance(dataProvenance, data);
 
   const computedMax = useMemo(
     () => maxDrawdown ?? Math.min(...chartData.map(d => d.drawdown)),
@@ -131,9 +138,12 @@ export const DrawdownChart: React.FC<DrawdownChartProps> = ({
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="space-y-0.5">
-          <h3 className="text-xs font-mono uppercase tracking-widest text-obsidian-400/50 dark:text-paper-100/50">
-            {title}
-          </h3>
+          <div className="flex items-center gap-2">
+            <h3 className="text-xs font-mono uppercase tracking-widest text-obsidian-400/50 dark:text-paper-100/50">
+              {title}
+            </h3>
+            {requiresSyntheticLabel(provenance) && <SyntheticDataBadge compact />}
+          </div>
           <div className="flex items-center gap-2">
             <span className="text-2xl font-mono font-bold text-obsidian-400 dark:text-paper-100">
               {computedMax.toFixed(1)}%

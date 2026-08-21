@@ -355,7 +355,7 @@ Deeper detail: **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)** ·
 |---|---|---|---|
 | `src/` application | 169 `.py` | 49,814 | API, risk, execution, indicators, strategies |
 | `tests/` | 140 `.py` | 38,961 | 2,097 tests: 2,060 pass, 37 skip, 0 fail |
-| `frontend/src/` | 98 `.ts`/`.tsx` | 18,139 | React 19 dashboard — see caveat below |
+| `frontend/src/` | 101 `.ts`/`.tsx` | 18,503 | React 19 dashboard — see caveat below |
 | `scripts/` | 25 | 12,064 | Live loop, paper loop, sweeps, reporting |
 | `research/` | 32 `.py` | 6,493 | DSR, effective-K, cost model, feature store |
 
@@ -388,7 +388,7 @@ Highlights:
   with the caveat that the generators themselves sit at 13-21% line coverage, so
   the suite does not independently establish that a null result came from the
   mechanism rather than the implementation.
-- **133 dated architectural decisions** with rationale and rejected
+- **134 dated architectural decisions** with rationale and rejected
   alternatives, referenced by 75 distinct IDs from source comments.
 
 ---
@@ -441,10 +441,18 @@ Stated plainly, because a reviewer will find all of it anyway.
   shared `X-API-Key` and a burst rate cap; the 42 read endpoints are open, there
   are no user identities and no key rotation. Do not expose it to a network you
   do not control. See [SECURITY.md](SECURITY.md).
-- **The dashboard is a prototype.** 17,000 lines of React that make three real
-  network calls. Every other page renders static seed data and the simulated
-  ticker is labelled as such in code. It is honest in the source and it is not
-  finished.
+- **The dashboard is a prototype, and now says so on screen.** 18,000 lines of
+  React that make three real network calls. Twelve files call `Math.random()`;
+  seven of them are components that fabricate profit and loss, equity curves,
+  drawdown series and win/loss outcomes. Until 2026-08-21 that was honest in
+  the source and invisible in the browser, which is the wrong way round — a
+  plausible equity curve with no label is a claim about a real account. Every
+  such component now renders a "Sample data" badge, and the rule is
+  **fail-closed**: a chart renders unlabelled only when told explicitly that
+  its data is `live`, so untagged data is labelled too. A test enumerates the
+  dashboard components, finds the ones calling `Math.random()`, and fails if
+  any of them is not provenance-aware — an eighth component gets the badge by
+  default rather than by someone remembering (DEC-2026-08-21-003).
 - **No trained model.** There is no estimator here. The work adjacent to machine
   learning is the infrastructure and the evaluation discipline: point-in-time
   feature resolution, leakage audits, multiple-comparisons correction, holdout
@@ -504,7 +512,7 @@ Stated plainly, because a reviewer will find all of it anyway.
 **Engineering**
 
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) · [docs/API_CONTRACT.md](docs/API_CONTRACT.md) · [docs/INDICATOR_SPECIFICATION.md](docs/INDICATOR_SPECIFICATION.md)
-- [.claude/DECISIONS.md](.claude/DECISIONS.md) — 133 decisions with rationale and rejected alternatives
+- [.claude/DECISIONS.md](.claude/DECISIONS.md) — 134 decisions with rationale and rejected alternatives
 - [docs/operations/](docs/operations/) — kill-switch runbook, scheduled jobs
 - [docs/PRODUCTION_READINESS_ASSESSMENT.md](docs/PRODUCTION_READINESS_ASSESSMENT.md) — measured gaps and the plan
 

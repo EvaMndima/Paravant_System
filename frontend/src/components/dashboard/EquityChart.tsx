@@ -4,11 +4,14 @@ import { AreaChart } from '@/components/charts/AreaChart';
 import type { AreaChartData } from '@/components/charts/AreaChart';
 import { GlassCard } from '@/components/ui/GlassCard';
 import { Badge } from '@/components/ui/Badge';
+import { SyntheticDataBadge } from '@/components/ui/SyntheticDataBadge';
 import { cn } from '@/lib/utils';
+import { requiresSyntheticLabel, resolveProvenance } from '@/lib/provenance';
+import type { ProvenanceProps } from '@/lib/provenance';
 
 export type EquityTimeRange = '1D' | '1W' | '1M' | '3M' | '1Y' | 'ALL';
 
-export interface EquityChartProps {
+export interface EquityChartProps extends ProvenanceProps {
   data?: AreaChartData[];
   height?: number;
   title?: string;
@@ -48,6 +51,7 @@ const RANGE_POINTS: Record<EquityTimeRange, number> = {
 
 export const EquityChart: React.FC<EquityChartProps> = ({
   data,
+  dataProvenance,
   height = 220,
   title = 'Portfolio Equity',
   startingCapital = 100_000,
@@ -60,6 +64,9 @@ export const EquityChart: React.FC<EquityChartProps> = ({
     return generateEquity(RANGE_POINTS[range], startingCapital);
   }, [data, range, startingCapital]);
 
+  // Generated data is synthetic no matter what the caller declared.
+  const provenance = resolveProvenance(dataProvenance, data);
+
   const first = chartData[0]?.value ?? startingCapital;
   const last = chartData[chartData.length - 1]?.value ?? startingCapital;
   const absChange = last - first;
@@ -71,9 +78,12 @@ export const EquityChart: React.FC<EquityChartProps> = ({
       {/* Header */}
       <div className="flex items-start justify-between">
         <div className="space-y-0.5">
-          <h3 className="text-xs font-mono uppercase tracking-widest text-obsidian-400/50 dark:text-paper-100/50">
-            {title}
-          </h3>
+          <div className="flex items-center gap-2">
+            <h3 className="text-xs font-mono uppercase tracking-widest text-obsidian-400/50 dark:text-paper-100/50">
+              {title}
+            </h3>
+            {requiresSyntheticLabel(provenance) && <SyntheticDataBadge compact />}
+          </div>
           <div className="flex items-baseline gap-3">
             <span className="text-2xl font-mono font-bold text-obsidian-400 dark:text-paper-100">
               ${last.toLocaleString()}
