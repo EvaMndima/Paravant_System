@@ -200,15 +200,28 @@ class TestStrategyAssignmentModel:
         db_session.add(strategy)
         db_session.commit()
 
-        for status in AssignmentStatus:
+        # A distinct strategy per status. The original loop reused one
+        # (account, strategy) pair for all three, which only worked because
+        # nothing enforced uniqueness -- the test was incidentally depending on
+        # a missing constraint while claiming to test enum round-tripping.
+        # Decision: DEC-2026-08-21-004
+        for index, status in enumerate(AssignmentStatus):
+            per_status_strategy = Strategy(
+                name=f"Test {status.value}",
+                type="trend_following",
+                template_id=f"test_template_{index}",
+                status="draft",
+            )
+            db_session.add(per_status_strategy)
+            db_session.commit()
+
             assignment = StrategyAssignment(
                 account_id=account.id,
-                strategy_id=strategy.id,
-            symbol="BTCUSDT",
-            timeframe="1h",
+                strategy_id=per_status_strategy.id,
+                symbol="BTCUSDT",
+                timeframe="1h",
                 status=status,
             )
             db_session.add(assignment)
             db_session.commit()
             assert assignment.status == status
-            db_session.rollback()

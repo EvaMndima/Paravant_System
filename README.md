@@ -388,8 +388,8 @@ Highlights:
   with the caveat that the generators themselves sit at 13-21% line coverage, so
   the suite does not independently establish that a null result came from the
   mechanism rather than the implementation.
-- **134 dated architectural decisions** with rationale and rejected
-  alternatives, referenced by 75 distinct IDs from source comments.
+- **135 dated architectural decisions** with rationale and rejected
+  alternatives, referenced by 77 distinct IDs from source comments.
 
 ---
 
@@ -512,7 +512,7 @@ Stated plainly, because a reviewer will find all of it anyway.
 **Engineering**
 
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) · [docs/API_CONTRACT.md](docs/API_CONTRACT.md) · [docs/INDICATOR_SPECIFICATION.md](docs/INDICATOR_SPECIFICATION.md)
-- [.claude/DECISIONS.md](.claude/DECISIONS.md) — 134 decisions with rationale and rejected alternatives
+- [.claude/DECISIONS.md](.claude/DECISIONS.md) — 135 decisions with rationale and rejected alternatives
 - [docs/operations/](docs/operations/) — kill-switch runbook, scheduled jobs
 - [docs/PRODUCTION_READINESS_ASSESSMENT.md](docs/PRODUCTION_READINESS_ASSESSMENT.md) — measured gaps and the plan
 

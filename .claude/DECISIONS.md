@@ -3027,13 +3027,35 @@ parameters:
 
 ---
 
+### DEC-2026-08-21-004: Uniqueness of (account_id, strategy_id) is declared on the model
+- **Decision:** `StrategyAssignment` declares `UniqueConstraint("account_id", "strategy_id")` in `__table_args__`. `test_duplicate_strategy_assignment_rejected` asserts `IntegrityError` on the duplicate and that the original row survives. The Alembic migration that previously held the constraint alone is kept and remains correct.
+- **Context:** DEC-2026-02-09-001 established the business rule -- one strategy instance per account -- and implemented it in `alembic/versions/20260209_add_unique_constraint_strategy_assignments.py`. **No runtime invokes Alembic.** Every path that creates a schema calls `Base.metadata.create_all()`, so the constraint has never existed in any running database. The rule was documented, implemented, referenced from the decision log, and enforced by nothing, for six months.
+- **Rationale:**
+  - **The model is where the constraint has to be, because the model is what builds the schema.** A migration is the right place for a constraint in a project that runs its migrations. This one does not. Until that changes -- and it is a separate decision whether it should -- `create_all()` is the schema authority and anything absent from the model is absent from production.
+  - **The test named for the protection could not fail.** It added a duplicate, called `db_session.commit()`, and asserted nothing, under a comment reading "This may or may not fail depending on constraints" and a TODO. It appeared in every CI run as a passing constraint-violation test. That is worse than no test: an absent test prompts someone to write one, a vacuous test tells them it is already covered.
+  - **Mutation-tested.** Removing the constraint from the model produces `DID NOT RAISE <class 'sqlalchemy.exc.IntegrityError'>`. Restoring it returns to green. The test now discriminates.
+  - **The assertion checks the survivor, not just the exception.** A rejected duplicate that also rolled back the original would satisfy `pytest.raises` and be a data-loss bug. Asserting that exactly one row remains, and that it is the first one, costs three lines.
+  - **One existing test was silently depending on the absence.** `test_assignment_status_enum` looped over all three `AssignmentStatus` values creating an assignment for the same `(account, strategy)` each time -- three duplicates -- while claiming to test enum round-tripping. It passed only because nothing enforced uniqueness. Rewritten to use a distinct strategy per status, which is what it meant to do. Finding a test that depends on a missing constraint is itself evidence the constraint was load-bearing and absent.
+- **Alternatives Considered:**
+  - **Run Alembic at deploy time instead:** REJECTED for this change, not on the merits. Making Alembic the schema authority is a real option and a bigger decision -- it needs a migration for every model change made in the last six months, and an upgrade path for the existing Neon database. Declaring the constraint on the model fixes the enforcement gap today without pre-empting that.
+  - **Delete the migration as dead:** REJECTED - it is correct, and it becomes live the moment the chain is run. Deleting it would also delete the record of when the rule was introduced.
+  - **Leave the test asserting nothing and add a new one:** REJECTED - the misleading name is the problem. A test called `test_duplicate_strategy_assignment_rejected` that does not test rejection should either test it or not exist.
+- **Status:** ACTIVE
+- **Date Decided:** 2026-08-21
+- **Implemented By:** Phase 1 structural guards (group 1.4)
+- **Affected Files:** `src/data/models/strategy_assignment.py`, `tests/integration/test_real_world_scenarios.py`, `tests/unit/data/test_models_signal_assignment.py`, `alembic/versions/20260209_add_unique_constraint_strategy_assignments.py` (batch mode, so the chain can apply on SQLite at all).
+- **Measured:** mutation-tested at 1 failure; full suite green.
+- **References:** DEC-2026-02-09-001 (the rule this finally enforces), `docs/PRODUCTION_READINESS_ASSESSMENT.md` row 16, `docs/ARCHITECTURE.md` "How the schema is actually created".
+
+---
+
 ---
 
 **End of Decisions Log**
 
-**Total Decisions:** 134 active, 0 superseded, 5 locked (1 amended); DEC-2026-06-04-013 amended
+**Total Decisions:** 135 active, 0 superseded, 5 locked (1 amended); DEC-2026-06-04-013 amended
 **Last Updated:** 2026-08-21
-**Next Decision ID:** DEC-2026-08-21-004
+**Next Decision ID:** DEC-2026-08-21-005
 
 > Count corrected 2026-08-14. This footer read "107 active" while the file held
 > 124 real decision entries -- the count had drifted as decisions were appended
