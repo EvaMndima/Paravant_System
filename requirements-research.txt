@@ -18,7 +18,7 @@ scipy>=1.11           # optional DSR cross-check in tests; stats for later phase
 statsmodels>=0.14     # time-series + walk-forward statistics (Phase R1+)
 scikit-learn>=1.3     # feature analysis, regime classification (Phase R2+)
 optuna>=3.4           # Bayesian parameter optimization (Phase R3)
-arch>=6.2             # GARCH / tail-risk modeling (later phases)
+arch>=8.0.0             # GARCH / tail-risk modeling (later phases)
 
 # Config + serialization.
 PyYAML>=6.0           # hypothesis ledger + strategy biographies (canonical store)
