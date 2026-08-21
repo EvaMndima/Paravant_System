@@ -38,7 +38,7 @@ pip-audit==2.10.1
 # mypy reports import-untyped without these. All four were installed on the
 # development machine and declared nowhere, so mypy passed locally and failed on
 # a clean runner -- discovered three separate times before this file was fixed.
-types-PyYAML==6.0.12.20250915
+types-PyYAML==6.0.12.20260815
 types-psutil==7.2.2.20260518
 types-requests==2.33.0.20260712
 pandas-stubs==3.0.0.260204
