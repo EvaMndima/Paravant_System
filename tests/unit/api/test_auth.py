@@ -242,19 +242,23 @@ class TestMutatingRouteCoverage:
         """Enumerate (method, concrete path) for every mutating route.
 
         Path parameters are replaced with a placeholder. The value is never
-        used: middleware runs before routing, so the 401 does not depend on the
-        path resolving to a handler.
+        used: middleware runs before routing, so the 401 does not depend on
+        the path resolving to a handler.
         """
+        from fastapi.routing import iter_route_contexts
         from src.api.main import app
 
         found: list[tuple[str, str]] = []
-        for route in app.routes:
-            methods = getattr(route, "methods", None)
-            path = getattr(route, "path", None)
-            if not methods or not path:
+        for context in iter_route_contexts(app.routes):
+            path = context.path
+            methods = context.methods or set()
+
+            if not path.startswith("/api/v1"):
                 continue
+
             for method in sorted(set(methods) & MUTATING_METHODS):
                 found.append((method, _PATH_PARAM.sub("test-id", path)))
+
         return found
 
     def test_the_app_actually_has_mutating_routes(self):

@@ -197,25 +197,30 @@ def count_decision_ids_in_source() -> int:
 def count_api_endpoints() -> int:
     """Routes registered under /api/v1.
 
-    Imports the real app rather than counting decorators, so a router that is
-    defined but never included is not counted.
+    Uses FastAPI's public route-context traversal so included routers are
+    counted even though app.routes now contains intermediate _IncludedRouter
+    nodes.
     """
+    from fastapi.routing import iter_route_contexts
     from src.api.main import app
 
-    return len(
-        [r for r in app.routes if str(getattr(r, "path", "")).startswith("/api/v1")]
+    return sum(
+        1
+        for context in iter_route_contexts(app.routes)
+        if context.path.startswith("/api/v1")
     )
 
 
 def count_mutating_endpoints() -> int:
     """Routes under /api/v1 whose method can change state."""
+    from fastapi.routing import iter_route_contexts
     from src.api.auth import MUTATING_METHODS
     from src.api.main import app
 
     return sum(
-        len(set(getattr(route, "methods", None) or set()) & MUTATING_METHODS)
-        for route in app.routes
-        if str(getattr(route, "path", "")).startswith("/api/v1")
+        len(set(context.methods or set()) & MUTATING_METHODS)
+        for context in iter_route_contexts(app.routes)
+        if context.path.startswith("/api/v1")
     )
 
 
