@@ -353,8 +353,8 @@ Deeper detail: **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)** ·
 
 | Layer | Files | Lines | Notes |
 |---|---|---|---|
-| `src/` application | 169 `.py` | 49,831 | API, risk, execution, indicators, strategies |
-| `tests/` | 142 `.py` | 39,580 | 2,152 tests: 2,115 pass, 37 skip, 0 fail |
+| `src/` application | 169 `.py` | 49,701 | API, risk, execution, indicators, strategies |
+| `tests/` | 142 `.py` | 39,676 | 2,150 tests: 2,113 pass, 37 skip, 0 fail |
 | `frontend/src/` | 101 `.ts`/`.tsx` | 18,503 | React 19 dashboard — see caveat below |
 | `scripts/` | 25 | 12,064 | Live loop, paper loop, sweeps, reporting |
 | `research/` | 32 `.py` | 6,493 | DSR, effective-K, cost model, feature store |
@@ -388,8 +388,8 @@ Highlights:
   with the caveat that the generators themselves sit at 13-21% line coverage, so
   the suite does not independently establish that a null result came from the
   mechanism rather than the implementation.
-- **138 dated architectural decisions** with rationale and rejected
-  alternatives, referenced by 77 distinct IDs from source comments.
+- **139 dated architectural decisions** with rationale and rejected
+  alternatives, referenced by 78 distinct IDs from source comments.
 
 ---
 
@@ -437,7 +437,7 @@ Stated plainly, because a reviewer will find all of it anyway.
 - **Not a profitable trading system.** No strategy here passes its own
   validation gates. If it had an edge, this README would be a different
   document and probably would not exist.
-- **Barely authenticated.** The 21 state-mutating endpoints sit behind one
+- **Barely authenticated.** The 19 state-mutating endpoints sit behind one
   shared `X-API-Key` and a burst rate cap; the 42 read endpoints are open, there
   are no user identities and no key rotation. Do not expose it to a network you
   do not control. See [SECURITY.md](SECURITY.md).
@@ -466,12 +466,25 @@ Stated plainly, because a reviewer will find all of it anyway.
   dashboard is unverified. This line read "the dashboard has no tests" until
   2026-08-21; that was true when written and was left standing after the Vitest
   job landed on 2026-08-16, contradicting the CI table further down this file.
-- **Not everything is fixed.** `orchestrator.py` is a fully built, tested main
-  loop that nothing calls — the deployed path reimplements it, and the two have
-  not been reconciled. Six methodology defects in the research layer remain open
-  and severity-ranked. Both are enumerated in
-  [docs/PRODUCTION_READINESS_ASSESSMENT.md](docs/PRODUCTION_READINESS_ASSESSMENT.md)
-  and [docs/research/RESEARCH_FIXLIST.md](docs/research/RESEARCH_FIXLIST.md).
+- **`src/core/orchestrator.py` is 1,850 lines that nothing calls, deliberately
+  kept.** It is a fully built, tested main loop with 68% coverage, and no
+  application code references it — the last two callers, `/system/start` and
+  `/system/stop`, were removed on 2026-08-21 because they needed an orchestrator
+  instance nothing ever supplied and returned 503 in every environment for their
+  entire existence. Wiring it was considered and rejected: it would promote a
+  loop that has never executed once over one that has, on no evidence, and it
+  would not deliver the risk layer either, because `orchestrator.py` has no
+  circuit-breaker, filter or `PositionSizer` references of its own. That moves
+  which loop is unwired rather than fixing it. Four of its five classes are
+  components the deployed loop genuinely lacks, which is why the file stays.
+  Written up as a case study in
+  [docs/AI_ASSISTED_DEVELOPMENT.md](docs/AI_ASSISTED_DEVELOPMENT.md) §4.2 —
+  local coherence is not integration.
+- **Six methodology defects in the research layer remain open** and
+  severity-ranked in
+  [docs/research/RESEARCH_FIXLIST.md](docs/research/RESEARCH_FIXLIST.md); the
+  engineering findings are in
+  [docs/PRODUCTION_READINESS_ASSESSMENT.md](docs/PRODUCTION_READINESS_ASSESSMENT.md).
 - **The engine ran without connection liveness checking for six months, and it
   cost an outage.** `create_engine` was called with no pool configuration from
   the first commit. That is invisible against local SQLite and wrong against
@@ -512,7 +525,7 @@ Stated plainly, because a reviewer will find all of it anyway.
 **Engineering**
 
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) · [docs/API_CONTRACT.md](docs/API_CONTRACT.md) · [docs/INDICATOR_SPECIFICATION.md](docs/INDICATOR_SPECIFICATION.md)
-- [.claude/DECISIONS.md](.claude/DECISIONS.md) — 138 decisions with rationale and rejected alternatives
+- [.claude/DECISIONS.md](.claude/DECISIONS.md) — 139 decisions with rationale and rejected alternatives
 - [docs/operations/](docs/operations/) — kill-switch runbook, scheduled jobs
 - [docs/PRODUCTION_READINESS_ASSESSMENT.md](docs/PRODUCTION_READINESS_ASSESSMENT.md) — measured gaps and the plan
 

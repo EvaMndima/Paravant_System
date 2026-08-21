@@ -40,7 +40,7 @@ Each module states what it owns and, as importantly, what it does not.
 | Execution | `src/core/execution/` | Order state machine, position tracking, P&L accounting, slippage/fill measurement | Whether an order *should* be placed |
 | Risk | `src/core/risk/` | Pre-trade checks, circuit breakers, kill switch, sizing, filters | Signal generation, execution |
 | Strategy | `src/core/strategy/` | Signal generation, backtest, paper engine, regime routing | Risk decisions, execution |
-| Indicators | `src/core/indicators/` | 19 indicator implementations, caching, resampling | Trading decisions |
+| Indicators | `src/core/indicators/` | 14 indicator implementations, plus caching, resampling and the factory | Trading decisions |
 | Data | `src/data/` | 15 ORM models, `DataStore` facade, market data, validators, cache | Business rules |
 | Alerting | `src/core/alerting/` | Telegram channel, 15 trigger types, scheduler, escalation | Deciding what is alarming |
 | Config | `src/core/config/` | YAML + env layering, templates, risk profiles, backup | Runtime mutation of config |
@@ -117,10 +117,33 @@ Two properties of this path matter more than the rest:
 condition, on every cycle, before a strategy is even considered. Ordering here
 is a correctness property, not a style choice.
 
-**Paper and live diverge only at `ExecutionInterface`.** Identical signal
-generation, identical risk checks, identical position tracking. This is what
-makes a paper record admissible as evidence for promotion to live — the two are
-not separate implementations that could drift.
+**Paper and live are separate implementations, and the promotion gate assumes
+they are not.**
+
+> **CORRECTED 2026-08-21.** This paragraph read: "Paper and live diverge only at
+> `ExecutionInterface`. Identical signal generation, identical risk checks,
+> identical position tracking. This is what makes a paper record admissible as
+> evidence for promotion to live — the two are not separate implementations that
+> could drift."
+>
+> They are two scripts of 2,110 and 946 lines sharing exactly one module-level
+> function name, `main`:
+>
+> ```bash
+> comm -12 <(grep -oE "^(async )?def [a-z_]+" scripts/run_live_trading.py | sed 's/async //' | sort -u) >          <(grep -oE "^(async )?def [a-z_]+" scripts/run_paper_trading.py | sed 's/async //' | sort -u)
+> # def main
+> ```
+>
+> `run_paper_trading.py` contains zero `kill_switch` references. Paper delegates
+> execution to `PaperTradingEngine`; live reimplements stop and take-profit
+> inline. They share the signal path — fetcher, indicators, generators, regime
+> detection — and diverge across the whole of execution and risk, which is
+> exactly where paper results are being used to predict live behaviour.
+>
+> Marked rather than replaced because the claim was load-bearing: it is the
+> stated justification for the promotion gate. Corrected in `README.md` on the
+> same date; this copy was missed on the first pass and found by grepping for
+> the old claim rather than the new one.
 
 ---
 
@@ -262,7 +285,7 @@ Both are tracked in
 
 ## 8. API surface
 
-FastAPI. **63 endpoints across 13 route modules, 21 of which mutate state**,
+FastAPI. **61 endpoints across 13 route modules, 19 of which mutate state**,
 plus 4 root endpoints (`/health`, `/ready`, `/health/detailed`, `/`).
 
 Middleware: `request_logger` (structured logs with request IDs) and
@@ -272,7 +295,7 @@ vulnerability (DEC-2026-02-08-004).
 
 ### 8.1 Authentication
 
-The 21 state-mutating endpoints require a shared secret in an `X-API-Key`
+The 19 state-mutating endpoints require a shared secret in an `X-API-Key`
 header. The 42 read endpoints do not: the dashboard is a read-only browser
 client, and gating it would break that client for no safety gain.
 

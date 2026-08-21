@@ -28,7 +28,7 @@ Git history: 102 commits, 2026-02-08 through 2026-06-11, single author.
 
 ### 1.2 Backend application (`src/`)
 
-**API layer** — FastAPI, 13 route modules, 63 endpoints (21 state-mutating).
+**API layer** — FastAPI, 13 route modules, 61 endpoints (19 state-mutating).
 `accounts`, `backtest`, `dashboard`, `events`, `execution`, `orders`,
 `paper_trading`, `pnl`, `positions`, `regime`, `risk`, `strategies`, `system`.
 Middleware: structured request logging, global error handler. Explicit CORS
@@ -221,7 +221,7 @@ mock the strategy engine rather than exercising the real signature.
 ### 2.5 Security posture
 
 > **UPDATED 2026-08-14.** The finding below described the state at `622ac49`.
-> Item 3.1 has since been implemented (DEC-2026-08-14-001): the 21 mutating
+> Item 3.1 has since been implemented (DEC-2026-08-14-001): the 19 mutating
 > endpoints now require a shared `X-API-Key`, enforced by method-based
 > middleware in `src/api/auth.py` and asserted route-by-route by
 > `tests/unit/api/test_auth.py::TestMutatingRouteCoverage`. Outside development
@@ -232,8 +232,9 @@ mock the strategy engine rather than exercising the real signature.
 > per process. Finding #1 below is downgraded from Critical to Medium
 > accordingly.
 
-No authentication exists on the API. All 63 endpoints are open, including
-21 mutating endpoints: place order, cancel order, close position, activate and
+No authentication exists on the API. All sixty-three endpoints are open,
+including twenty-one mutating endpoints: place order, cancel order, close
+position, activate and
 deactivate the kill switch, start and stop paper trading sessions, mutate
 strategy parameters, and change system configuration.
 
@@ -371,7 +372,7 @@ finding it sat next to survives and is strengthened -- see row 21.
 - The research validation layer: DSR, effective-K, pre-registered gates,
   cost modelling, negative-space tracking. This is stronger than what most
   retail quant projects attempt, and it is the differentiator.
-- The decision log: 138 dated decisions with rationale and alternatives.
+- The decision log: 139 dated decisions with rationale and alternatives.
 - The indicator library and data models: well typed, well tested, well factored.
 
 ### 3.2 What blocks a "production ready" verdict
@@ -388,7 +389,7 @@ Status column added 2026-08-14. "Resolved" means verified against the current
 
 | # | Finding | Severity | Status |
 |---|---|---|---|
-| 1 | No API authentication on 21 mutating endpoints incl. order placement and kill switch | ~~Critical~~ Medium | Partly resolved 2026-08-14 — mutating endpoints gated (DEC-2026-08-14-001) and rate-capped (DEC-2026-08-14-003); reads still open, no identities, no key rotation |
+| 1 | No API authentication on twenty-one mutating endpoints incl. order placement and kill switch | ~~Critical~~ Medium | Partly resolved 2026-08-14 — mutating endpoints gated (DEC-2026-08-14-001) and rate-capped (DEC-2026-08-14-003); reads still open, no identities, no key rotation |
 | 2 | No CI — nothing verifies any commit | Critical | Resolved — 7 jobs in `.github/workflows/ci.yml` |
 | 3 | 9 failing tests on `master` | High | Resolved — 1,899 pass, 0 fail, 0 errors |
 | 4 | Orchestrator startup check calls a function with 4 wrong kwargs; error swallowed | High | Resolved — check is read-only; `TypeError`/`AttributeError` now propagate |
@@ -420,8 +421,10 @@ Status column added 2026-08-14. "Resolved" means verified against the current
 | 30 | `RESEARCH_FIXLIST.md` marks 1 of 13 defects resolved; `SECURITY.md` names 6 as open | Medium | **Open** — status lives only in the pointing document. A reader following the link cannot tell which entries are live |
 | 31 | `.gitleaks.toml` exists and no CI job or hook runs it; no SAST; Docker image never built; migrations never exercised | Medium | **Partly resolved 2026-08-21** — gitleaks now runs over the whole history on every push, pinned to 8.30.1 and verified to fail on a planted key (DEC-2026-08-21-006); migrations exercised by the `migrations` job (DEC-2026-08-21-005). Still **open**: no SAST over first-party code, and the Docker image is still never built in CI |
 | 32 | 7 dashboard components fabricate P&L, equity, drawdown and win/loss with `Math.random()` | Medium | Resolved 2026-08-21 — all seven render a fail-closed "Sample data" badge; `provenance.test.tsx` enumerates dashboard sources and fails on any fabricating component that is not provenance-aware (DEC-2026-08-21-003). The generators remain until item 3.4 wires the pages |
-| 33 | `set_orchestrator()` is defined and called nowhere, so `/system/start` and `/system/stop` return 503 in every environment | Medium | **Open** — `src/api/routes/system.py:157`, `:271`, `:331` |
+| 33 | `set_orchestrator()` is defined and called nowhere, so `/system/start` and `/system/stop` return 503 in every environment | Medium | Resolved 2026-08-21 — both endpoints and the setter removed; `orchestrator.py` deliberately kept and its unreferenced status stated in the README rather than only in the case study (DEC-2026-08-21-008). API surface 63 -> 61 endpoints, 21 -> 19 mutating |
 | 34 | `test_unhandled_exception_returns_500` is `pass  # TODO` | Low | **Open** — a named test for the 500 path that contains no test, counted in the passing total |
+| 36 | `src/api/main.py` freezes `ENVIRONMENT` at import while `src/api/auth.py` reads it at call time | Medium | **Open** — the two can disagree, and in tests whichever module imports `main` first configured the app for the session. `tests/conftest.py` now pins it before collection, which is a workaround, not a fix. See finding S-4 |
+| 37 | `test_all_checks_pass` read the host's real free disk space | Low | Resolved 2026-08-21 — began failing when a drive filled to 0.56GB, with no change to code or test. `shutil.disk_usage` is now mocked, as `psutil.virtual_memory` already was in the same test |
 | 35 | Three per-machine assistant config files were tracked, leaking a foreign username and a predecessor project path | Low | Resolved 2026-08-21 — untracked and ignored; history deliberately not rewritten (DEC-2026-08-21-001) |
 
 ### 3.3 Positioning note
@@ -620,7 +623,7 @@ what the repo looks like and what it is.
       no rate budget. 27 tests in `tests/unit/api/test_rate_limit.py`.
 - [ ] 3.3 Generate a typed API client for the frontend from the OpenAPI schema
       (`openapi-typescript`). This kills an entire class of drift between the
-      63 endpoints and the UI types.
+      61 endpoints and the UI types.
 - [ ] 3.4 Replace hardcoded page data with real queries, in priority order:
       1. `CockpitPage` — positions, PnL, activity, system status
       2. `PortfolioPage` — real equity curve from `equity_snapshots`

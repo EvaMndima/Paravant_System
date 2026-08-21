@@ -35,7 +35,7 @@ script had an off-by-one in one of its figures until 2026-08-17 -- see 4.12.*
 
 A crypto trading system: Binance data ingestion, 14 indicators, 29 signal
 generators, a layered risk system, an order state machine, backtest and paper
-engines sharing the live code path, a FastAPI surface of 63 endpoints, a React
+engines sharing the live code path, a FastAPI surface of 61 endpoints, a React
 dashboard, and a statistical research layer whose purpose is to reject the
 system's own strategies.
 
@@ -215,17 +215,42 @@ errors now propagate instead of being reported as check failures
 `src/core/orchestrator.py` is 1,850 lines implementing an eight-step startup
 sequence, a kill-switch-first main loop, entry-timing coordination, graceful
 degradation, and emergency shutdown with position reconciliation. It is
-coherent, documented, and 71% covered by tests.
+coherent, documented, and 68% covered by tests.
 
-Nothing calls it. `set_orchestrator()` is defined in the API layer and invoked
-nowhere, so the module-level handle is permanently `None` and `/system/start`
-and `/system/stop` cannot work. The system that actually deploys is
-`scripts/run_live_trading.py`, which independently reimplements the loop.
+Nothing calls it. `set_orchestrator()` was defined in the API layer and invoked
+nowhere, so the module-level handle was permanently `None` and `/system/start`
+and `/system/stop` returned 503 in every environment they ever ran in. The
+system that actually deploys is `scripts/run_live_trading.py`, which
+independently reimplements the loop.
 
 No test failed, because the orchestrator's tests test the orchestrator. Local
 coherence is not integration, and a test suite scoped to a module cannot tell
-you the module is orphaned. This is recorded rather than quietly deleted; it is
-a real duplication and it is unresolved.
+you the module is orphaned.
+
+**Updated 2026-08-21.** The two endpoints and the setter were removed
+(DEC-2026-08-21-008), which makes the file entirely unreferenced by application
+code rather than reachable-in-principle. Two things were learned in deciding
+that, and both sharpen the lesson rather than closing it.
+
+The first: the tests covering those endpoints passed by supplying a mock
+orchestrator through `init_system_routes(orchestrator=...)`. The application
+never does. So the tests were correct about behaviour that existed in no
+environment — a more specific failure than "tests scoped to a module", and a
+harder one to notice, because the test *did* cross the module boundary. It
+crossed it into a configuration nothing produces.
+
+The second: wiring the orchestrator was considered and rejected, and the reason
+matters more than the decision. It has no `circuit_breaker`, `time_filter`,
+`event_filter` or `PositionSizer` references of its own — so promoting it would
+not have delivered the risk layer, only moved which loop lacks it. Two
+independently coherent implementations had each omitted the same integration,
+which is what this failure mode looks like when it happens twice.
+
+The file is kept. Four of its five classes — `StartupChecklist`,
+`EntryCoordinator`, `HealthChecker`, `DegradationManager` — are working
+components the deployed loop lacks entirely. Only the `Orchestrator` class
+duplicates it. Treating the file as one orphan was itself a small instance of
+the same error: judging a unit by its container.
 
 ### 4.3 Namespace collisions from incremental refactors
 

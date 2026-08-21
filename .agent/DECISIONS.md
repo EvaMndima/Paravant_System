@@ -3140,13 +3140,40 @@ parameters:
 
 ---
 
+### DEC-2026-08-21-008: Remove /system/start and /system/stop; keep orchestrator.py
+- **Decision:** Delete the `/system/start` and `/system/stop` endpoints, `set_orchestrator()`, and the now-unreferenced `ActionResponse` model from `src/api/routes/system.py`. Keep `/system/status`, which degrades gracefully. **Keep `src/core/orchestrator.py` in full.** Do not wire it.
+- **Context:** Both endpoints required an orchestrator instance. `main.py` calls `init_system_routes(store=..., event_bus=...)` without one, and `set_orchestrator()` was invoked nowhere, so the module handle was permanently `None` and both endpoints returned 503 in every environment they ever ran in. Removing them leaves `orchestrator.py` -- 1,850 lines, 68% covered -- entirely unreferenced by application code.
+- **Rationale:**
+  - **Wiring it would have moved which loop is unwired, not fixed it.** `orchestrator.py` has zero `circuit_breaker`, `time_filter`, `event_filter`, `volatility` or `PositionSizer` references of its own. Promoting it would not have delivered the risk package. Two independently coherent implementations had each omitted the same integration.
+  - **It would promote a loop that has never executed over one that has.** `scripts/run_live_trading.py` has run and produced trades, including losses that are recorded in its own comments. The `Orchestrator` class has never run once. Choosing the untested implementation over the one with a track record, on no evidence, while the live deployment may still be up, is the wrong direction.
+  - **The file is not one orphan; it is five classes and only one is orphaned.** `StartupChecklist`, `EntryCoordinator`, `HealthChecker` and `DegradationManager` are working, tested components the deployed loop lacks -- `run_live_trading.py` performs no startup validation at all, and its degradation handling is a consecutive-failure counter. Deleting the file to remove one dead class would take four useful ones with it. Treating the file as a unit was itself a small instance of the error it documents.
+  - **The status belongs on the front page, not two links away.** Group 1.2 found `audit/AUDIT.md` had correctly disclosed the risk-layer gap on 2026-08-08 while `README.md` kept the wrong diagram for thirteen days -- the owning document was right and the front page contradicted it. A reviewer who greps and finds 1,850 orphaned lines with no explanation on the front page has found a defect; one who reads the README first has found an exhibit. The known-limitations section now states it directly and points at `AI_ASSISTED_DEVELOPMENT.md` section 4.2, which is the owning write-up.
+  - **Removing dead controls is not the same as fixing the system.** These endpoints were a control surface that could not work. Deleting them makes the API honest about what it offers; it does not close the gap between the risk package and the deployed loop, and the README says so.
+- **Found while doing this, and worth more than the removal:**
+  - **The tests for these endpoints passed by constructing a state production never reaches.** Both supplied a mock orchestrator through `init_system_routes(orchestrator=...)`. They were correct about behaviour that existed in no environment. That is a sharper failure than "tests scoped to a module do not see integration" -- the test *did* cross the module boundary, into a configuration nothing produces.
+  - **`src/api/main.py` freezes `ENVIRONMENT` at import, so whichever test imports it first configures the application for the whole session.** Several tests legitimately set `ENVIRONMENT=production` before importing it, to assert startup aborts without an API key. When one of those ran first, the app held `ALLOWED_ORIGINS_PROD` -- empty -- and `test_401_carries_cors_headers` failed while passing in isolation. Order dependence with no symptom in the test that caused it. `tests/conftest.py` now pins the environment and imports the API module before collection, which makes it deterministic. This is a workaround; the underlying split -- `main.py` reading at import, `auth.py` reading at call time -- is finding S-4.
+  - **`test_all_checks_pass` read the host's free disk space** and began failing when a drive filled to 0.56GB. Nothing in the code or the test had changed. The memory check in the same test was already mocked for this exact reason; the disk check now is too.
+- **Alternatives Considered:**
+  - **Wire the orchestrator and refactor:** REJECTED - see rationale. It is a 1,850-line behaviour change that delivers no risk coverage, and it presupposes a decision about whether this system trades again that has not been taken.
+  - **Delete `orchestrator.py`:** REJECTED - four of five classes are useful, and `StartupChecklist` is the near-term win. The deployed loop validates nothing at startup; a disk check would have caught the condition that surfaced during this very change.
+  - **Leave the endpoints returning 503:** REJECTED - two endpoints in the OpenAPI schema that cannot work in any environment are a claim the API does not honour.
+  - **Say nothing on the front page and rely on the case study:** REJECTED explicitly, on the group 1.2 precedent.
+- **Status:** ACTIVE
+- **Date Decided:** 2026-08-21
+- **Implemented By:** Phase 1 structural guards (group 1.4)
+- **Affected Files:** `src/api/routes/system.py`, `tests/integration/test_api.py`, `tests/unit/api/test_auth.py`, `tests/unit/test_orchestrator.py`, `tests/conftest.py`, `README.md`, `docs/PROJECT_CONTEXT.md` (4.3), `docs/ARCHITECTURE.md`, `docs/AI_ASSISTED_DEVELOPMENT.md` (4.2), `docs/PRODUCTION_READINESS_ASSESSMENT.md` (row 33).
+- **Measured:** API surface 63 -> 61 endpoints, 21 -> 19 state-mutating; 14 documented mentions of those counts updated across seven files, two of them spelled as words because they quote a superseded finding. Suite green.
+- **References:** `docs/AI_ASSISTED_DEVELOPMENT.md` 4.2 (the owning write-up), `docs/PRODUCTION_READINESS_ASSESSMENT.md` rows 13 and 33 and finding S-4, DEC-2026-08-14-001 (the auth gate whose call-time reads contrast with `main.py`'s import-time ones).
+
+---
+
 ---
 
 **End of Decisions Log**
 
-**Total Decisions:** 138 active, 0 superseded, 5 locked (1 amended); DEC-2026-06-04-013 amended
+**Total Decisions:** 139 active, 0 superseded, 5 locked (1 amended); DEC-2026-06-04-013 amended
 **Last Updated:** 2026-08-21
-**Next Decision ID:** DEC-2026-08-21-008
+**Next Decision ID:** DEC-2026-08-21-009
 
 > Count corrected 2026-08-14. This footer read "107 active" while the file held
 > 124 real decision entries -- the count had drifted as decisions were appended

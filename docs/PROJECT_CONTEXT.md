@@ -80,7 +80,7 @@ Three commitments shape almost every decision in the codebase:
    pipeline. This read "Every order passes seven independent pre-trade checks and
    five circuit breakers" until 2026-08-21, stated as a fact about live orders.
    See Section 4.2.
-3. **Decisions are written down.** 138 dated architectural decisions with rationale,
+3. **Decisions are written down.** 139 dated architectural decisions with rationale,
    alternatives considered, and status. Code is required to match them.
 
 ### 1.3 Locked scope
@@ -133,7 +133,7 @@ reports the current commit count.
 ```
 Paravant_System/
 ├── src/                      169 .py, 49,745 lines — the application
-│   ├── api/                  FastAPI: 13 route modules, 63 endpoints, 4 middleware
+│   ├── api/                  FastAPI: 13 route modules, 61 endpoints, 4 middleware
 │   ├── brokers/binance/      Exchange client, execution adapter, rate limiter
 │   ├── core/
 │   │   ├── alerting/         Telegram channel, triggers, scheduler, escalation
@@ -166,7 +166,7 @@ Paravant_System/
 ├── docs/                     72 tracked .md
 ├── config/                   settings.yaml, risk_profiles.yaml, 14 strategy templates
 ├── alembic/                  6 migrations
-└── .claude/ + .agent/        DECISIONS.md (138 decisions, dual-maintained) + rules
+└── .claude/ + .agent/        DECISIONS.md (139 decisions, dual-maintained) + rules
 ```
 
 ---
@@ -237,14 +237,47 @@ Binance REST  ->  MarketDataFetcher  ->  OHLCVSeries (in-memory, cached)
                         AlertTriggers -> Telegram
 ```
 
-The key architectural property: **paper and live share the entire code path** and
-diverge only at the `ExecutionInterface` boundary. A paper session and a live session
-run identical signal generation, identical risk checks, and identical position
-tracking. This is what makes paper results meaningful as a promotion gate.
+> **CORRECTED 2026-08-21.** This paragraph read: "The key architectural
+> property: **paper and live share the entire code path** and diverge only at
+> the `ExecutionInterface` boundary. A paper session and a live session run
+> identical signal generation, identical risk checks, and identical position
+> tracking. This is what makes paper results meaningful as a promotion gate."
+>
+> They are two scripts of 2,110 and 946 lines sharing exactly one module-level
+> function name, `main`. `run_paper_trading.py` contains zero `kill_switch`
+> references; live enforces three risk checks inline that paper does not have at
+> all. They share the signal path and diverge across the whole of execution and
+> risk.
+>
+> This was the third copy of the claim. `README.md` was corrected first,
+> `ARCHITECTURE.md` second, and this one was found by grepping for the old
+> wording rather than the new. See
+> [ARCHITECTURE.md](ARCHITECTURE.md#3-the-trading-path) for the evidence.
 
 ### 4.3 The orchestrator
 
-`src/core/orchestrator.py` (1,850 lines) is the async coordinator. It provides:
+> **Nothing calls any of this.** As of 2026-08-21 `src/core/orchestrator.py` is
+> entirely unreferenced by application code: the two API endpoints that could
+> have started it (`/system/start`, `/system/stop`) were removed because they
+> required an orchestrator instance nothing ever supplied, and returned 503 in
+> every environment for their whole existence (DEC-2026-08-21-008).
+>
+> The file is kept rather than deleted, and the distinction is between the five
+> classes in it. `StartupChecklist`, `EntryCoordinator`, `HealthChecker` and
+> `DegradationManager` are working, tested components the deployed loop lacks --
+> `scripts/run_live_trading.py` performs no startup validation at all, and its
+> degradation handling is a consecutive-failure counter. Only the `Orchestrator`
+> class itself duplicates the deployed loop.
+>
+> Wiring it was considered and rejected: it would promote a loop that has never
+> executed over one that has, on no evidence, and it would not deliver the risk
+> layer either -- `orchestrator.py` has zero `circuit_breaker`, `time_filter`,
+> `event_filter` or `PositionSizer` references of its own. That would move which
+> loop is unwired rather than fix it. Choosing a main loop and wiring the risk
+> package are one decision, to be taken after the live deployment is stopped and
+> reconciled.
+
+The file (1,850 lines) provides:
 
 - **8-step startup validation** — database reachable, config valid, broker reachable,
   account state loadable, strategies constructible, risk limits sane, kill switch
@@ -313,7 +346,7 @@ PostgreSQL on Neon.
 
 ## 6. API surface
 
-FastAPI, 63 endpoints across 13 route modules. The 21 state-mutating endpoints
+FastAPI, 61 endpoints across 13 route modules. The 19 state-mutating endpoints
 require a shared `X-API-Key` secret as of 2026-08-14 (DEC-2026-08-14-001); the
 42 read endpoints are open. The gate is method-based middleware rather than a
 per-route dependency, chosen because the latter is fail-open for endpoints
@@ -340,7 +373,7 @@ blocking, since blocking inbound would amplify a flood rather than absorb it.
 | `system` | 7 | Status, start, stop, config |
 | root | 3 | `/health`, `/ready`, `/health/detailed` |
 
-21 endpoints mutate state, including order placement, position closure, and kill
+19 endpoints mutate state, including order placement, position closure, and kill
 switch control.
 
 Middleware: structured request logging with request IDs, and a global exception
@@ -956,7 +989,7 @@ not yet — see readiness assessment 4.4.
 
 ### 18.1 The decision log
 
-138 dated architectural decisions, 3,626 lines, maintained identically in
+139 dated architectural decisions, 3,653 lines, maintained identically in
 `.claude/DECISIONS.md` and `.agent/DECISIONS.md` (verified byte-identical). Each entry
 records: decision, context, rationale, alternatives considered, status, date,
 implementing section, affected files, references.
@@ -1031,7 +1064,7 @@ readiness assessment, Section 2.1.
 
 | Dimension | State |
 |---|---|
-| Backend application | Complete and functional; 63 endpoints; mutating 21 behind a shared `X-API-Key`, reads open |
+| Backend application | Complete and functional; 61 endpoints; mutating 19 behind a shared `X-API-Key`, reads open |
 | Risk system | Complete, best-tested subsystem in the project |
 | Strategy library | 29 generators built; **0 validated** |
 | Backtest engine | Complete, O(n) optimised, equivalence-gated |

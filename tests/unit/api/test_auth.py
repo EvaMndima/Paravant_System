@@ -261,7 +261,12 @@ class TestMutatingRouteCoverage:
         """Guards the suite itself: if route registration changes shape and
         the enumeration silently returns nothing, every parametrised case below
         would vacuously pass."""
-        assert len(self._mutating_routes()) >= 20
+        # Floor lowered from 20 to 18 on 2026-08-21: /system/start and
+        # /system/stop were removed (DEC-2026-08-21-008), taking the count from
+        # 21 to 19. The floor sits just under the real count so it catches an
+        # enumeration that silently returns nothing, without breaking on every
+        # deliberate route change.
+        assert len(self._mutating_routes()) >= 18
 
     def test_every_mutating_route_rejects_an_unauthenticated_request(
         self, monkeypatch

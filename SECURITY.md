@@ -15,7 +15,7 @@ them.
 
 ### API authentication is a single shared key, and reads are not gated
 
-As of 2026-08-14 the 21 state-mutating endpoints require a shared secret in an
+As of 2026-08-14 the 19 state-mutating endpoints require a shared secret in an
 `X-API-Key` header: placing orders, cancelling orders, closing positions,
 activating and deactivating the kill switch, starting and stopping paper
 sessions, creating and mutating strategies and accounts, and starting and

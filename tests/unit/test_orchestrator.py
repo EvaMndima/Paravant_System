@@ -271,11 +271,33 @@ class TestStartupChecklist:
             )
         ]
 
-        # Mock memory check to pass (test machine may have low memory)
-        with patch("psutil.virtual_memory") as mock_mem:
+        # Memory AND disk are mocked, for the same reason: both checks read real
+        # host state, so without this the test asserts something about the
+        # machine rather than about the code.
+        #
+        # The memory mock was here from the start; the disk one was added on
+        # 2026-08-21, after this test failed on a development machine whose disk
+        # had 0.56GB free. Nothing in the code, the test or the assertion had
+        # changed -- the drive had filled. A test that passes or fails on how
+        # full a disk is will eventually go red in CI for a reason nobody can
+        # act on, which is the failure mode DEC-2026-08-14-005 describes for
+        # flaky tests generally.
+        #
+        # `_check_disk_space` itself is exercised properly by
+        # `test_disk_space_check_failure`, which controls the value it sees.
+        # Decision: DEC-2026-08-21-008
+        with (
+            patch("psutil.virtual_memory") as mock_mem,
+            patch("shutil.disk_usage") as mock_disk,
+        ):
             mock_mem.return_value = MagicMock(
                 available=1024 * 1024 * 1024,  # 1GB available
                 percent=50,
+            )
+            mock_disk.return_value = MagicMock(
+                total=100 * 1024**3,
+                used=50 * 1024**3,
+                free=50 * 1024**3,  # 50GB free, comfortably over the 1GB floor
             )
 
             checklist = StartupChecklist(**mocks)
