@@ -3049,13 +3049,45 @@ parameters:
 
 ---
 
+### DEC-2026-08-21-005: The migration chain is asserted against the ORM models in CI
+- **Decision:** `tests/integration/test_migrations.py` applies the whole Alembic chain to an empty database and asserts that `alembic.autogenerate.compare_metadata` reports **zero** differences against `Base.metadata`. A dedicated `migrations` CI job runs the alembic CLI as an operator would, then that test. A catch-up revision (`621b6ee74fd9`) adds the four objects that existed only in the models. `alembic/env.py` now honours `DATABASE_URL` and `-x sqlalchemy.url=`. `alembic/` is added to the ruff gate.
+- **Context:** Nothing had ever applied this chain. Two failures were sitting in it:
+  1. **It aborted at revision two of six.** `op.create_unique_constraint` raises `NotImplementedError: No support for ALTER of constraints in SQLite dialect` -- four revisions had never run. Fixed under DEC-2026-08-21-004 with batch mode.
+  2. **Four schema objects existed only in the models:** the `paper_trading_sessions` and `symbols` tables, the `ix_symbols_symbol` index, and the `signals.symbol` column. Six months of drift.
+
+  `paper_trading_sessions` is the consequential one. Despite the name it is where `scripts/run_live_trading.py` persists live position state, keyed by a `live_` session-id prefix. A database built from this chain would have had no table for live trading to write to.
+
+  A third defect surfaced while wiring the CI job: `alembic.ini` hardcodes `sqlalchemy.url = sqlite:///data/trading.db` and `env.py` read neither the environment nor `-x`. Running `alembic upgrade head` on a host configured for PostgreSQL would have migrated a local SQLite file and exited 0, leaving the real database untouched. Production is PostgreSQL on Neon.
+- **Rationale:**
+  - **`compare_metadata`, not a table-name comparison.** It is the function `alembic revision --autogenerate` uses to decide what a migration should contain, so an empty result is exactly the statement "autogenerate would emit nothing", which covers columns, types, nullability, indexes and constraints. A table-name diff would have caught the two missing tables and missed `signals.symbol` entirely. Mutation-testing confirms the split: removing a table fails two tests, changing one column's type from `Integer` to `String` fails only the `compare_metadata` one.
+  - **The CLI leg of the CI job is not redundant with the pytest leg.** The test exercises the Python API. A broken `alembic.ini`, a wrong `script_location`, or an `env.py` that ignores the environment all pass there and fail for a human at a terminal. The third defect above was found precisely because the job runs the CLI.
+  - **`downgrade()` is exercised too.** Every revision had one, written alongside its `upgrade()`, and none had ever run. A chain that cannot be reversed cannot be rolled back, which is the situation you discover during an incident. Downgrading to base and back is two lines and covers all six.
+  - **`test_the_chain_is_not_empty` guards the guard.** Every other assertion is about the result of applying revisions. An empty directory or a wrong `script_location` would make them all pass against a schema built from nothing -- the same shape of vacuous-success failure this file exists to catch, so it must not be possible here.
+  - **The Alembic config is built without `alembic.ini` in the test.** `env.py` calls `fileConfig(config.config_file_name)`, which reconfigures logging process-wide and disables existing loggers, including structlog, for every test running afterwards. Leaving `config_file_name` as None skips that branch.
+  - **A temporary server default on `signals.symbol`.** `ALTER TABLE ... ADD COLUMN NOT NULL` with no default fails against a table holding rows, and SQLite refuses it outright. The default is dropped immediately after, because leaving it would itself be a difference the comparison reports.
+  - **`alembic/` joins the lint gate.** It was outside `ruff check` and carried two unused imports. A directory that is now CI-tested for behaviour should not be exempt from the checks everything else gets.
+- **Alternatives Considered:**
+  - **Make Alembic the deployment schema authority now:** DEFERRED, and it is the real question this exposes. The chain and the models now agree, which is the precondition. Switching `create_all()` for `alembic upgrade head` in the deployment path needs a stamped baseline for the existing Neon database, and is its own decision.
+  - **Compare table names only:** REJECTED - misses `signals.symbol`, which is the drift most likely to recur.
+  - **Autogenerate a migration in CI and fail if non-empty:** REJECTED - equivalent in effect, slower, and writes a file to assert a property. `compare_metadata` gives the same answer directly.
+  - **Delete the chain as dead code:** REJECTED - it is the only upgrade path an existing database can ever have, and `create_all()` cannot alter an existing table. Deleting it would make the drift permanent rather than fixing it.
+  - **Leave `alembic.ini`'s hardcoded URL:** REJECTED - a migration tool that silently migrates the wrong database is worse than one that fails.
+- **Status:** ACTIVE
+- **Date Decided:** 2026-08-21
+- **Implemented By:** Phase 1 structural guards (group 1.4)
+- **Affected Files:** `tests/integration/test_migrations.py` (new, 7 tests), `alembic/versions/20260821_catch_up_schema_to_models.py` (new), `alembic/env.py`, `alembic/versions/20260209_*.py` and `20260222_*.py` (unused imports), `.github/workflows/ci.yml` (new `migrations` job, `alembic/` added to lint).
+- **Measured:** chain applies all seven revisions; `compare_metadata` reports 0 differences, down from 5; mutation-tested at 2 failures (missing table) and 1 (column type drift).
+- **References:** DEC-2026-08-21-004 (the batch-mode fix without which the chain could not be measured), `docs/PRODUCTION_READINESS_ASSESSMENT.md` row 15, `docs/ARCHITECTURE.md` "How the schema is actually created".
+
+---
+
 ---
 
 **End of Decisions Log**
 
-**Total Decisions:** 135 active, 0 superseded, 5 locked (1 amended); DEC-2026-06-04-013 amended
+**Total Decisions:** 136 active, 0 superseded, 5 locked (1 amended); DEC-2026-06-04-013 amended
 **Last Updated:** 2026-08-21
-**Next Decision ID:** DEC-2026-08-21-005
+**Next Decision ID:** DEC-2026-08-21-006
 
 > Count corrected 2026-08-14. This footer read "107 active" while the file held
 > 124 real decision entries -- the count had drifted as decisions were appended

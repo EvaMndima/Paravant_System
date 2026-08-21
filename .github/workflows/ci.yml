@@ -30,7 +30,7 @@ jobs:
           cache: pip
       - run: pip install -r requirements-dev.txt
       - name: ruff check
-        run: ruff check src/ research/ scripts/ tests/
+        run: ruff check src/ research/ scripts/ tests/ alembic/
 
   typecheck:
     name: Type check (mypy)
@@ -132,6 +132,53 @@ jobs:
             --cov=src --cov=research \
             --cov-report=term-missing:skip-covered \
             --cov-fail-under=72
+
+  migrations:
+    # Added 2026-08-21. Before this, nothing had ever applied the migration
+    # chain. It aborted at revision two of six on SQLite -- "No support for
+    # ALTER of constraints in SQLite dialect" -- and four revisions had never
+    # run. Separately, four schema objects existed only in the ORM models and
+    # in no migration, including `paper_trading_sessions`, which is where the
+    # live trading loop persists position state.
+    #
+    # None of that was visible, because no runtime invokes Alembic: every path
+    # calls Base.metadata.create_all(). A migration chain and a set of models
+    # are two descriptions of one schema and nothing forces them to agree
+    # unless something checks.
+    #
+    # This runs the alembic CLI as an operator would, then the test suite's
+    # programmatic comparison. The CLI leg is not redundant: `pytest tests/`
+    # exercises the Python API, and a broken alembic.ini or script_location
+    # would pass there and fail for a human.
+    # Decision: DEC-2026-08-21-005
+    name: Migrations match the models
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - run: pip install -r requirements.txt -r requirements-dev.txt
+
+      # DATABASE_URL, not alembic.ini. env.py honours it as of
+      # DEC-2026-08-21-005; before that it read the hardcoded ini value, so
+      # pointing alembic at a different database was not possible and doing so
+      # would have silently migrated the wrong one.
+      - name: Apply the whole chain to an empty database
+        env:
+          DATABASE_URL: sqlite:///ci_migrations.db
+        run: alembic upgrade head
+
+      - name: Downgrade to base and back, so downgrade() is not fiction
+        env:
+          DATABASE_URL: sqlite:///ci_migrations.db
+        run: |
+          alembic downgrade base
+          alembic upgrade head
+
+      - name: Assert the migrated schema equals the ORM models
+        run: pytest tests/integration/test_migrations.py -q --tb=short
 
   quickstart:
     name: Quickstart (${{ matrix.os }})

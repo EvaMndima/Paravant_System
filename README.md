@@ -353,8 +353,8 @@ Deeper detail: **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)** ·
 
 | Layer | Files | Lines | Notes |
 |---|---|---|---|
-| `src/` application | 169 `.py` | 49,814 | API, risk, execution, indicators, strategies |
-| `tests/` | 140 `.py` | 38,961 | 2,097 tests: 2,060 pass, 37 skip, 0 fail |
+| `src/` application | 169 `.py` | 49,831 | API, risk, execution, indicators, strategies |
+| `tests/` | 141 `.py` | 39,162 | 2,104 tests: 2,067 pass, 37 skip, 0 fail |
 | `frontend/src/` | 101 `.ts`/`.tsx` | 18,503 | React 19 dashboard — see caveat below |
 | `scripts/` | 25 | 12,064 | Live loop, paper loop, sweeps, reporting |
 | `research/` | 32 `.py` | 6,493 | DSR, effective-K, cost model, feature store |
@@ -388,7 +388,7 @@ Highlights:
   with the caveat that the generators themselves sit at 13-21% line coverage, so
   the suite does not independently establish that a null result came from the
   mechanism rather than the implementation.
-- **135 dated architectural decisions** with rationale and rejected
+- **136 dated architectural decisions** with rationale and rejected
   alternatives, referenced by 77 distinct IDs from source comments.
 
 ---
@@ -512,7 +512,7 @@ Stated plainly, because a reviewer will find all of it anyway.
 **Engineering**
 
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) · [docs/API_CONTRACT.md](docs/API_CONTRACT.md) · [docs/INDICATOR_SPECIFICATION.md](docs/INDICATOR_SPECIFICATION.md)
-- [.claude/DECISIONS.md](.claude/DECISIONS.md) — 135 decisions with rationale and rejected alternatives
+- [.claude/DECISIONS.md](.claude/DECISIONS.md) — 136 decisions with rationale and rejected alternatives
 - [docs/operations/](docs/operations/) — kill-switch runbook, scheduled jobs
 - [docs/PRODUCTION_READINESS_ASSESSMENT.md](docs/PRODUCTION_READINESS_ASSESSMENT.md) — measured gaps and the plan
 
@@ -537,18 +537,19 @@ run them against Binance testnet.
 
 `.github/workflows/ci.yml` gates every push and pull request:
 
-Nine jobs. Every one of them blocks — none is advisory.
+Ten jobs. Every one of them blocks — none is advisory.
 
 | Job | Enforces |
 |---|---|
-| Lint | `ruff` over `src`, `research`, `scripts` **and** `tests` |
+| Lint | `ruff` over `src`, `research`, `scripts`, `tests` **and** `alembic` |
 | Type check | `mypy` over `src/` and `research/features/` |
 | Dependency audit | `pip-audit` against the pinned production set |
 | Tests | Python 3.11, 3.12, 3.13 |
 | Coverage | Floor at 72% (measured 74%), over the **whole** suite |
+| **Migrations** | Apply the whole Alembic chain to an empty database, downgrade to base and back, then assert the resulting schema equals the ORM models |
 | **Quickstart** | Fresh install, `init_db`, `verify_db`, boot the API, assert `/health` — on **Linux and Windows** |
 | Frontend | `tsc -b` and production build |
-| Frontend tests | Vitest — formatters, data hook, positions table, confirmation gate |
+| Frontend tests | Vitest — formatters, data hook, positions table, confirmation gate, synthetic-data provenance |
 | Frontend lint | `eslint`, 0 errors |
 
 The quickstart job exists because the documented first command of this README

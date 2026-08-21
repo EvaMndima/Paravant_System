@@ -371,7 +371,7 @@ finding it sat next to survives and is strengthened -- see row 21.
 - The research validation layer: DSR, effective-K, pre-registered gates,
   cost modelling, negative-space tracking. This is stronger than what most
   retail quant projects attempt, and it is the differentiator.
-- The decision log: 135 dated decisions with rationale and alternatives.
+- The decision log: 136 dated decisions with rationale and alternatives.
 - The indicator library and data models: well typed, well tested, well factored.
 
 ### 3.2 What blocks a "production ready" verdict
@@ -402,7 +402,7 @@ Status column added 2026-08-14. "Resolved" means verified against the current
 | 12 | Integration tests error rather than skip without network | Low | Resolved — skip on `PARAVANT_RUN_NETWORK_TESTS` |
 | 13 | Live loop reaches 3 of 12 risk controls; circuit breakers, dead man's switch, filters, `PositionSizer` unreachable | Critical | **Open** — see 2.9. Diagrams corrected 2026-08-21; wiring untouched |
 | 14 | SHORT signals emit spot SELL orders against a long-only locked decision | Critical | **Open** — PARA-01. 2 of 4 live tiers construct `SignalDirection.SHORT`; `run_live_trading.py:1494` maps it to `"sell"` |
-| 15 | No migration path: 6 Alembic revisions, no runtime invokes any; `create_all()` never emits `ALTER` | High | **Open** — against a persistent volume a model change surfaces as `no such column` at query time |
+| 15 | No migration path: 6 Alembic revisions, no runtime invokes any; `create_all()` never emits `ALTER` | High | **Partly resolved 2026-08-21** — the chain now applies (it aborted at revision 2 of 6 on SQLite) and is asserted equal to the ORM models by a CI job; four objects existed only in the models and now have a migration (DEC-2026-08-21-005). Still **open**: no deployment path runs `alembic upgrade head`, so `create_all()` remains the runtime mechanism and an existing database still receives no `ALTER` |
 | 16 | Unique constraint on `strategy_assignments (account_id, strategy_id)` exists only in an unrun migration, not on the model | High | Resolved 2026-08-21 — declared in `__table_args__`, so `create_all()` builds it; `test_duplicate_strategy_assignment_rejected` now asserts `IntegrityError` and that the original row survives, mutation-tested (DEC-2026-08-21-004). One existing test was found to be depending on the constraint's absence |
 | 17 | Every real-money control variable is undocumented | High | **Open** — `MAX_DAILY_LOSS_PCT`, `MAX_DRAWDOWN_PCT`, `LIVE_CAPITAL_USDT`, `LIVE_SYMBOL`, `LIVE_TEMPLATE`, `LIVE_STATE_FILE`, `MAX_CONCURRENT_SAME_DIRECTION` appear in no file. `.env.example` documents `DAILY_LOSS_LIMIT_PCT`, which no code reads as an env var |
 | 18 | Paper and live are separate implementations; the promotion gate's justification assumes they are not | High | **Open** — see 2.9 |

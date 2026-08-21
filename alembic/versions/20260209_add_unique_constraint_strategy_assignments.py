@@ -12,7 +12,6 @@ Decision: DEC-2026-02-09-001 (data integrity)
 
 """
 from alembic import op
-import sqlalchemy as sa
 
 
 # revision identifiers, used by Alembic.
