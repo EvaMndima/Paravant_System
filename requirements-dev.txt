@@ -25,6 +25,15 @@ black==26.1.0
 # Local convenience only; no CI gate depends on it, so a floor is sufficient.
 pre-commit>=4.0.0
 
+# -- Dependency security -----------------------------------------------------
+# Queries the PyPI advisory database for known CVEs in the pinned set.
+#
+# This is the other half of the pinning trade made above. Exact pins remove
+# surprise upgrades, which also means a dependency silently stays vulnerable
+# until someone looks. Dependabot raises PRs; this fails the build, so a known
+# CVE cannot be merged past by ignoring a notification.
+pip-audit==2.10.1
+
 # -- Type stubs --------------------------------------------------------------
 # mypy reports import-untyped without these. All four were installed on the
 # development machine and declared nowhere, so mypy passed locally and failed on

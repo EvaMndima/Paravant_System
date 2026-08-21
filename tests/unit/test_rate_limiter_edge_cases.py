@@ -25,6 +25,7 @@ import time
 
 import pytest
 
+from src.brokers.binance import rate_limiter as rate_limiter_module
 from src.brokers.binance.rate_limiter import (
     PriorityLevel,
     RateLimiter,
@@ -67,20 +68,36 @@ class TestTokenBucketEdgeCases:
         assert result is True
         assert bucket.tokens == 99.5
 
-    def test_bucket_refill_partial_second(self) -> None:
-        """Test refill with very short time elapsed."""
+    def test_bucket_refill_partial_second(self, monkeypatch) -> None:
+        """Refill over a sub-second interval is proportional to elapsed time.
+
+        The clock is controlled rather than slept on. This test previously did
+        ``time.sleep(0.01)`` and asserted ``tokens <= 50.15``, i.e. it allowed
+        5ms of slack -- less than the ~15.6ms default timer granularity on
+        Windows. Under full-suite load the sleep overshot and the assertion
+        failed intermittently, which is worse than no test: it trains readers
+        to re-run CI rather than read failures.
+
+        Driving the clock directly tests the refill arithmetic, which is the
+        actual contract, instead of the OS scheduler's sleep precision.
+        """
+        clock = {"now": 1_000.0}
+        monkeypatch.setattr(rate_limiter_module.time, "time", lambda: clock["now"])
+
         bucket = TokenBucket(capacity=100, refill_rate=10)
+        # `last_refill` uses `default_factory=time.time`, which bound the real
+        # function at class-definition time and is therefore unaffected by the
+        # patch above. Set it explicitly onto the controlled clock.
+        bucket.last_refill = clock["now"]
 
-        # Consume tokens
         bucket.try_consume(50)
+        assert bucket.tokens == pytest.approx(50.0)
 
-        # Wait very short time (10ms)
-        time.sleep(0.01)
+        clock["now"] += 0.01  # exactly 10ms
         bucket.refill()
 
-        # Should have minimal refill (0.1 tokens)
-        assert bucket.tokens >= 50.0
-        assert bucket.tokens <= 50.15  # Allow for small variation
+        # 10 tokens/sec * 0.01s = 0.1 tokens, exactly.
+        assert bucket.tokens == pytest.approx(50.1)
 
     def test_bucket_usage_percentage_at_limits(self) -> None:
         """Test usage percentage calculation at boundary conditions."""

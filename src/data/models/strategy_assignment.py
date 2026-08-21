@@ -4,7 +4,7 @@ from __future__ import annotations
 import enum
 from typing import TYPE_CHECKING, cast
 
-from sqlalchemy import JSON, Enum, ForeignKey, String
+from sqlalchemy import JSON, Enum, ForeignKey, String, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from .base import Base, TimestampMixin, generate_id
@@ -26,6 +26,23 @@ class StrategyAssignment(Base, TimestampMixin):
     """Strategy assignment to account."""
 
     __tablename__ = "strategy_assignments"  # Explicit table name with snake_case
+
+    # One strategy instance per account.
+    #
+    # This constraint existed only in
+    # alembic/versions/20260209_add_unique_constraint_strategy_assignments.py,
+    # and no runtime invokes Alembic -- every path calls create_all(). So the
+    # rule was documented in DEC-2026-02-09-001, implemented in a migration,
+    # and enforced by nothing. Declaring it here is what makes it real for
+    # create_all(), which is how every deployment actually builds its schema.
+    # Decision: DEC-2026-08-21-004
+    __table_args__ = (
+        UniqueConstraint(
+            "account_id",
+            "strategy_id",
+            name="uq_strategy_assignments_account_strategy",
+        ),
+    )
 
     id: Mapped[str] = mapped_column(String, primary_key=True, default=lambda: generate_id("asgn"))
 

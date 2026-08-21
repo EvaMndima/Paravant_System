@@ -30,6 +30,10 @@ _LEAKY_ENV_NAMES = frozenset({
     "MAX_STRATEGIES_LIVE_CONCURRENT",
     "CAPITAL_RESERVE_FRACTION",
     "ALLOWED_ORIGINS",
+    # A developer's real API key must not decide whether the auth gate is
+    # exercised. Tests that need it set it explicitly.
+    # Decision: DEC-2026-08-14-001
+    "PARAVANT_API_KEY",
 })
 
 # Integration modules whose fixtures open a real connection to Binance during
@@ -38,6 +42,78 @@ _LEAKY_ENV_NAMES = frozenset({
 _NETWORK_TEST_MODULES = ("test_binance_client.py", "test_symbol_refresh.py")
 
 _RUN_NETWORK_ENV = "PARAVANT_RUN_NETWORK_TESTS"
+
+
+def _neutralise_env_before_any_application_import() -> None:
+    """Pin the leaky variables at CONFTEST IMPORT, not per test.
+
+    The autouse fixture below runs per test and is too late for anything read at
+    module scope. ``src/api/main.py`` does exactly that::
+
+        ENVIRONMENT = os.getenv("ENVIRONMENT", "development")
+
+    and derives the CORS allowlist and the ``/docs`` route from it, once, when
+    the module is first imported. ``load_dotenv()`` runs when
+    ``src/data/database.py`` is imported and pushes the developer's real ``.env``
+    into ``os.environ`` before that happens. A fixture that deletes the variable
+    afterwards cannot unfreeze the constant.
+
+    This was found on 2026-08-21, when a developer set ``ENVIRONMENT=production``
+    in their local ``.env`` and ``test_401_carries_cors_headers`` began failing:
+    the app had selected ``ALLOWED_ORIGINS_PROD``, which is empty, so a 401
+    carried no ``access-control-allow-origin`` header. Nothing in the test, the
+    middleware or the assertion had changed. CI passes because the workflow sets
+    ``ENVIRONMENT: development`` explicitly, which means the two environments
+    disagreed silently.
+
+    Values are SET rather than deleted, because ``load_dotenv()`` does not
+    override a variable that is already present. Deleting would leave the door
+    open for whichever import happens to call it next.
+
+    This closes the same leak the fixture below documents, through the door the
+    fixture does not cover: it disables ``Settings.env_file``, which protects
+    code reading configuration through pydantic, and nothing reading
+    ``os.environ`` directly.
+    """
+    os.environ["ENVIRONMENT"] = "development"
+    os.environ["TRADING_MODE"] = "paper"
+    os.environ["BINANCE_TESTNET"] = "true"
+    os.environ["LIVE_TRADING_ENABLED"] = "false"
+    os.environ.pop("ALLOWED_ORIGINS", None)
+    os.environ["ALLOWED_ORIGINS"] = ""
+
+
+_neutralise_env_before_any_application_import()
+
+
+def _freeze_the_api_module_under_hermetic_settings() -> None:
+    """Import ``src.api.main`` now, so its import-time constants are pinned.
+
+    ``main.py`` reads ``ENVIRONMENT`` once, at module scope, and derives from it
+    the CORS allowlist and whether ``/docs`` is served. Which test imports the
+    module first therefore decides the application's configuration for the whole
+    session -- and several tests legitimately ``monkeypatch.setenv("ENVIRONMENT",
+    "production")`` before importing it, to assert that startup aborts without an
+    API key.
+
+    The result was order dependence with no symptom in the test that caused it.
+    `TestMutatingRouteCoverage` or `TestStartupWiring` running before
+    `TestMiddlewareOrdering` left the app holding ``ALLOWED_ORIGINS_PROD``, which
+    is empty, so a 401 carried no ``access-control-allow-origin`` header and
+    `test_401_carries_cors_headers` failed. Running that test alone passed.
+
+    Importing here, after the environment is pinned above and before any test
+    module is collected, makes the configuration deterministic.
+
+    This is a workaround, not a fix. The underlying defect is that `main.py`
+    freezes environment-dependent configuration at import while `src/api/auth.py`
+    reads the same variable at call time, so the two can disagree. That is
+    recorded as finding S-4 in `docs/PRODUCTION_READINESS_ASSESSMENT.md`.
+    """
+    import src.api.main  # noqa: F401
+
+
+_freeze_the_api_module_under_hermetic_settings()
 
 
 @pytest.fixture(autouse=True)

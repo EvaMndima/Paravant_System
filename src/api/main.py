@@ -12,7 +12,9 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
+from src.api.auth import ApiKeyAuthMiddleware, validate_api_key_config
 from src.api.middleware.request_logger import RequestLoggerMiddleware
+from src.api.rate_limit import RateLimitMiddleware
 from src.api.routes.accounts import router as accounts_router
 from src.api.routes.backtest import router as backtest_router
 from src.api.routes.dashboard import router as dashboard_router
@@ -79,12 +81,31 @@ ALLOWED_ORIGINS_PROD = (
     else []
 )
 
+# Middleware registration order is load-bearing. Starlette makes the LAST-added
+# middleware the OUTERMOST layer, so the calls below produce this stack:
+#
+#   RequestLogger  ->  CORS  ->  ApiKeyAuth  ->  RateLimit  ->  routes
+#
+# Two constraints drive it:
+#   1. Auth and rate limiting must sit INSIDE CORS. A layer outside CORS returns
+#      401s and 429s stripped of CORS headers, which a browser reports as an
+#      opaque network error rather than the actual status.
+#   2. Rate limiting must sit INSIDE auth. Unauthenticated floods are then
+#      rejected by auth for a cheap 401 and consume no rate budget, so an
+#      attacker with no key cannot exhaust the global bucket and lock the
+#      operator out of their own kill switch.
+# Decisions: DEC-2026-08-14-001 (auth), DEC-2026-08-14-003 (rate limit)
+app.add_middleware(RateLimitMiddleware)
+app.add_middleware(ApiKeyAuthMiddleware)
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=ALLOWED_ORIGINS_DEV if ENVIRONMENT == "development" else ALLOWED_ORIGINS_PROD,
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "DELETE", "PATCH"],  # Explicit methods
-    allow_headers=["Content-Type", "Authorization", "X-Request-ID"],  # Explicit headers
+    # X-API-Key must be allowed here or the browser preflight rejects the
+    # header before the request is ever sent. Decision: DEC-2026-08-14-001
+    allow_headers=["Content-Type", "Authorization", "X-Request-ID", "X-API-Key"],
 )
 
 # Request logging middleware. Added after CORS so CORS headers are already set
@@ -293,6 +314,11 @@ async def startup_event() -> None:
         log_level=LOG_LEVEL,
         startup_time=startup_time.isoformat()
     )
+
+    # Validate the API key gate before anything else is initialised. Outside
+    # development this raises and aborts startup rather than serving
+    # unauthenticated order-placement endpoints. Decision: DEC-2026-08-14-001
+    validate_api_key_config()
 
     # Warn if CORS is not configured in production
     if ENVIRONMENT != "development" and not ALLOWED_ORIGINS_PROD:

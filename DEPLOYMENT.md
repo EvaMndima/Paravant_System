@@ -86,9 +86,18 @@ pytest tests/unit/ -v                              # Unit tests
 | `DATABASE_URL` | PostgreSQL connection string | `postgresql://user:pass@host:5432/paravant` |
 | `ALLOWED_ORIGINS` | CORS allowed origins (comma-separated) | `https://app.example.com` |
 | `ENVIRONMENT` | Runtime environment | `production` |
+| `PARAVANT_API_KEY` | Shared secret for state-mutating endpoints, 32 chars min. **Startup aborts without it whenever `ENVIRONMENT` is not `development`.** | `python -c "import secrets; print(secrets.token_urlsafe(32))"` |
 | `TRADING_MODE` | Trading mode | `paper` or `live` |
 | `TELEGRAM_BOT_TOKEN` | Telegram bot token | `123456:ABC-DEF...` |
 | `TELEGRAM_CHAT_ID` | Telegram chat ID for alerts | `-1001234567890` |
+
+> **Upgrading an existing deployment:** `PARAVANT_API_KEY` became mandatory on
+> 2026-08-14 (DEC-2026-08-14-001). A deployment that sets `ENVIRONMENT` to
+> anything other than `development` will crash-loop until the variable is set.
+> That is the intended behaviour -- the alternative is silently serving
+> unauthenticated order-placement endpoints. Any client calling a
+> `POST`/`PUT`/`PATCH`/`DELETE` endpoint must send the same value in an
+> `X-API-Key` header. See [SECURITY.md](SECURITY.md).
 
 ### Optional
 
@@ -98,6 +107,13 @@ pytest tests/unit/ -v                              # Unit tests
 | `BINANCE_API_KEY` | Binance API key | (none) |
 | `BINANCE_API_SECRET` | Binance API secret | (none) |
 | `BINANCE_TESTNET` | Use Binance testnet | `true` |
+| `API_RATE_LIMIT_PER_MINUTE` | Mutating requests per minute, per client. `0` disables | `30` |
+| `API_RATE_LIMIT_GLOBAL_PER_MINUTE` | Mutating requests per minute, all clients. `0` disables | `120` |
+
+> Rate-limit buckets live in process memory, so the effective limit is
+> multiplied by the number of uvicorn workers and resets on restart. Run a
+> single worker unless you raise the limits to match. See
+> [SECURITY.md](SECURITY.md) and `docs/ARCHITECTURE.md` section 8.2.
 
 ---
 

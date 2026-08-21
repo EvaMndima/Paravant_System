@@ -11,6 +11,9 @@ import { Badge } from '@/components/ui/Badge';
 import { Dropdown } from '@/components/ui/Dropdown';
 import { AreaChart } from '@/components/charts/AreaChart';
 import { cn, formatCurrency, formatNumber, formatPercent } from '@/lib/utils';
+import { SyntheticDataBadge } from '@/components/ui/SyntheticDataBadge';
+import { requiresSyntheticLabel, resolveProvenance } from '@/lib/provenance';
+import type { ProvenanceProps } from '@/lib/provenance';
 
 // --- Types ---
 
@@ -29,7 +32,7 @@ export interface DrawerPosition {
   weight: number;
 }
 
-interface PositionDrawerProps {
+interface PositionDrawerProps extends ProvenanceProps {
   isOpen: boolean;
   onClose: () => void;
   position: DrawerPosition | null;
@@ -96,12 +99,17 @@ const DetailRow = ({
 
 // --- Main Component ---
 
+
 export const PositionDrawer: React.FC<PositionDrawerProps> = ({
   isOpen,
   onClose,
   position,
   onAlert,
+  dataProvenance,
 }) => {
+  // The price series in this drawer is generated regardless of whether
+  // `position` is real, so the view always contains fabricated values.
+  const provenance = resolveProvenance(dataProvenance, undefined);
   const [mounted, setMounted] = useState(false);
   const [note, setNote] = useState('');
   const [isWatchlisted, setIsWatchlisted] = useState(false);
@@ -163,6 +171,7 @@ export const PositionDrawer: React.FC<PositionDrawerProps> = ({
                   <Badge variant="neutral" size="sm" className="font-normal opacity-80">
                     {position.assetType}
                   </Badge>
+                  {requiresSyntheticLabel(provenance) && <SyntheticDataBadge compact />}
                 </div>
                 <div className="text-sm text-obsidian-400/60 dark:text-paper-100/60 font-sans">
                   {position.name}

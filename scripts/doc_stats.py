@@ -112,9 +112,17 @@ def collect() -> dict[str, object]:
         [p for p in _tracked("src/core/strategy/generators", (".py",))
          if p.name != "__init__.py"]
     )
+    # Indicators, excluding the scaffolding that shares the package. Counting
+    # every module reported 19 and put "19 indicators" into two documents; five
+    # of those are the ABC, the factory, the caching wrapper, shared helpers and
+    # the timeframe resampler. None of them is an indicator, and the inflated
+    # figure also dragged the quoted coverage range with it. The remaining 14
+    # match the distinct classes in IndicatorFactory._registry exactly (aliases
+    # excluded), which is the operational definition of "an indicator" here.
+    _INDICATOR_SCAFFOLDING = {"__init__", "base", "factory", "cached", "utils", "resample"}
     indicators = len(
         [p for p in _tracked("src/core/indicators", (".py",))
-         if p.name != "__init__.py"]
+         if p.stem not in _INDICATOR_SCAFFOLDING]
     )
 
     return {
@@ -123,7 +131,15 @@ def collect() -> dict[str, object]:
         "commits": int(_git("rev-list", "--count", "HEAD")),
         "first_commit": _git("log", "--reverse", "--format=%ad", "--date=short").splitlines()[0],
         "last_commit": _git("log", "-1", "--format=%ad", "--date=short"),
-        "decisions": len(re.findall(r"^### DEC-", decisions_text, re.MULTILINE)),
+        # The ID pattern is matched in full, not just the `### DEC-` prefix.
+        # The loose form counted the `### DEC-YYYY-MM-DD-XXX: Decision Title`
+        # TEMPLATE near the top of DECISIONS.md as a decision, so this script --
+        # written so figures would be generated rather than typed -- reported
+        # 132 where there were 131. An off-by-one in the anti-drift tool is
+        # worse than an off-by-one in prose, because it is trusted.
+        "decisions": len(
+            re.findall(r"^### DEC-\d{4}-\d{2}-\d{2}-\d{3}:", decisions_text, re.MULTILINE)
+        ),
         "decisions_lines": decisions_text.count("\n") + 1,
         "decision_ids_in_source": len(
             set(re.findall(r"DEC-20\d\d-\d\d-\d\d-\d\d\d",

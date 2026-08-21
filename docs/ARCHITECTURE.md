@@ -40,7 +40,7 @@ Each module states what it owns and, as importantly, what it does not.
 | Execution | `src/core/execution/` | Order state machine, position tracking, P&L accounting, slippage/fill measurement | Whether an order *should* be placed |
 | Risk | `src/core/risk/` | Pre-trade checks, circuit breakers, kill switch, sizing, filters | Signal generation, execution |
 | Strategy | `src/core/strategy/` | Signal generation, backtest, paper engine, regime routing | Risk decisions, execution |
-| Indicators | `src/core/indicators/` | 19 indicator implementations, caching, resampling | Trading decisions |
+| Indicators | `src/core/indicators/` | 14 indicator implementations, plus caching, resampling and the factory | Trading decisions |
 | Data | `src/data/` | 15 ORM models, `DataStore` facade, market data, validators, cache | Business rules |
 | Alerting | `src/core/alerting/` | Telegram channel, 15 trigger types, scheduler, escalation | Deciding what is alarming |
 | Config | `src/core/config/` | YAML + env layering, templates, risk profiles, backup | Runtime mutation of config |
@@ -55,6 +55,26 @@ warns against moving code into it.
 
 ## 3. The trading path
 
+> **CORRECTED 2026-08-21.** The diagram below is the **designed** pipeline, as
+> `RiskController` implements it. It is not the path a live order takes.
+>
+> `scripts/run_live_trading.py` does not import `RiskController`. It
+> reimplements three of these checks inline — kill switch, daily loss, max
+> drawdown — and reaches none of the other five, none of the circuit breakers,
+> none of the filters and not `PositionSizer`:
+>
+> ```bash
+> grep -cE "RiskController|circuit_breaker|dead_man|time_filter|event_filter|VolatilityAnalyzer|PositionSizer|concentration|weekly" scripts/run_live_trading.py
+> # 0
+> ```
+>
+> The diagram is kept because it documents what the risk package does when it is
+> invoked, which is accurate and worth having. The correction is marked rather
+> than the diagram redrawn because the gap between this design and the deployed
+> loop is itself the finding — `audit/AUDIT.md` raised it on 2026-08-08 and
+> called it the most serious item for a trading role. The deployed path is drawn
+> in [../README.md](../README.md#architecture).
+
 ```mermaid
 flowchart TD
     A[Binance REST] --> B[MarketDataFetcher]
@@ -63,7 +83,7 @@ flowchart TD
     D --> E[SignalGenerator.generate<br/>TradingSignal or None]
     E --> F{RegimeRouter}
     F -->|not allowed in<br/>this regime| Z[No trade]
-    F -->|allowed| G[RiskController.validate_order]
+    F -->|allowed| G[RiskController.validate_order<br/>NOT called by the live loop]
 
     subgraph checks [Pre-trade checks, in order]
         G1[1. kill switch] --> G2[2. daily loss]
@@ -97,10 +117,33 @@ Two properties of this path matter more than the rest:
 condition, on every cycle, before a strategy is even considered. Ordering here
 is a correctness property, not a style choice.
 
-**Paper and live diverge only at `ExecutionInterface`.** Identical signal
-generation, identical risk checks, identical position tracking. This is what
-makes a paper record admissible as evidence for promotion to live — the two are
-not separate implementations that could drift.
+**Paper and live are separate implementations, and the promotion gate assumes
+they are not.**
+
+> **CORRECTED 2026-08-21.** This paragraph read: "Paper and live diverge only at
+> `ExecutionInterface`. Identical signal generation, identical risk checks,
+> identical position tracking. This is what makes a paper record admissible as
+> evidence for promotion to live — the two are not separate implementations that
+> could drift."
+>
+> They are two scripts of 2,110 and 946 lines sharing exactly one module-level
+> function name, `main`:
+>
+> ```bash
+> comm -12 <(grep -oE "^(async )?def [a-z_]+" scripts/run_live_trading.py | sed 's/async //' | sort -u) >          <(grep -oE "^(async )?def [a-z_]+" scripts/run_paper_trading.py | sed 's/async //' | sort -u)
+> # def main
+> ```
+>
+> `run_paper_trading.py` contains zero `kill_switch` references. Paper delegates
+> execution to `PaperTradingEngine`; live reimplements stop and take-profit
+> inline. They share the signal path — fetcher, indicators, generators, regime
+> detection — and diverge across the whole of execution and risk, which is
+> exactly where paper results are being used to predict live behaviour.
+>
+> Marked rather than replaced because the claim was load-bearing: it is the
+> stated justification for the promotion gate. Corrected in `README.md` on the
+> same date; this copy was missed on the first pass and found by grepping for
+> the old claim rather than the new one.
 
 ---
 
@@ -205,14 +248,44 @@ transitions, so a retired strategy cannot be quietly revived. Reviving one means
 creating a new strategy, which means it re-enters at `draft` and earns its way
 back through every gate.
 
-Transitions are validated by `StrategyEngine`, not assigned freely. Schema is
-managed by Alembic across 6 revisions.
+Transitions are validated by `StrategyEngine`, not assigned freely.
+
+### How the schema is actually created
+
+This section previously read "Schema is managed by Alembic across 6 revisions."
+That was not true, and the correction matters more than the sentence did.
+
+Six Alembic revisions exist under `alembic/versions/`, and **no runtime invokes
+any of them**. `grep -rn "alembic" --include="*.py" --include="*.yml" scripts/
+.github/ Dockerfile Procfile railway.toml` returns nothing. Every path that
+creates a schema calls `init_db()` (`src/data/database.py:29`), whose entire body
+is `Base.metadata.create_all(bind=engine)` at line 31 — `scripts/init_db.py:17`,
+`scripts/run_paper_trading.py:725`, `scripts/run_live_trading.py:1620` and
+`scripts/validation_report.py:424`.
+
+The consequence is the part worth knowing. `create_all()` creates tables that do
+not exist and **silently skips tables that do**; it never emits `ALTER TABLE`.
+Against a database that already has the tables — which on Railway is every
+deploy after the first, because the volume persists — a model change reaches
+nothing. It surfaces later as `no such column` at query time rather than as a
+failure at deploy time.
+
+Two live consequences of this, both recorded rather than fixed in this pass:
+
+- The unique constraint on `strategy_assignments (account_id, strategy_id)`
+  exists only in `alembic/versions/20260209_add_unique_constraint_strategy_assignments.py`
+  and is not declared on the model, so no running system enforces it.
+- Nothing compares the migration chain against the ORM models, so the two are
+  free to diverge without any signal.
+
+Both are tracked in
+[PRODUCTION_READINESS_ASSESSMENT.md](PRODUCTION_READINESS_ASSESSMENT.md).
 
 ---
 
 ## 8. API surface
 
-FastAPI. **63 endpoints across 13 route modules, 21 of which mutate state**,
+FastAPI. **61 endpoints across 13 route modules, 19 of which mutate state**,
 plus 4 root endpoints (`/health`, `/ready`, `/health/detailed`, `/`).
 
 Middleware: `request_logger` (structured logs with request IDs) and
@@ -220,9 +293,72 @@ Middleware: `request_logger` (structured logs with request IDs) and
 an explicit allowlist with no wildcard — fixing what was originally a critical
 vulnerability (DEC-2026-02-08-004).
 
-**There is no authentication.** All 63 endpoints are open, including order
-placement, position closure and kill-switch control. This is the single largest
-gap in the system and is documented in [../SECURITY.md](../SECURITY.md).
+### 8.1 Authentication
+
+The 19 state-mutating endpoints require a shared secret in an `X-API-Key`
+header. The 42 read endpoints do not: the dashboard is a read-only browser
+client, and gating it would break that client for no safety gain.
+
+The gate is **middleware keyed on HTTP method**, not a `Depends` on each route
+(`src/api/auth.py`, DEC-2026-08-14-001). A per-route dependency is the
+idiomatic FastAPI approach and it is fail-open — protection would depend on the
+author of every future endpoint remembering to add it, and nothing would fail
+when they did not. Gating by method is fail-closed: a mutating endpoint added
+tomorrow is covered the day it is written.
+
+The cost is that the requirement does not appear in the OpenAPI schema. The
+compensating control is `tests/unit/api/test_auth.py::TestMutatingRouteCoverage`,
+which enumerates `app.routes` and asserts every mutating route returns 401
+without a key, so an unguarded endpoint is a test failure rather than a silent
+exposure.
+
+Ordering is load-bearing. Starlette makes the last-added middleware outermost,
+so the auth layer is added **before** `CORSMiddleware` in order to sit inside
+it. An auth layer outside CORS returns 401s without CORS headers, which a
+browser reports as an opaque network error rather than an authentication
+failure. `TestMiddlewareOrdering` guards this.
+
+Configuration is `PARAVANT_API_KEY`. Outside `ENVIRONMENT=development` a
+missing key aborts startup; a key under 32 characters is rejected in every
+environment. In development a missing key disables the gate and logs
+`api_auth_disabled`, which keeps the documented quickstart runnable.
+
+**What this is not:** one shared key, no identities, no rotation, no expiry, and
+open reads. It authenticates a request, not a person. The limits are enumerated
+in [../SECURITY.md](../SECURITY.md).
+
+### 8.2 Rate limiting
+
+Mutating requests are additionally capped (`src/api/rate_limit.py`,
+DEC-2026-08-14-003). Two independent token buckets:
+
+| Bucket | Default | Keyed on | Purpose |
+|---|---|---|---|
+| Per-client | 30/min | leftmost `X-Forwarded-For`, else peer IP | Fairness. Best-effort — that header is client-supplied and spoofable |
+| Global | 120/min | nothing | The real cap. Trusts no client value, so it cannot be evaded by rotating a header |
+
+Per-client alone would not work: behind a proxy the real client address arrives
+in a header the client sets, so an attacker rotates it and evades the bucket
+entirely — while also filling the identity map. Hence the global bucket, and
+hence a bounded LRU (1,024 entries) so the map cannot be used to exhaust memory.
+
+**It reuses the `TokenBucket` primitive from
+`src/brokers/binance/rate_limiter.py` (DEC-2026-02-10-002) but not the
+`RateLimiter` policy.** That class blocks with `asyncio.sleep` until tokens free
+up, which is right for outbound calls to Binance where waiting beats a ban. It
+is wrong inbound: a held request occupies a connection and a coroutine, so
+blocking would turn 10,000 requests into 10,000 sleeping tasks — the limiter
+would amplify the flood it exists to absorb. Inbound rejects with `429` and a
+`Retry-After` header.
+
+Ordering: this layer sits **inside** the auth layer, so unauthenticated floods
+are rejected by auth for a cheap 401 and consume no rate budget. Placed outside,
+an anonymous flood could exhaust the global bucket and lock the operator out of
+their own kill switch.
+
+**What this is not:** buckets live in process memory, so limits multiply by
+uvicorn worker count (deployment runs one) and reset on restart. It bounds the
+*rate* of damage from a leaked key, not the *total*.
 
 ---
 

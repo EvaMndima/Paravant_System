@@ -23,18 +23,19 @@ export interface Position {
   assetType?: 'Stock' | 'ETF' | 'Option' | 'Cash' | 'Crypto';
 }
 
-// --- Mock Data (used when no data prop is supplied) ---
-
-const mockPositions: Position[] = [
-  { id: '1', symbol: 'NVDA', name: 'NVIDIA Corp.', quantity: 450, avgPrice: 420.50, currentPrice: 890.25, pl: 211387.50, plPercent: 111.71, weight: 24.5, sector: 'Technology', assetType: 'Stock' },
-  { id: '2', symbol: 'MSFT', name: 'Microsoft Corp.', quantity: 1200, avgPrice: 310.00, currentPrice: 425.10, pl: 138120.00, plPercent: 37.13, weight: 18.2, sector: 'Technology', assetType: 'Stock' },
-  { id: '3', symbol: 'BTC', name: 'Bitcoin', quantity: 8.5, avgPrice: 42000.00, currentPrice: 67500.00, pl: 216750.00, plPercent: 60.71, weight: 15.8, sector: 'Crypto', assetType: 'Crypto' },
-  { id: '4', symbol: 'TSLA', name: 'Tesla Inc.', quantity: 800, avgPrice: 245.00, currentPrice: 175.40, pl: -55680.00, plPercent: -28.41, weight: 8.5, sector: 'Consumer Cyclical', assetType: 'Stock' },
-  { id: '5', symbol: 'AAPL', name: 'Apple Inc.', quantity: 1500, avgPrice: 155.00, currentPrice: 172.50, pl: 26250.00, plPercent: 11.29, weight: 12.1, sector: 'Technology', assetType: 'Stock' },
-  { id: '6', symbol: 'GOOGL', name: 'Alphabet Inc.', quantity: 600, avgPrice: 135.00, currentPrice: 142.00, pl: 4200.00, plPercent: 5.19, weight: 5.4, sector: 'Technology', assetType: 'Stock' },
-];
-
 // --- Component ---
+//
+// There is deliberately no mock-data fallback here.
+//
+// This component previously rendered six hardcoded equity positions (NVDA,
+// MSFT, TSLA, AAPL, GOOGL) whenever `data` was undefined -- in a crypto-only
+// system that cannot trade any of them. Harmless as prototype seed data, and a
+// genuine hazard as a failure mode: a data fetch that returned undefined would
+// have presented fabricated positions as real holdings, with plausible P&L.
+//
+// Omitting `data` now shows the empty state. Every caller (CockpitPage,
+// PortfolioPage, Dev2Page) already passes `data` explicitly, so removing the
+// fallback changed no page's appearance.
 
 interface PositionsTableProps {
   data?: Position[];
@@ -47,7 +48,7 @@ interface PositionsTableProps {
 }
 
 export const PositionsTable: React.FC<PositionsTableProps> = ({
-  data,
+  data = [],
   isLoading = false,
   limit,
   className,
@@ -55,9 +56,7 @@ export const PositionsTable: React.FC<PositionsTableProps> = ({
   title = 'Top Holdings',
   compact = false,
 }) => {
-  const displayData = data
-    ? (limit ? data.slice(0, limit) : data)
-    : (limit ? mockPositions.slice(0, limit) : mockPositions);
+  const displayData = limit ? data.slice(0, limit) : data;
 
   const columns: Column<Position>[] = [
     {

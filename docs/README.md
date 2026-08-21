@@ -8,7 +8,7 @@ Start with the three under **Orientation**. Everything else is reference.
 |---|---|
 | [PROJECT_CONTEXT.md](PROJECT_CONTEXT.md) | Complete briefing on the system. Readable end to end without opening a source file. |
 | [RESEARCH_FINDINGS.md](RESEARCH_FINDINGS.md) | What the research actually established, what was withdrawn, and why. The project's headline result. |
-| [AI_ASSISTED_DEVELOPMENT.md](AI_ASSISTED_DEVELOPMENT.md) | How this was built with AI assistance, and the specific defects that produced. |
+| [AI_ASSISTED_DEVELOPMENT.md](AI_ASSISTED_DEVELOPMENT.md) | How this was built with AI assistance, the fifteen specific defects that produced, and the moves that found them. |
 
 ## Engineering
 
@@ -67,6 +67,6 @@ than reference. See [archive/README.md](archive/README.md).
 
 ## Decision log
 
-Not under `docs/`. 120 dated architectural decisions with rationale and rejected
+Not under `docs/`. 139 dated architectural decisions with rationale and rejected
 alternatives live in [`.claude/DECISIONS.md`](../.claude/DECISIONS.md),
 maintained byte-identically in `.agent/DECISIONS.md`.

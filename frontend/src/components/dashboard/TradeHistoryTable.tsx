@@ -8,10 +8,13 @@ import { DateRangePicker } from '@/components/ui/DateRangePicker';
 import type { DateRange } from '@/components/ui/DateRangePicker';
 import { Pagination } from '@/components/ui/Pagination';
 import { GlassCard } from '@/components/ui/GlassCard';
+import { SyntheticDataBadge } from '@/components/ui/SyntheticDataBadge';
+import { requiresSyntheticLabel, resolveProvenance } from '@/lib/provenance';
+import type { ProvenanceProps } from '@/lib/provenance';
 import { cn } from '@/lib/utils';
 import type { TradeDetail } from './TradeDetailModal';
 
-export interface TradeHistoryTableProps {
+export interface TradeHistoryTableProps extends ProvenanceProps {
   trades?: TradeDetail[];
   onRowClick?: (trade: TradeDetail) => void;
   className?: string;
@@ -80,10 +83,16 @@ const STATUS_OPTIONS = [
 ];
 
 export const TradeHistoryTable: React.FC<TradeHistoryTableProps> = ({
-  trades = MOCK_TRADES,
+  trades: suppliedTrades,
+  dataProvenance,
   onRowClick,
   className,
 }) => {
+  // The default parameter used to be `trades = MOCK_TRADES`, which made it
+  // impossible to tell inside the component whether the caller supplied data.
+  const trades = suppliedTrades ?? MOCK_TRADES;
+  const provenance = resolveProvenance(dataProvenance, suppliedTrades);
+
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
   const [symbolFilter, setSymbolFilter] = useState('all');
@@ -217,6 +226,7 @@ export const TradeHistoryTable: React.FC<TradeHistoryTableProps> = ({
           <span className="text-xs font-mono text-obsidian-400/30 dark:text-paper-100/30">
             ({filtered.length} trades)
           </span>
+          {requiresSyntheticLabel(provenance) && <SyntheticDataBadge compact />}
         </div>
 
         <DateRangePicker

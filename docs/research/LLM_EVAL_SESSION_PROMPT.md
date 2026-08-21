@@ -21,7 +21,7 @@ approval at the end of each phase.
    respect.
 4. `docs/RESEARCH_FINDINGS.md` — what this project has already established, and
    the correction it had to make.
-5. `docs/AI_ASSISTED_DEVELOPMENT.md` sections 4 and 5 — the eight failure modes
+5. `docs/AI_ASSISTED_DEVELOPMENT.md` sections 4, 5 and 6 — the fifteen failure modes
    found in this repository. Do not reproduce them.
 
 ## Repository state

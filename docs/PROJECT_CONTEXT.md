@@ -1,8 +1,18 @@
 # PARAVANT — Complete Project Context
 
-**Version:** 1.0
-**Compiled:** 2026-08-08
-**Repository state:** `master` @ `622ac49`
+**Version:** 1.1
+**Compiled:** 2026-08-08. **Revised:** 2026-08-17.
+**Repository state:** branch `api-hardening-and-coverage`. Run
+`python scripts/doc_stats.py` for current figures -- a commit count hardcoded in
+prose is stale by the next commit (documentation-freshness Rule 11.3).
+
+> Section 0 originally read "every factual claim was verified against the
+> codebase on 2026-08-08". That remained true of the claims and stopped being
+> true of the codebase: between 2026-08-11 and 2026-08-16 the API gained
+> authentication and rate limiting, the test suite went from 9 failures to 0,
+> coverage measurement was corrected, and the frontend gained its first tests.
+> Counts and status claims were re-verified on 2026-08-17 and the revision
+> dates below mark what changed.
 **Companion document:** `docs/PRODUCTION_READINESS_ASSESSMENT.md` (gaps, defects, and the
 publication plan). This document covers *what exists and why*; that one covers
 *what is wrong and what to do about it*.
@@ -16,8 +26,15 @@ finish it able to reason about the system's design, its history, its current sta
 and its open questions. Nothing here requires opening a source file, though file
 paths are given throughout as anchors.
 
-Every factual claim was verified against the codebase on 2026-08-08. Where a claim
-is a design intention rather than a verified behaviour, it is marked as such.
+Every factual claim was verified against the codebase on 2026-08-08 and
+re-verified on 2026-08-17. Where a claim is a design intention rather than a
+verified behaviour, it is marked as such.
+
+The counts in Section 3 are additionally asserted by
+`tests/unit/test_doc_consistency.py`, which computes each from the repository
+and fails if any document disagrees. That test exists because three documents
+here once claimed fourteen route modules when there had only ever been thirteen
+— a number copied between documents rather than derived from the code.
 
 ---
 
@@ -30,12 +47,16 @@ tracks the outcome — in backtest, in paper simulation, and (behind a default-o
 switch) with real capital.
 
 Its distinguishing feature is not the trading engine. It is the **research and
-validation layer** built around the trading engine, whose explicit purpose is to
-reject the system's own strategies. The project treats "we found a profitable
-strategy" as a claim requiring statistical proof, and it implements the machinery to
-test that claim honestly: Deflated Sharpe Ratio, effective-trial counting,
-pre-registered gates, regime-conditional attribution, and a written protocol that
-forbids moving a gate to make a strategy pass.
+validation layer** built around the trading engine, whose purpose is to decide
+whether a strategy has a real edge — and to return `no` when the evidence is not
+there, including for the system's own strategies. The project treats "we found a
+profitable strategy" as a claim requiring statistical proof, and it implements the
+machinery to test that claim honestly: Deflated Sharpe Ratio, effective-trial
+counting, pre-registered gates, regime-conditional attribution, and a written
+protocol that forbids moving a gate to make a strategy pass.
+
+That the answer has so far been `no` for every strategy is a finding, not a
+malfunction of the layer. See Section 14.
 
 ### 1.1 The founding question
 
@@ -53,9 +74,13 @@ Three commitments shape almost every decision in the codebase:
    off. Unknown market regime means no strategy activates. A position size below the
    exchange minimum exits the process rather than rounding up.
 2. **Capital preservation over return.** The risk layer is the most complete and
-   best-tested subsystem. Every order passes seven independent pre-trade checks and
-   five circuit breakers.
-3. **Decisions are written down.** 113 dated architectural decisions with rationale,
+   best-tested subsystem, and the live loop reaches three of its checks. Every
+   order *in the designed pipeline* passes seven independent pre-trade checks and
+   five circuit breakers; `scripts/run_live_trading.py` does not call that
+   pipeline. This read "Every order passes seven independent pre-trade checks and
+   five circuit breakers" until 2026-08-21, stated as a fact about live orders.
+   See Section 4.2.
+3. **Decisions are written down.** 139 dated architectural decisions with rationale,
    alternatives considered, and status. Code is required to match them.
 
 ### 1.3 Locked scope
@@ -97,7 +122,9 @@ records that this amendment ultimately produced the finding that spot long-only
 | 2026-06-05 | Retrospective DSR run. **All 11 strategies rejected** |
 | 2026-06-08 to 06-11 | Forward hypothesis loop. Two more hypotheses rejected |
 
-102 commits total, single author. Roughly four months of sustained work.
+Single author throughout. Roughly four months of build work (2026-02 to 2026-06)
+plus a pre-publication hardening pass (2026-08). `python scripts/doc_stats.py`
+reports the current commit count.
 
 ---
 
@@ -105,14 +132,14 @@ records that this amendment ultimately produced the finding that spot long-only
 
 ```
 Paravant_System/
-├── src/                      170 .py, 49,294 lines — the application
-│   ├── api/                  FastAPI: 14 route modules, 63 endpoints, 2 middleware
+├── src/                      169 .py, 49,745 lines — the application
+│   ├── api/                  FastAPI: 13 route modules, 61 endpoints, 4 middleware
 │   ├── brokers/binance/      Exchange client, execution adapter, rate limiter
 │   ├── core/
 │   │   ├── alerting/         Telegram channel, triggers, scheduler, escalation
 │   │   ├── config/           YAML+env loader, templates, risk profiles, backup
 │   │   ├── execution/        Order manager, position tracker, execution quality
-│   │   ├── indicators/       19 technical indicators
+│   │   ├── indicators/       14 technical indicators
 │   │   ├── monitoring/       Monitoring service
 │   │   ├── risk/             11 modules — the safety system
 │   │   ├── strategy/
@@ -123,23 +150,23 @@ Paravant_System/
 │   │   ├── event_bus.py      Pub/sub
 │   │   ├── exceptions.py     868-line exception hierarchy
 │   │   ├── health.py         Health checks
-│   │   └── orchestrator.py   1,800 lines — the main loop
+│   │   └── orchestrator.py   1,850 lines — the main loop
 │   ├── data/                 15 ORM models, DataStore, market data, validators, cache
 │   └── utils/                Logging, time, config, geo-block
-├── research/                 27 .py, 5,411 lines — the research library
+├── research/                 32 .py, 6,493 lines — the research library
 │   ├── backtest/             Cost model, regime tagging
 │   ├── biographies/          Strategy biography schema
 │   ├── data/                 Funding, ETF flows, Coinbase premium, liquidations
 │   ├── generators/           7 crypto-native hypothesis generators
 │   ├── promotion/            Tier classifier
 │   └── validation/           Deflated Sharpe, effective-K
-├── scripts/                  24 files, 11,865 lines — operational entrypoints
-├── tests/                    134 files, 36,221 lines, 1,900 tests
-├── frontend/                 100 .ts/.tsx, 17,230 lines — React dashboard
-├── docs/                     50 tracked .md
+├── scripts/                  25 files, 12,048 lines — operational entrypoints
+├── tests/                    139 files, 38,710 lines, 2,036 tests (+62 frontend)
+├── frontend/                 98 .ts/.tsx, 18,139 lines — React dashboard
+├── docs/                     72 tracked .md
 ├── config/                   settings.yaml, risk_profiles.yaml, 14 strategy templates
 ├── alembic/                  6 migrations
-└── .claude/ + .agent/        DECISIONS.md (113 decisions, dual-maintained) + rules
+└── .claude/ + .agent/        DECISIONS.md (139 decisions, dual-maintained) + rules
 ```
 
 ---
@@ -173,6 +200,9 @@ Binance REST  ->  MarketDataFetcher  ->  OHLCVSeries (in-memory, cached)
                                               |
                                               v
                         RiskController.validate_order()
+                        [DESIGNED PATH -- the live loop does not call this.
+                         grep -c RiskController scripts/run_live_trading.py -> 0
+                         Deployed path: ../README.md#architecture]
                           - kill switch          (checked FIRST)
                           - daily loss limit
                           - weekly loss limit
@@ -207,14 +237,47 @@ Binance REST  ->  MarketDataFetcher  ->  OHLCVSeries (in-memory, cached)
                         AlertTriggers -> Telegram
 ```
 
-The key architectural property: **paper and live share the entire code path** and
-diverge only at the `ExecutionInterface` boundary. A paper session and a live session
-run identical signal generation, identical risk checks, and identical position
-tracking. This is what makes paper results meaningful as a promotion gate.
+> **CORRECTED 2026-08-21.** This paragraph read: "The key architectural
+> property: **paper and live share the entire code path** and diverge only at
+> the `ExecutionInterface` boundary. A paper session and a live session run
+> identical signal generation, identical risk checks, and identical position
+> tracking. This is what makes paper results meaningful as a promotion gate."
+>
+> They are two scripts of 2,110 and 946 lines sharing exactly one module-level
+> function name, `main`. `run_paper_trading.py` contains zero `kill_switch`
+> references; live enforces three risk checks inline that paper does not have at
+> all. They share the signal path and diverge across the whole of execution and
+> risk.
+>
+> This was the third copy of the claim. `README.md` was corrected first,
+> `ARCHITECTURE.md` second, and this one was found by grepping for the old
+> wording rather than the new. See
+> [ARCHITECTURE.md](ARCHITECTURE.md#3-the-trading-path) for the evidence.
 
 ### 4.3 The orchestrator
 
-`src/core/orchestrator.py` (1,800 lines) is the async coordinator. It provides:
+> **Nothing calls any of this.** As of 2026-08-21 `src/core/orchestrator.py` is
+> entirely unreferenced by application code: the two API endpoints that could
+> have started it (`/system/start`, `/system/stop`) were removed because they
+> required an orchestrator instance nothing ever supplied, and returned 503 in
+> every environment for their whole existence (DEC-2026-08-21-008).
+>
+> The file is kept rather than deleted, and the distinction is between the five
+> classes in it. `StartupChecklist`, `EntryCoordinator`, `HealthChecker` and
+> `DegradationManager` are working, tested components the deployed loop lacks --
+> `scripts/run_live_trading.py` performs no startup validation at all, and its
+> degradation handling is a consecutive-failure counter. Only the `Orchestrator`
+> class itself duplicates the deployed loop.
+>
+> Wiring it was considered and rejected: it would promote a loop that has never
+> executed over one that has, on no evidence, and it would not deliver the risk
+> layer either -- `orchestrator.py` has zero `circuit_breaker`, `time_filter`,
+> `event_filter` or `PositionSizer` references of its own. That would move which
+> loop is unwired rather than fix it. Choosing a main loop and wiring the risk
+> package are one decision, to be taken after the live deployment is stopped and
+> reconciled.
+
+The file (1,850 lines) provides:
 
 - **8-step startup validation** — database reachable, config valid, broker reachable,
   account state loadable, strategies constructible, risk limits sane, kill switch
@@ -272,15 +335,26 @@ financial field, and lambda factories for mutable defaults.
 with SUSPENDED and RETIRED as terminal-ish states, and an OPTIMIZATION status added
 2026-02-22.
 
-Migrations are managed by Alembic (6 revisions). Development uses SQLite; production
-uses PostgreSQL on Neon.
+Six Alembic revisions exist under `alembic/versions/` and **no runtime invokes
+any of them**. Every path that creates a schema calls `init_db()`, which is
+`Base.metadata.create_all()`. See
+[ARCHITECTURE.md](ARCHITECTURE.md#how-the-schema-is-actually-created) for what
+that means for an existing database. Development uses SQLite; production uses
+PostgreSQL on Neon.
 
 ---
 
 ## 6. API surface
 
-FastAPI, 63 endpoints across 14 route modules. **No authentication exists on any of
-them** — this is the top finding in the readiness assessment.
+FastAPI, 61 endpoints across 13 route modules. The 19 state-mutating endpoints
+require a shared `X-API-Key` secret as of 2026-08-14 (DEC-2026-08-14-001); the
+42 read endpoints are open. The gate is method-based middleware rather than a
+per-route dependency, chosen because the latter is fail-open for endpoints
+added later — see `docs/ARCHITECTURE.md` section 8.1. Remaining gaps: one
+shared key with no identities or rotation, open reads. Mutating requests are
+also rate-capped per client and globally (DEC-2026-08-14-003), reusing the
+`TokenBucket` primitive from the Binance adapter but rejecting rather than
+blocking, since blocking inbound would amplify a flood rather than absorb it.
 
 | Module | Endpoints | Notable |
 |---|---|---|
@@ -299,7 +373,7 @@ them** — this is the top finding in the readiness assessment.
 | `system` | 7 | Status, start, stop, config |
 | root | 3 | `/health`, `/ready`, `/health/detailed` |
 
-21 endpoints mutate state, including order placement, position closure, and kill
+19 endpoints mutate state, including order placement, position closure, and kill
 switch control.
 
 Middleware: structured request logging with request IDs, and a global exception
@@ -871,7 +945,19 @@ type-only imports must use `import type` or they crash at runtime.
 (`/api/v1/regime/current`, `/api/v1/regime/paper-sessions`,
 `/api/v1/strategies/{id}/backtest/results`). Every other page renders hardcoded
 arrays; `PortfolioPage` generates its equity curve with `Math.sin() + Math.random()`.
-There are no frontend tests. See the readiness assessment, Phase 3.
+Wiring the remaining pages to real data is item 3.4 of the readiness assessment
+and is the largest single gap between what this repository looks like and what
+it is.
+
+**Updated 2026-08-16:** it now has 62 tests (Vitest + React Testing Library),
+covering the shared formatters, the regime hook, the positions table, the
+`EmergencyPanel` confirmation gate, and a react-router API contract. They were
+added deliberately *before* the rewiring, because refactoring untested UI is how
+a working prototype quietly stops working. Writing them immediately exposed two
+defects that had been invisible: the regime hook discarded its last good reading
+on any failed poll, and the positions table rendered fabricated equity holdings
+(NVDA, MSFT, TSLA) whenever its `data` prop was undefined — in a crypto-only
+system. Both are fixed (DEC-2026-08-16-003).
 
 ---
 
@@ -903,7 +989,7 @@ not yet — see readiness assessment 4.4.
 
 ### 18.1 The decision log
 
-113 dated architectural decisions, 2,998 lines, maintained identically in
+139 dated architectural decisions, 3,653 lines, maintained identically in
 `.claude/DECISIONS.md` and `.agent/DECISIONS.md` (verified byte-identical). Each entry
 records: decision, context, rationale, alternatives considered, status, date,
 implementing section, affected files, references.
@@ -937,25 +1023,40 @@ enforcement mechanism against their own future scope creep.
 > 2026-08-08 record.
 
 ```
-1,900 tests | 1,855 passed | 9 failed | 4 skipped | 32 errors | 132s
-Coverage: 63% (src + research, 15,784 statements)
+As of 2026-08-21:
+2,079 tests | 2,042 passed | 37 skipped | 0 failed | 0 errors | ~85s
+Coverage: 74% (src + research, whole suite), CI floor 72%
 ```
+
+The 2026-08-08 snapshot below read `1,900 tests | 1,855 passed | 9 failed |
+32 errors | 63% coverage`. All nine failures and all thirty-two errors are
+resolved. The 63% figure was also measured over `tests/unit` + `tests/research`
+only, which understated any module tested from `tests/integration/` — see the
+correction under "Poorly covered" below (DEC-2026-08-14-004).
 
 **Structure:** `tests/unit/` (the bulk, by subsystem), `tests/integration/`
 (API, database CRUD, order flow, full system, real-world scenarios),
 `tests/research/` (24 files covering the research layer),
 `tests/load/`, `tests/performance/`.
 
-**Well covered:** risk sizing 100%, risk checks 99%, time filter 100%, indicators
-88-100%, data models 88-100%, health 94%, config 96-97%.
+**Well covered:** risk sizing 100%, risk checks 99%, time filter 100%, data
+models 88-100%, health 94%, config 96-97%. The 14 indicators run 33-100%, 87%
+in aggregate — this line read "indicators 88-100%" until 2026-08-21, which was
+wrong at both ends and counted five scaffolding modules as indicators.
 
-**Poorly covered:** `data/store.py` 28%, `strategy/engine.py` 60%,
-`orchestrator.py` 71%, `risk/controller.py` 74%. `scripts/` — including the
-2,111-line live loop — is largely unmeasured.
+**Poorly covered** (corrected 2026-08-14): the previous entry here read
+"`data/store.py` 28%". That was a measurement artifact — the CI coverage job
+scoped itself to `tests/unit` + `tests/research`, while `DataStore` is tested
+from `tests/integration/`, which the `test` job runs on every commit. Measured
+over the whole suite `store.py` is at **100%**. The job now measures everything
+(DEC-2026-08-14-004). Remaining genuinely thin: `strategy/engine.py`,
+`risk/controller.py`, and `scripts/` — including the 2,110-line live loop —
+which is largely unmeasured.
 
-The 32 errors are network-dependent Binance tests that error rather than skip. The 9
-failures are genuine: 1 environment-leakage, 5 stale assertions, 3 test-environment
-defects. Full detail in the readiness assessment, Section 2.1.
+The 32 errors were network-dependent Binance tests that errored rather than
+skipped; they now skip unless `PARAVANT_RUN_NETWORK_TESTS=1`
+(DEC-2026-08-11-004). The 9 failures are all fixed. Full detail in the
+readiness assessment, Section 2.1.
 
 ---
 
@@ -963,7 +1064,7 @@ defects. Full detail in the readiness assessment, Section 2.1.
 
 | Dimension | State |
 |---|---|
-| Backend application | Complete and functional; 63 endpoints; no auth |
+| Backend application | Complete and functional; 61 endpoints; mutating 19 behind a shared `X-API-Key`, reads open |
 | Risk system | Complete, best-tested subsystem in the project |
 | Strategy library | 29 generators built; **0 validated** |
 | Backtest engine | Complete, O(n) optimised, equivalence-gated |
@@ -971,8 +1072,8 @@ defects. Full detail in the readiness assessment, Section 2.1.
 | Live trading | Built; kill switch OFF; no strategy passes the promotion gate |
 | Research layer | Complete and rigorous; the project's differentiator |
 | Research result | All 11 strategies + 2 forward hypotheses rejected |
-| Frontend | Visually complete, functionally a prototype (3 API calls) |
-| Tests | 1,900 tests, 63% coverage, 9 failing |
+| Frontend | Visually complete; still 3 API calls, but now 62 tests and no fabricated data |
+| Tests | 2,017 tests, 74% coverage (CI floor 72%), 0 failing |
 | CI | None |
 | Type/lint gates | Configured but unenforced; 50 mypy + 76 ruff errors |
 | Documentation | Extensive but disorganised; README two quarters stale |

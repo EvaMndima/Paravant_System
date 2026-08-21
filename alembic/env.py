@@ -1,4 +1,5 @@
 from logging.config import fileConfig
+import os
 import sys
 from pathlib import Path
 
@@ -44,7 +45,12 @@ def run_migrations_offline() -> None:
     script output.
 
     """
-    url = config.get_main_option("sqlalchemy.url")
+    x_args = context.get_x_argument(as_dictionary=True)
+    url = (
+        x_args.get("sqlalchemy.url")
+        or os.getenv("DATABASE_URL")
+        or config.get_main_option("sqlalchemy.url")
+    )
     context.configure(
         url=url,
         target_metadata=target_metadata,
@@ -63,8 +69,30 @@ def run_migrations_online() -> None:
     and associate a connection with the context.
 
     """
+    section = config.get_section(config.config_ini_section, {}) or {}
+
+    # DATABASE_URL wins over alembic.ini.
+    #
+    # alembic.ini hardcodes `sqlalchemy.url = sqlite:///data/trading.db`, and
+    # nothing here read the environment. Running `alembic upgrade head` on a
+    # host configured for PostgreSQL would therefore have migrated a local
+    # SQLite file and reported success, leaving the real database untouched --
+    # a silent no-op with a green exit code. Production is PostgreSQL on Neon.
+    #
+    # An explicit -x override still wins over both, for the case where an
+    # operator wants to point a one-off migration somewhere specific without
+    # exporting anything:
+    #
+    #     alembic -x sqlalchemy.url=postgresql://... upgrade head
+    #
+    # Decision: DEC-2026-08-21-005
+    x_args = context.get_x_argument(as_dictionary=True)
+    url = x_args.get("sqlalchemy.url") or os.getenv("DATABASE_URL")
+    if url:
+        section["sqlalchemy.url"] = url
+
     connectable = engine_from_config(
-        config.get_section(config.config_ini_section, {}),
+        section,
         prefix="sqlalchemy.",
         poolclass=pool.NullPool,
     )

@@ -1,7 +1,16 @@
-"""System control API endpoints.
+"""System status and regime API endpoints.
 
-Provides endpoints for system status, start/stop, and regime management.
-Supports graceful degradation when orchestrator is not yet initialized.
+Provides endpoints for system status and regime management.
+
+`/system/start` and `/system/stop` were removed on 2026-08-21. They required an
+orchestrator instance that nothing ever supplied -- `init_system_routes()` is
+called from `main.py` without one, and `set_orchestrator()` was called nowhere --
+so both returned 503 in every environment for their entire existence. See
+DEC-2026-08-21-008.
+
+`/system/status` remains and degrades gracefully: it enriches its response from
+the orchestrator when one is present and falls back to the data store when it is
+not, which is the case in every deployment.
 
 Decision: DEC-2026-02-08-003 - Timezone-aware UTC timestamps
 Decision: DEC-2026-02-08-004 - Explicit CORS origins
@@ -44,14 +53,6 @@ class SystemStatusResponse(BaseModel):
     last_trade_at: str | None = None
     started_at: str | None = None
     metrics: dict[str, Any] = Field(default_factory=dict)
-    timestamp: str
-
-
-class ActionResponse(BaseModel):
-    """Response for start/stop actions."""
-
-    status: str
-    message: str
     timestamp: str
 
 
@@ -154,17 +155,6 @@ def init_system_routes(
     logger.info("system_routes_initialized")
 
 
-def set_orchestrator(orchestrator: Any) -> None:
-    """Set orchestrator after delayed initialization.
-
-    Args:
-        orchestrator: Orchestrator instance.
-    """
-    global _orchestrator  # noqa: PLW0603
-    _orchestrator = orchestrator
-    logger.info("system_routes_orchestrator_set")
-
-
 # ---------------------------------------------------------------------------
 # Endpoints
 # ---------------------------------------------------------------------------
@@ -248,126 +238,6 @@ async def get_system_status() -> SystemStatusResponse:
     response_data["daily_pnl"] = daily_pnl
 
     return SystemStatusResponse(**response_data)
-
-
-@router.post(
-    "/start",
-    response_model=ActionResponse,
-    status_code=status.HTTP_200_OK,
-    summary="Start the trading system",
-    description="Starts the orchestrator and begins the main trading loop.",
-)
-async def start_system() -> ActionResponse:
-    """Start the trading system.
-
-    Requires orchestrator to be initialized.
-
-    Returns:
-        ActionResponse with result.
-
-    Raises:
-        HTTPException: 503 if orchestrator not initialized, 409 if already running.
-    """
-    if _orchestrator is None:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Orchestrator not initialized. System cannot be started via API yet.",
-        )
-
-    orch_status = _orchestrator.get_status()
-    if orch_status["running"]:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="System is already running.",
-        )
-
-    try:
-        # Start is async - fire and forget (runs in background)
-        import asyncio
-        asyncio.create_task(_orchestrator.start())
-
-        store = get_store()
-        store.add_audit_log(
-            action="system_started",
-            actor="api",
-            details={"trigger": "manual_api_start"},
-        )
-
-        if _event_bus is not None:
-            await _event_bus.publish("system_status_changed", {
-                "status": "starting",
-                "trigger": "api",
-            })
-
-        return ActionResponse(
-            status="starting",
-            message="System start initiated. Check /status for progress.",
-            timestamp=datetime.now(timezone.utc).isoformat(),
-        )
-    except Exception as e:
-        logger.error("system_start_failed", error=str(e), exc_info=True)
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to start system: {str(e)}",
-        )
-
-
-@router.post(
-    "/stop",
-    response_model=ActionResponse,
-    status_code=status.HTTP_200_OK,
-    summary="Stop the trading system",
-    description="Gracefully stops the orchestrator and cancels pending orders.",
-)
-async def stop_system() -> ActionResponse:
-    """Stop the trading system gracefully.
-
-    Returns:
-        ActionResponse with result.
-
-    Raises:
-        HTTPException: 503 if orchestrator not initialized, 409 if not running.
-    """
-    if _orchestrator is None:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Orchestrator not initialized.",
-        )
-
-    orch_status = _orchestrator.get_status()
-    if not orch_status["running"]:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="System is not running.",
-        )
-
-    try:
-        await _orchestrator.stop()
-
-        store = get_store()
-        store.add_audit_log(
-            action="system_stopped",
-            actor="api",
-            details={"trigger": "manual_api_stop"},
-        )
-
-        if _event_bus is not None:
-            await _event_bus.publish("system_status_changed", {
-                "status": "stopped",
-                "trigger": "api",
-            })
-
-        return ActionResponse(
-            status="stopped",
-            message="System stopped gracefully.",
-            timestamp=datetime.now(timezone.utc).isoformat(),
-        )
-    except Exception as e:
-        logger.error("system_stop_failed", error=str(e), exc_info=True)
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to stop system: {str(e)}",
-        )
 
 
 @router.get(

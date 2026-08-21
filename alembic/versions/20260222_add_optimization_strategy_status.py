@@ -15,7 +15,6 @@ no DDL change is required for development databases. The ALTER TYPE
 below is only executed on PostgreSQL (production).
 """
 from alembic import op
-import sqlalchemy as sa
 
 
 # revision identifiers, used by Alembic.

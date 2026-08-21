@@ -173,17 +173,39 @@ deactivate
 
 ## Docker Alternative
 
-If you prefer not to set up a local Python environment, you can use Docker:
+If you prefer not to set up a local Python environment, you can use Docker.
+No `.env` and no other setup is required — the compose file declares working
+defaults for everything.
 
 ```bash
-# Development mode (with hot reload)
-docker-compose --profile dev up
+# Start the API (creates the database schema first, then serves on :8000)
+docker compose up --build
 
-# Production mode
-docker-compose up
+# Check it
+curl http://localhost:8000/health
+
+# Development mode, with hot reload, on :8001
+docker compose --profile dev up
 ```
 
-Docker includes all dependencies and runs in an isolated environment.
+Note `docker compose` (a subcommand of Docker) rather than the older
+standalone `docker-compose` binary, which is end-of-life.
+
+Two things the compose file does deliberately:
+
+- **It runs `scripts/init_db.py` before starting the API.** `init_db()` is a
+  function nothing calls at import, so without this the API would boot and
+  then fail every query with "no such table". It is idempotent, so restarts
+  are safe.
+- **`LIVE_TRADING_ENABLED` and `BINANCE_TESTNET` are hardcoded, not
+  interpolated.** Compose reads a local `.env` for `${VAR}` substitution, so
+  inheriting them would point a local demo container at whatever a developer's
+  `.env` selects — including mainnet. No Binance credentials are passed into
+  the container at all.
+
+Set `PARAVANT_API_KEY` in your environment or `.env` to exercise the API key
+gate; leave it unset and the gate stays off in development. See
+[SECURITY.md](SECURITY.md).
 
 ---
 

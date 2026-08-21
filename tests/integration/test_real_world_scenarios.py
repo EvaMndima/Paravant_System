@@ -9,6 +9,9 @@ Tests complete end-to-end scenarios:
 """
 from datetime import datetime, timezone
 
+import pytest
+from sqlalchemy.exc import IntegrityError
+
 from src.data.models import (
     Account,
     Strategy,
@@ -271,10 +274,27 @@ class TestConstraintViolations:
             status=AssignmentStatus.ACTIVE,
         )
         db_session.add(assignment2)
-        
-        # This may or may not fail depending on constraints
-        # For now, just commit (TODO: Add unique constraint in migration)
-        db_session.commit()
+
+        # Until 2026-08-21 this method committed the duplicate and asserted
+        # nothing, with a comment reading "This may or may not fail depending
+        # on constraints". It could not fail, and it read in every CI run as a
+        # passing protection. The constraint existed only in an Alembic
+        # migration no runtime invoked; it is now on the model, so create_all()
+        # builds it and this asserts it.
+        # Decision: DEC-2026-08-21-004
+        with pytest.raises(IntegrityError):
+            db_session.commit()
+
+        db_session.rollback()
+
+        # And the first assignment survives the rejected duplicate.
+        surviving = (
+            db_session.query(StrategyAssignment)
+            .filter_by(account_id=account.id, strategy_id=strategy.id)
+            .all()
+        )
+        assert len(surviving) == 1
+        assert surviving[0].id == assignment1.id
 
 
     def test_negative_pnl_allowed(self, db_session):

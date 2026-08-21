@@ -1,21 +1,46 @@
 # PARAVANT
 
-**An autonomous crypto trading system, and a validation layer built to prove
-its own strategies don't work.**
+[![CI](https://github.com/EvaMndima/Paravant_System/actions/workflows/ci.yml/badge.svg)](https://github.com/EvaMndima/Paravant_System/actions/workflows/ci.yml)
+[![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-blue)](pyproject.toml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
-It worked, and the most instructive thing it did was catch an error in its own
-reporting.
+> ## Do not run the live trading script against real capital
+>
+> `scripts/run_live_trading.py` enforces three of the eight pre-trade checks
+> this repository documents — it reaches no circuit breaker, no dead man's
+> switch, no position sizer and no time, event or volatility filter, sizes every
+> position at a flat 25% of equity without reference to stop distance, and is
+> 22% covered by tests.
+>
+> The risk package those controls live in is real and well tested. It is not
+> connected to the loop that places orders. See
+> [What actually runs, and what does not](#what-actually-runs-and-what-does-not).
 
-After four months and 29 signal generators, **no strategy in this repository has
-a validated edge.** Eight subjects were rejected outright at a sample size where
-the verdict carries information. Ten more were initially reported as rejected —
-until the system's own guard established that they had never had enough data to
+**An autonomous crypto trading system, built around a validation layer that
+decides whether a strategy has a real edge — and is built to return `no` when
+the evidence is not there.**
+
+Twenty-nine signal generators have been through it over four months. **None has
+a validated edge.**
+
+That is the finding, not a malfunction. The validation layer is the artifact:
+gates pre-registered before results are seen, Deflated Sharpe correction for the
+number of trials actually run, a deliberately pessimistic cost model, and a map
+of where edge has been shown to be absent. Point it at a strategy and it tells
+you whether the result survives multiple-comparisons correction and realistic
+costs — or whether you were reading noise. It happens that everything pointed at
+it so far has been noise.
+
+The most instructive thing it did was catch an error in its own reporting. Eight
+subjects were rejected outright at a sample size where the verdict carries
+information. Ten more were initially reported as rejected — until the system's
+own minimum-evidence guard established that they had never had enough data to
 reject at all, and reclassified them as *unmeasurable*.
 
 The difference between "proven worthless" and "never actually measured" is the
-whole discipline. Getting it wrong in the safe direction, then catching it, is
-the result this repository exists to report. The trading engine is the
-supporting cast.
+whole discipline. A validation layer that catches its own over-claim — in the
+direction that makes its own headline weaker — is the strongest evidence
+available that it is measuring something rather than confirming something.
 
 ---
 
@@ -193,32 +218,106 @@ published conclusion changes. Recorded as `DEC-2026-08-13-001`.
 ## Architecture
 
 Three processes from one image: a read/query API, a paper-trading loop, and a
-live loop behind a default-off kill switch. Paper and live share the entire code
-path and diverge only at the execution interface, which is what makes paper
-results usable as a promotion gate.
+live loop behind a default-off kill switch.
+
+The diagram below is what `scripts/run_live_trading.py` does, traced from the
+source rather than from the design. Until 2026-08-21 this section carried a
+different diagram — one that routed every order through `RiskController`, five
+circuit breakers and `PositionSizer`. None of those appears anywhere in the
+deployed loop. The next section is the accounting.
 
 ```mermaid
 flowchart TD
     A[Binance REST] --> B[MarketDataFetcher]
     B --> C[OHLCVSeries, cached]
     C --> D[IndicatorFactory, cached]
-    D --> E[SignalGenerator]
-    E --> F{RegimeRouter<br/>allowed in this regime?}
-    F -->|no| Z[No trade]
-    F -->|yes| G{RiskController}
-    G --> H[kill switch, checked first<br/>daily / weekly loss<br/>max drawdown<br/>open positions<br/>concentration<br/>position size<br/>portfolio correlation<br/>5 circuit breakers]
-    H -->|rejected| Y[Logged + alerted]
-    H -->|approved| I[PositionSizer]
-    I --> J[OrderManager<br/>state machine]
-    J --> K[ExecutionInterface]
-    K --> L[BinanceExecution]
-    K --> M[PaperExecution]
-    L --> N[PositionTracker]
-    M --> N
-    N --> O[(DataStore)]
-    O --> P[ExecutionQuality<br/>slippage, fill rate]
-    O --> Q[Telegram alerts]
+    D --> E[SignalGenerator<br/>4 tiers, hardcoded]
+    E --> F{_tier_regime_match<br/>regime allows entry?}
+    F -->|no| Z[No entry]
+    F -->|yes| G{decorrelation cap<br/>MAX_CONCURRENT_SAME_DIRECTION}
+    G -->|at cap| Z
+    G -->|under cap| H{_check_risk_guards<br/>3 checks, not 8}
+    H --> H1[1 - kill switch<br/>DB read, fails CLOSED on error]
+    H --> H2[2 - daily loss<br/>vs MAX_DAILY_LOSS_PCT]
+    H --> H3[3 - max drawdown<br/>vs MAX_DRAWDOWN_PCT]
+    H -->|rejected| Y[Logged + Telegram]
+    H -->|approved| I[calculate_quantity<br/>flat 25% of equity<br/>stop distance is not an input]
+    I --> J[BinanceExecutionAdapter<br/>market order, no DB write]
+    J --> K[(paper_trading_sessions<br/>written after the fill)]
+    K --> Q[Telegram alerts]
 ```
+
+Three details in that diagram are worth reading twice.
+
+**The kill switch blocks exits, not only entries.** `_check_risk_guards` is
+consulted before every order including the one that closes a losing position,
+and the exit paths at lines 1325 and 1399 branch on `"kill_switch" in
+block_reason` and skip the close. Activating it with a position open disables
+the stop-loss and leaves the position running. It is a trading halt, not a flat
+button.
+
+**Position size does not consider the stop.** `calculate_quantity(current_equity,
+price)` takes no stop-loss argument, so risk per trade is unbounded by stop
+width. The `PositionSizer` that computes size from stop distance is at 100%
+coverage and is not called.
+
+**The order is placed before anything is persisted.** `submit_market_order`
+writes no database row; the record appears later, in `save_state`. A crash or an
+HTTP timeout between those two points leaves a position on the exchange with no
+record of it, and no reconciliation code exists.
+
+### What actually runs, and what does not
+
+The risk package in `src/core/risk/` is the best-tested subsystem in the
+repository. The live loop reaches three of its twelve controls, and reaches
+those three by reimplementing them inline rather than by importing them — so
+even the three that run are not the tested code.
+
+| Control | Built | Coverage | Reached by the live loop |
+|---|---|---|---|
+| Kill switch | yes | 96% | **yes** — via an inline DB read, not via `RiskController` |
+| Daily loss limit | yes | 99% | **yes** — reimplemented inline against `MAX_DAILY_LOSS_PCT` |
+| Max drawdown | yes | 99% | **yes** — reimplemented inline against `MAX_DRAWDOWN_PCT` |
+| 5 circuit breakers | yes | 95% | no |
+| Dead man's switch | yes | 100% | no |
+| Time filter | yes | 100% | no |
+| Event filter | yes | 100% | no |
+| Volatility filter | yes | 97% | no |
+| `PositionSizer` | yes | 100% | no — flat 25% fraction instead |
+| Weekly loss limit | yes | 99% | no |
+| Concentration check | yes | 99% | no |
+| `RiskController` (the pipeline) | yes | 74% | no |
+
+Verify it in one command:
+
+```bash
+grep -cE "RiskController|circuit_breaker|dead_man|time_filter|event_filter|VolatilityAnalyzer|PositionSizer|concentration|weekly" scripts/run_live_trading.py
+# 0
+```
+
+`src/core/orchestrator.py` is the loop that *was* meant to wire these together.
+Nothing calls it, and it never wired the circuit breakers, the filters or the
+sizer either — so "the deployed path reimplements the orchestrator" understates
+it in both directions.
+
+**Paper and live are separate implementations, and the promotion gate depends on
+their not being.** This section previously claimed they "share the entire code
+path and diverge only at the execution interface". They are two scripts of 2,110
+and 946 lines sharing exactly one module-level function name, `main`. Paper
+delegates execution to `PaperTradingEngine`; live reimplements stop and
+take-profit inline, its correctness asserted only by a docstring claiming
+consistency with the paper implementation. `run_paper_trading.py` contains zero
+`kill_switch` references. They share the signal path — fetcher, indicators,
+generators, regime detection — and diverge across the whole of execution and
+risk, which is exactly where paper results are being used to predict live
+behaviour.
+
+None of this is repaired here. It is described so that the diagram stops
+describing a system that does not exist. Whether the risk layer is wired, or the
+live loop deleted, is a decision that comes after the running deployment is
+stopped and reconciled — not one to make while it is still up. The findings are
+tracked in
+[docs/PRODUCTION_READINESS_ASSESSMENT.md](docs/PRODUCTION_READINESS_ASSESSMENT.md).
 
 The research layer sits alongside and may import from `src/`, but `src/` may
 never import from `research/`. That one-way boundary means research experiments
@@ -254,29 +353,43 @@ Deeper detail: **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)** ·
 
 | Layer | Files | Lines | Notes |
 |---|---|---|---|
-| `src/` application | 167 `.py` | 49,184 | API, risk, execution, indicators, strategies |
-| `tests/` | 134 `.py` | 36,876 | 1,931 tests: 1,894 pass, 37 skip, 0 fail |
-| `frontend/src/` | 90 `.ts`/`.tsx` | 17,187 | React 19 dashboard — see caveat below |
-| `scripts/` | 25 | 11,900 | Live loop, paper loop, sweeps, reporting |
-| `research/` | 32 `.py` | 6,461 | DSR, effective-K, cost model, feature store |
+| `src/` application | 169 `.py` | 49,701 | API, risk, execution, indicators, strategies |
+| `tests/` | 142 `.py` | 39,676 | 2,150 tests: 2,113 pass, 37 skip, 0 fail |
+| `frontend/src/` | 101 `.ts`/`.tsx` | 18,503 | React 19 dashboard — see caveat below |
+| `scripts/` | 25 | 12,064 | Live loop, paper loop, sweeps, reporting |
+| `research/` | 32 `.py` | 6,493 | DSR, effective-K, cost model, feature store |
 
-*Figures as of 2026-08-13. Regenerate with `python scripts/doc_stats.py`.*
+*Figures as of 2026-08-21. Regenerate with `python scripts/doc_stats.py`.*
 
 Highlights:
 
 - **Risk layer** — 8 pre-trade checks, 5 circuit breakers with state that
   survives restart, kill switch, dead man's switch, time/event/volatility
-  filters. Position sizing at 100% coverage, checks at 99%.
+  filters. Position sizing at 100% coverage, checks at 99%. **Three of these
+  are reached by the deployed live loop**; the rest are built, tested and not
+  called. This bullet listed them without that qualifier until 2026-08-21,
+  which read as a description of what protects a live order. See
+  [What actually runs, and what does not](#what-actually-runs-and-what-does-not).
 - **Live capital model** — per-strategy capital slicing, a concurrency cap, an
   85% capital reserve, and a minimum-notional guard that calls `sys.exit(1)`
   rather than rounding an order up to the exchange minimum.
 - **Promotion gate** — a strategy cannot go live until its pooled paper record
   is classified `READY_FOR_LIVE`. Fails *open* on a database error so a restart
   is not blocked; fails *closed* on a clear non-ready verdict.
-- **19 indicators**, each independently tested at 88-100% coverage.
-- **29 signal generators**, of which 0 are validated. That ratio is the point.
-- **122 dated architectural decisions** with rationale and rejected
-  alternatives, referenced by 71 distinct IDs from source comments.
+- **14 indicators**, independently tested at 33-100% coverage, 87% in aggregate.
+  Keltner at 33% and Ichimoku at 69% are the two that are not carrying their
+  weight. This bullet claimed nineteen indicators at 88-100% until 2026-08-21;
+  that count included `base`, `factory`, `cached`, `utils` and `resample`, which
+  are scaffolding rather than indicators, and the range was wrong at both ends.
+  The miscount is spelled as a word deliberately — `test_doc_consistency.py`
+  asserts every digit-form mention of this figure, and cannot tell a live claim
+  from a quotation of a retired one.
+- **29 signal generators**, of which 0 are validated. That ratio is the point —
+  with the caveat that the generators themselves sit at 13-21% line coverage, so
+  the suite does not independently establish that a null result came from the
+  mechanism rather than the implementation.
+- **139 dated architectural decisions** with rationale and rejected
+  alternatives, referenced by 78 distinct IDs from source comments.
 
 ---
 
@@ -324,13 +437,22 @@ Stated plainly, because a reviewer will find all of it anyway.
 - **Not a profitable trading system.** No strategy here passes its own
   validation gates. If it had an edge, this README would be a different
   document and probably would not exist.
-- **Not authenticated.** All 63 API endpoints are open, including 21 that mutate
-  state. Do not expose it to a network you do not control. See
-  [SECURITY.md](SECURITY.md).
-- **The dashboard is a prototype.** 17,000 lines of React that make three real
-  network calls. Every other page renders static seed data and the simulated
-  ticker is labelled as such in code. It is honest in the source and it is not
-  finished.
+- **Barely authenticated.** The 19 state-mutating endpoints sit behind one
+  shared `X-API-Key` and a burst rate cap; the 42 read endpoints are open, there
+  are no user identities and no key rotation. Do not expose it to a network you
+  do not control. See [SECURITY.md](SECURITY.md).
+- **The dashboard is a prototype, and now says so on screen.** 18,000 lines of
+  React that make three real network calls. Twelve files call `Math.random()`;
+  seven of them are components that fabricate profit and loss, equity curves,
+  drawdown series and win/loss outcomes. Until 2026-08-21 that was honest in
+  the source and invisible in the browser, which is the wrong way round — a
+  plausible equity curve with no label is a claim about a real account. Every
+  such component now renders a "Sample data" badge, and the rule is
+  **fail-closed**: a chart renders unlabelled only when told explicitly that
+  its data is `live`, so untagged data is labelled too. A test enumerates the
+  dashboard components, finds the ones calling `Math.random()`, and fails if
+  any of them is not provenance-aware — an eighth component gets the badge by
+  default rather than by someone remembering (DEC-2026-08-21-003).
 - **No trained model.** There is no estimator here. The work adjacent to machine
   learning is the infrastructure and the evaluation discipline: point-in-time
   feature resolution, leakage audits, multiple-comparisons correction, holdout
@@ -338,13 +460,46 @@ Stated plainly, because a reviewer will find all of it anyway.
 - **The frontend is not mine from scratch.** It began as a visual prototype
   built in Google AI Studio and was ported here and rebuilt on Tailwind v3.
   Productionising it was real work; designing it was not. Six pages still need
-  wiring to the API, and the dashboard has no tests.
-- **Not everything is fixed.** `orchestrator.py` is a fully built, tested main
-  loop that nothing calls — the deployed path reimplements it, and the two have
-  not been reconciled. Six methodology defects in the research layer remain open
-  and severity-ranked. Both are enumerated in
-  [docs/PRODUCTION_READINESS_ASSESSMENT.md](docs/PRODUCTION_READINESS_ASSESSMENT.md)
-  and [docs/research/RESEARCH_FIXLIST.md](docs/research/RESEARCH_FIXLIST.md).
+  wiring to the API. It has 62 tests across five files — the shared formatters,
+  the regime hook, the positions table, the emergency-panel confirmation gate,
+  and routing — against 74 components, with no coverage floor. Most of the
+  dashboard is unverified. This line read "the dashboard has no tests" until
+  2026-08-21; that was true when written and was left standing after the Vitest
+  job landed on 2026-08-16, contradicting the CI table further down this file.
+- **`src/core/orchestrator.py` is 1,850 lines that nothing calls, deliberately
+  kept.** It is a fully built, tested main loop with 68% coverage, and no
+  application code references it — the last two callers, `/system/start` and
+  `/system/stop`, were removed on 2026-08-21 because they needed an orchestrator
+  instance nothing ever supplied and returned 503 in every environment for their
+  entire existence. Wiring it was considered and rejected: it would promote a
+  loop that has never executed once over one that has, on no evidence, and it
+  would not deliver the risk layer either, because `orchestrator.py` has no
+  circuit-breaker, filter or `PositionSizer` references of its own. That moves
+  which loop is unwired rather than fixing it. Four of its five classes are
+  components the deployed loop genuinely lacks, which is why the file stays.
+  Written up as a case study in
+  [docs/AI_ASSISTED_DEVELOPMENT.md](docs/AI_ASSISTED_DEVELOPMENT.md) §4.2 —
+  local coherence is not integration.
+- **Six methodology defects in the research layer remain open** and
+  severity-ranked in
+  [docs/research/RESEARCH_FIXLIST.md](docs/research/RESEARCH_FIXLIST.md); the
+  engineering findings are in
+  [docs/PRODUCTION_READINESS_ASSESSMENT.md](docs/PRODUCTION_READINESS_ASSESSMENT.md).
+- **The engine ran without connection liveness checking for six months, and it
+  cost an outage.** `create_engine` was called with no pool configuration from
+  the first commit. That is invisible against local SQLite and wrong against
+  the managed Postgres production actually runs on: the provider closes idle
+  connections, SQLAlchemy hands out one that is already dead, and the query
+  fails with `psycopg2.OperationalError: SSL connection has been closed
+  unexpectedly`. On 2026-08-15 that took down regime persistence. Fixed
+  2026-08-21 with `pool_pre_ping` and a 300-second `pool_recycle`
+  (DEC-2026-08-21-002). It is recorded here rather than quietly repaired
+  because the sequence is the useful part: an audit predicted the failure from
+  the absence of two keyword arguments, and the failure had already happened.
+  A prediction that is later confirmed is better evidence than either the
+  prediction or the incident alone, and the reason it went unnoticed for six
+  months — development on one database, production on another — is a more
+  general lesson than the fix is.
 - **Not built alone in the conventional sense.** One person working with AI
   coding assistants throughout. Where that approach held up, where it broke, and
   what had to be built to catch the breaks is in
@@ -370,7 +525,7 @@ Stated plainly, because a reviewer will find all of it anyway.
 **Engineering**
 
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) · [docs/API_CONTRACT.md](docs/API_CONTRACT.md) · [docs/INDICATOR_SPECIFICATION.md](docs/INDICATOR_SPECIFICATION.md)
-- [.claude/DECISIONS.md](.claude/DECISIONS.md) — 122 decisions with rationale and rejected alternatives
+- [.claude/DECISIONS.md](.claude/DECISIONS.md) — 139 decisions with rationale and rejected alternatives
 - [docs/operations/](docs/operations/) — kill-switch runbook, scheduled jobs
 - [docs/PRODUCTION_READINESS_ASSESSMENT.md](docs/PRODUCTION_READINESS_ASSESSMENT.md) — measured gaps and the plan
 
@@ -395,21 +550,31 @@ run them against Binance testnet.
 
 `.github/workflows/ci.yml` gates every push and pull request:
 
+Eleven jobs. Every one of them blocks — none is advisory.
+
 | Job | Enforces |
 |---|---|
-| Lint | `ruff` over `src`, `research`, `scripts` **and** `tests` |
+| Lint | `ruff` over `src`, `research`, `scripts`, `tests` **and** `alembic` |
 | Type check | `mypy` over `src/` and `research/features/` |
+| Dependency audit | `pip-audit` against the pinned production set |
+| **Secret scan** | `gitleaks` over the **whole history**, pinned to 8.30.1 |
 | Tests | Python 3.11, 3.12, 3.13 |
-| Coverage | Floor at 62% (measured 63%) |
+| Coverage | Floor at 72% (measured 74%), over the **whole** suite |
+| **Migrations** | Apply the whole Alembic chain to an empty database, downgrade to base and back, then assert the resulting schema equals the ORM models |
 | **Quickstart** | Fresh install, `init_db`, `verify_db`, boot the API, assert `/health` — on **Linux and Windows** |
 | Frontend | `tsc -b` and production build |
+| Frontend tests | Vitest — formatters, data hook, positions table, confirmation gate, synthetic-data provenance |
+| Frontend lint | `eslint`, 0 errors |
 
 The quickstart job exists because the documented first command of this README
 once exited 1 with a traceback on Windows, and 1,900 passing tests said nothing
 about it: tests import modules and call functions, and nobody had run the
-entrypoint. Frontend lint runs advisory-only while 84 known issues are
-outstanding — an amber check that means something, rather than a green one that
-does not.
+entrypoint.
+
+Frontend lint became a real gate on 2026-08-13 once eslint reported 0 errors.
+80 warnings remain and are expected to; `--max-warnings` is deliberately not set
+to 0, so the count stays visible while it is driven down rather than hidden by a
+blanket disable.
 
 ---
 

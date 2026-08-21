@@ -299,11 +299,32 @@ class TestEmaTrendRsiGenerator:
         assert result is None
 
     def test_generate_with_sufficient_data(self):
-        """Test signal generation with enough data (may or may not signal)."""
+        """The generator emits a well-formed signal on data that triggers it.
+
+        This method read as follows until 2026-08-21::
+
+            result = gen.generate(series, params, "BTCUSDT")
+            if result is not None:
+                assert isinstance(result, TradingSignal)
+                assert result.symbol == "BTCUSDT"
+                assert result.price > 0
+
+        Every assertion sat behind a conditional a broken generator satisfies by
+        returning None forever, under a docstring that said "may or may not
+        signal". It was the only test in the suite calling `generate()` on
+        real-shaped data, and it could not fail.
+
+        Demonstrated rather than argued: making `macd_pullback`'s entry
+        condition unsatisfiable leaves this file at 24 passed and fails
+        `test_generator_liveness.py`.
+
+        Decision: DEC-2026-08-21-007
+        """
+        from tests.unit.test_generator_liveness import _series
+
         factory = SignalGeneratorFactory()
         gen = factory.get_generator("ema_trend_rsi")
 
-        series = _make_series(n_bars=250, trend=0.002)
         params = {
             "fast_ema_period": 12,
             "slow_ema_period": 26,
@@ -316,9 +337,23 @@ class TestEmaTrendRsiGenerator:
             "atr_period": 14,
         }
 
-        # Should not raise - result can be None or TradingSignal
-        result = gen.generate(series, params, "BTCUSDT")
-        if result is not None:
+        # Walk the series forward, as the live loop and the backtest both do.
+        # `generate()` inspects only the last bar, so calling it once asks
+        # whether that single bar happened to be a setup.
+        full = _series("uptrend_with_pullbacks")
+        signals = [
+            signal
+            for end in range(260, len(full) + 1, 10)
+            if (signal := gen.generate(full.slice(0, end), params, "BTCUSDT")) is not None
+        ]
+
+        assert signals, (
+            "ema_trend_rsi produced no signal at any point of a trending series "
+            "with pullbacks. It is either dead or its entry condition cannot be "
+            "met."
+        )
+
+        for result in signals:
             assert isinstance(result, TradingSignal)
             assert result.symbol == "BTCUSDT"
             assert result.price > 0

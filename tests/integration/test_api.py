@@ -376,19 +376,16 @@ class TestSystemEndpoints:
         data = response.json()
         assert data["daily_pnl"] == 0.0
 
-    def test_system_stop(self, api_test_client, mock_orchestrator):
-        """Test system stop."""
-        response = api_test_client.post("/api/v1/system/stop")
-        assert response.status_code == 200
-        data = response.json()
-        assert data["status"] == "stopped"
-        mock_orchestrator.stop.assert_called_once()
-
-    def test_system_stop_not_running(self, api_test_client, mock_orchestrator):
-        """Test stopping a non-running system returns 409."""
-        mock_orchestrator.get_status.return_value = {"running": False, "status": "stopped"}
-        response = api_test_client.post("/api/v1/system/stop")
-        assert response.status_code == 409
+    # test_system_stop and test_system_stop_not_running were removed on
+    # 2026-08-21 with the /system/start and /system/stop endpoints themselves
+    # (DEC-2026-08-21-008).
+    #
+    # Worth recording why they passed. Both supplied a mock orchestrator through
+    # init_system_routes(orchestrator=...). The application never does: main.py
+    # calls it with store and event_bus only, and set_orchestrator() was called
+    # nowhere. So these tests exercised a code path that existed in no
+    # environment, and reported it as covered. A test can be entirely correct
+    # about behaviour that cannot occur.
 
     def test_get_regime(self, api_test_client, seed_account):
         """Test getting current regime."""

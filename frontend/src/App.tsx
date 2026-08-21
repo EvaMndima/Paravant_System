@@ -37,7 +37,14 @@ function App() {
   return (
     <ThemeProvider>
       <ToastProvider>
-        <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+        {/*
+          The `future={{ v7_startTransition, v7_relativeSplatPath }}` opt-in was
+          removed when react-router-dom went 6.30 -> 7.18 (DEC-2026-08-16-001).
+          Those flags no longer exist as props because both behaviours are the
+          default in v7, so deleting them changes nothing at runtime -- having
+          already opted in is precisely what made the major bump a non-event.
+        */}
+        <BrowserRouter>
           <DashboardProvider>
             <SidebarProvider>
               <Suspense fallback={<LoadingState className="min-h-screen" />}>

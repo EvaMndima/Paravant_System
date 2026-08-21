@@ -643,8 +643,16 @@ These decisions are **LOCKED** per MVP scope control rules until specified revie
 
 ---
 
+> **Superseded intermediate footer.** The block below is a leftover from an
+> earlier merge of this file and sits in the middle of the document rather than
+> at its end. Its "Next Decision ID" was already months out of date, and its
+> count is asserted by nothing -- `test_governance_sync.py` reads the LAST
+> `**Total Decisions:**` match. The authoritative counts are at the end of this
+> file. Marked rather than deleted (Rule 6) because the merge it records is
+> itself part of the log's history. Found 2026-08-21.
+
 **Last Updated:** 2026-05-08
-**Total Decisions:** 23 active, 0 superseded, 5 locked
+**Total Decisions:** 131 active, 0 superseded, 5 locked
 **Next Decision ID:** DEC-2026-05-08-005
 
 ---
@@ -2947,13 +2955,243 @@ parameters:
 - **Expectations:** Liquidation cascades large enough to trade are RARE; reaching testable N (>= 30 in HIGH_VOL) will take WEEKS-to-MONTHS of accrual. The liquidation generator (H-004 / H-009) re-enters the lifecycle at the data/implement step and is screened via `regime_dsr` once N is sufficient (Stage-1 already passed). The LONG flush (buy forced-selling) is spot-deployable; the SHORT squeeze-fade stays research-only (DEC-2026-05-28-001).
 - **References:** DEC-2026-06-04-018 (data-channel-on-pass discipline this invokes), DEC-2026-06-04-005 (paid alt-data deferral this routes around with a free source), DEC-2026-06-04-003 (geo-block root cause / deploy gate), DEC-2026-05-28-001 (spot-only live lock - short fade research-only), DEC-2026-06-04-019 (research generator runtime hook the eventual generator will use). Ledger `H-2026-06-004` / `H-2026-06-009` (the unblocked hypotheses); `docs/research/NEGATIVE_SPACE_MAP.md` (meta-finding). PRD Section 5.2 (one-way dependency), Section 11.1 (free Binance data). Session prompt 2026-06-11 (PROMPT_LIQUIDATION_COLLECTOR).
 
+### DEC-2026-08-21-001: Untrack per-machine assistant config; do NOT rewrite git history
+- **Decision:** Remove `.claude/mcp_config.json`, `.claude/settings.local.json` and `.agent/mcp.json` from tracking with `git rm --cached` and add them to `.gitignore`, so they stop being published going forward. **Do not** rewrite git history to purge their previous contents.
+- **Context:** These three files were tracked from early in the project until 2026-08-20. They are per-machine tooling, not project artifacts. `.claude/mcp_config.json` in particular carried an interpreter path under a different Windows account (`C:\Users\Dell\anaconda3`) and pointed two MCP servers -- `PYTHONPATH` and the filesystem server root -- at an unrelated predecessor project, `D:\Eva\Projects\MultiAgentTradingSystem`. It reads as config copied between projects and never reviewed, which is what it was. **No credentials are involved:** the `${GITHUB_TOKEN}`-style entries are interpolation placeholders, not values, and the full-history secret scan recorded in `b4cb1b8` (gitleaks + trufflehog) found nothing. The question this decision answers is therefore not "how do we contain a leak" but "is a filesystem path worth rewriting history for".
+- **Rationale:**
+  - **The exposed content is not a secret, so erasure buys nothing.** A username and a predecessor project's directory name cannot be revoked, reused, or escalated. Nothing is safer after a rewrite than before one. Contrast a real credential, where rewriting is *also* insufficient -- rotation is the actual remedy and the rewrite is cosmetic.
+  - **A rewrite would break the traceability that is the point of the decision log.** `git filter-repo` changes every SHA from the first affected commit onward. This log references commits by SHA, and `docs/audit/AUDIT.md` is explicitly pinned -- "written against commit `622ac49`" -- with a preamble explaining that its stale links are left unedited because "rewriting an audit so its findings appear never to have applied would defeat its purpose". A history rewrite would make that pin unresolvable and silently falsify every SHA reference in both documents. Trading a real, load-bearing audit trail for the removal of a directory name is a bad exchange.
+  - **A force-push over published history is a worse signal than the paths are.** It breaks every existing clone, it is visible in the repository's own reflog and in any fork, and to a reviewer it reads as either panic or as something worth hiding. The paths read as untidy. Untidy and disclosed beats tidy and suspicious.
+  - **Disclosure is the treatment this repository already uses for non-secrets.** `documentation-freshness.md` Rule 6 distinguishes an outdated claim (update in place) from a wrong one (mark it, keep the record). The same instinct applies to history: the fix for something embarrassing but harmless is to say what it was and stop doing it, not to pretend it never happened. `.gitignore` carries that explanation inline, at the ignore rules themselves, where the next person to wonder why will look.
+  - **The rule this establishes is conditional, not absolute.** History is not rewritten for a non-secret. A real credential would change the answer -- and would require rotation first, with the rewrite as an optional second step whose cost is then clearly worth paying.
+- **Alternatives Considered:**
+  - **`git filter-repo` to purge the three files from all history:** REJECTED - invalidates every SHA reference in this log and the pinned commit in `docs/audit/AUDIT.md`, breaks existing clones, and removes a directory name that is not sensitive. Cost is concrete and permanent; benefit is cosmetic.
+  - **Leave them tracked:** REJECTED - they are local tooling with no reader value, they leak filesystem layout, and `.claude/settings.local.json` is by name a local override file. What *is* deliberately tracked under `.claude/` and `.agent/` -- `DECISIONS.md`, `CLAUDE.md` / `SYSTEM.md`, and `rules/` -- belongs to the project and stays.
+  - **Squash the whole history into one commit before publishing:** REJECTED - destroys the 153-commit record, which is a substantial part of what this repository demonstrates, to solve a problem the ignore rules already solve.
+- **Status:** ACTIVE
+- **Date Decided:** 2026-08-21
+- **Implemented By:** Phase 1 publication hygiene (group 1.3)
+- **Affected Files:** `.gitignore` (ignore rules plus the inline explanation), `.claude/mcp_config.json`, `.claude/settings.local.json`, `.agent/mcp.json` (all three untracked, retained on disk), `docs/PRODUCTION_READINESS_ASSESSMENT.md` (hygiene finding recorded).
+- **References:** `b4cb1b8` (full-history gitleaks + trufflehog scan, found nothing), `docs/audit/AUDIT.md` (pinned to `622ac49`; the reference a rewrite would break), `SECURITY.md` (disclosure posture), DEC-2026-08-14-002 Rule 6 (mark a correction rather than erasing the record).
+
+---
+
+### DEC-2026-08-21-002: Connection liveness for managed Postgres (pool_pre_ping + pool_recycle)
+- **Decision:** `create_engine` receives `pool_pre_ping=True` and `pool_recycle=300` for every server-backed database, and neither for SQLite. The choice is made by a new `engine_options(url)` in `src/data/database.py`, which also replaces the substring test `"sqlite" in DATABASE_URL` with SQLAlchemy's own URL parsing.
+- **Context:** Production is PostgreSQL on Neon. A managed Postgres closes idle connections on its own schedule and the client learns of it only on use: SQLAlchemy hands out a pooled connection the server has already dropped, and the query fails with `psycopg2.OperationalError: SSL connection has been closed unexpectedly`. **This is not a predicted failure. It happened on 2026-08-15 and took down regime persistence.** The engine had been constructed with no pool configuration at all since the first commit, which was invisible for as long as development ran against local SQLite.
+- **Rationale:**
+  - **Both settings, because they fail differently.** `pool_recycle` retires connections by age and prevents the common case cheaply. `pool_pre_ping` issues a trivial liveness check at checkout and transparently reconnects, catching what recycle misses -- including a server-side close that arrives well inside the recycle window, which is exactly what a provider that suspends compute on idle produces. Pre-ping alone would be correct and costs one round trip per checkout; recycle alone is cheaper and leaves a window. The window is where the 2026-08-15 outage lived.
+  - **300 seconds, chosen against the provider's behaviour rather than by habit.** It sits under the idle window after which a managed Postgres drops or suspends a connection. The value is a constant with that reasoning attached rather than an environment variable, because adding an undocumented environment variable is the defect recorded as finding 17 in `docs/PRODUCTION_READINESS_ASSESSMENT.md` and this change should not add a fourteenth.
+  - **SQLite deliberately gets neither.** There is no server to close the connection, so a pre-ping is a round trip protecting against nothing. Keeping the branch explicit also documents *why* SQLite is different rather than leaving a reader to infer it.
+  - **The substring test had to go with it.** `"sqlite" in DATABASE_URL` could not fail, but it could silently misclassify: a Postgres host, database or password containing "sqlite" selected the SQLite branch and would have passed `check_same_thread` to psycopg2, which rejects it. Since this change branches on backend to decide pooling, a misfire would now also mean a production database silently running without liveness checking. `make_url(url).get_backend_name()` is the parser SQLAlchemy uses itself.
+  - **Extracted to a function so the choice is testable.** The engine is built at import time from an environment variable, which makes the configuration awkward to assert. `engine_options(url)` is a pure function over a URL. `tests/unit/test_database_engine.py` also asserts that the live `engine` was actually built from it -- a tested component that nothing calls is the failure mode this repository has found repeatedly elsewhere, and it is cheap to rule out here.
+  - **Mutation-tested, both halves.** Removing `pool_pre_ping` fails 4 of the 18 tests; reverting to the substring test fails 2. A fix whose tests still pass without it is not protected.
+- **Alternatives Considered:**
+  - **`pool_pre_ping` only:** REJECTED - correct, but pays a round trip on every checkout for a case `pool_recycle` handles for free. The two together cost less in aggregate.
+  - **`pool_recycle` only:** REJECTED - cheaper, and leaves precisely the gap the 2026-08-15 outage went through. A connection can be closed server-side one second after it is opened.
+  - **Catch `OperationalError` and retry at the call sites:** REJECTED - spreads the fix across every query in the codebase, cannot be verified by inspection, and reimplements what the pool already does correctly one layer down. The audit's finding was that there is no `OperationalError` handling anywhere; the answer is not to add it in 200 places.
+  - **`NullPool` (no pooling):** REJECTED - removes the failure mode by removing the pool, at the cost of a connection setup per request against a database whose connection setup includes a TLS handshake.
+  - **Make the recycle window an environment variable:** REJECTED for now - see rationale. It would be the fourteenth undocumented live-configuration variable.
+- **Status:** ACTIVE
+- **Date Decided:** 2026-08-21
+- **Implemented By:** Phase 1 structural guards (group 1.4)
+- **Affected Files:** `src/data/database.py` (`engine_options`, `POOL_RECYCLE_SECONDS`), `tests/unit/test_database_engine.py` (new, 18 tests), `README.md` (known limitations), `docs/PRODUCTION_READINESS_ASSESSMENT.md` (row 21).
+- **Measured:** 18 new tests; mutation-tested at 4 and 2 failures respectively; full suite 2,042 -> 2,060 passing, 0 failing.
+- **References:** `docs/PRODUCTION_READINESS_ASSESSMENT.md` row 21 (the finding) and finding 17 (why the recycle window is a constant, not an env var), the 2026-08-15 `SSL connection has been closed unexpectedly` incident.
+
+---
+
+### DEC-2026-08-21-003: Fabricated dashboard data is labelled fail-closed
+- **Decision:** Every dashboard component that renders financial values accepts an optional `dataProvenance` prop and shows a `SyntheticDataBadge` unless that prop is explicitly `'live'`. Synthetic data is labelled; **untagged data is also labelled**. `resolveProvenance()` further forces `'synthetic'` whenever a component generated its own data, so a caller cannot declare `'live'` while passing nothing. A test in `frontend/src/components/dashboard/provenance.test.tsx` enumerates dashboard sources via `import.meta.glob`, selects those containing `Math.random`, and fails if any is not provenance-aware.
+- **Context:** Twelve files in the dashboard call `Math.random()`; seven are components that fabricate profit and loss, equity curves, drawdown series and win/loss outcomes. The pages were ported from a visual prototype and six are still not wired to the API. The generators were honestly named -- `generateEquity`, `generateMockTrades`, `mockResult` -- and entirely invisible in the browser. `docs/audit/AUDIT.md` flagged this on 2026-08-08; the 2026-08-20 audit flagged it again. A plausible equity curve with no label is a claim about a real account, and this repository is about to be public.
+- **Rationale:**
+  - **Fail-closed, because the alternative depends on memory.** Tagging the synthetic paths and treating everything else as real would leave the eighth component -- written months from now by someone who has not read any of this -- rendering fabricated values with no label and nothing failing. That is structurally the same choice as a per-route authentication dependency, and `src/api/auth.py` already rejects it in this codebase: "a mutating endpoint added tomorrow is covered on the day it is written". The same reasoning gives the same answer here.
+  - **The guard enumerates the filesystem, not a list.** A hardcoded list of components has to be updated by the person adding the eighth one, who is the same person who forgot the badge. `import.meta.glob('./*.tsx', { query: '?raw' })` finds every dashboard source through the bundler, so the test sees exactly the module set the build sees.
+  - **Mutation-tested, and the mutation is the actual scenario.** Dropping an eighth component that calls `Math.random()` with no badge into the directory fails three tests, each named after the offending file. Removing it returns the suite to green. A structural guard that does not fail on the case it exists for is decoration.
+  - **`resolveProvenance` closes the laundering path.** Without it, `<EquityChart dataProvenance="live" />` with no `data` would render a generated series with no badge -- the caller's claim applied to data the component invented. The helper ignores the declaration when `data` is `undefined`. This is asserted directly.
+  - **The badge is not dismissible and not subtle.** Amber, bordered, with an `AlertTriangle` and the words "Sample data". A label a reader can close, or one rendered in muted grey at the foot of a card, has been technically applied rather than actually communicated.
+  - **`BacktestResultsModal` derives provenance rather than being told.** It chooses between a caller prop, `useBacktestResults` (one of the three real API calls) and `mockResult`. Provenance follows which branch won, so the one path in the dashboard that does fetch real data renders clean without anyone passing a prop.
+  - **A README note was explicitly not the fix.** The operator ruled that out, correctly: a caveat in a file the viewer of the dashboard is not reading does not label the dashboard.
+- **Alternatives Considered:**
+  - **Delete the synthetic generators:** REJECTED for now - six pages are unwired, and removing the fallbacks leaves empty cards that look like a broken product rather than an unfinished one. Item 3.4 in the readiness assessment wires them; the labels can come out per component as that lands.
+  - **Tag synthetic paths, treat untagged as live:** REJECTED - fail-open, see rationale. It is the exact defect this repository has found three times elsewhere (the risk package, the orchestrator, the Alembic chain): protection that exists and is not reached.
+  - **A note in the README:** REJECTED by the operator, and rightly.
+  - **Enforce in the chart primitives (`AreaChart`, `SparklineChart`):** REJECTED for this pass - it would catch more, but those primitives are also used for genuinely live data, and threading provenance through them is a larger change than the one asked for. Worth revisiting if the badge count grows.
+  - **A hardcoded list of components in the test:** REJECTED - see rationale.
+- **Status:** ACTIVE
+- **Date Decided:** 2026-08-21
+- **Implemented By:** Phase 1 structural guards (group 1.4)
+- **Affected Files:** `frontend/src/lib/provenance.ts` (new), `frontend/src/components/ui/SyntheticDataBadge.tsx` (new), `frontend/src/components/dashboard/provenance.test.tsx` (new, 31 tests), and the seven fabricating components: `EquityChart`, `DrawdownChart`, `TradeHistoryTable`, `BacktestResultsModal`, `TradeDetailModal`, `PositionDrawer`, `StrategyDetailDrawer`. Plus `README.md` and `docs/PRODUCTION_READINESS_ASSESSMENT.md` row 32.
+- **Measured:** frontend 62 -> 93 tests, all passing; `tsc -b` and `vite build` green; eslint unchanged at 0 errors / 80 warnings; mutation probe fails 3 tests and only those.
+- **References:** `docs/audit/AUDIT.md` (raised 2026-08-08), `docs/PRODUCTION_READINESS_ASSESSMENT.md` row 32 and item 3.4, DEC-2026-08-14-001 (the fail-closed-by-default reasoning this borrows), DEC-2026-08-16-003 (removal of the fabricated `PositionsTable` fallback, the same problem solved by deletion where deletion was possible).
+
+---
+
+### DEC-2026-08-21-004: Uniqueness of (account_id, strategy_id) is declared on the model
+- **Decision:** `StrategyAssignment` declares `UniqueConstraint("account_id", "strategy_id")` in `__table_args__`. `test_duplicate_strategy_assignment_rejected` asserts `IntegrityError` on the duplicate and that the original row survives. The Alembic migration that previously held the constraint alone is kept and remains correct.
+- **Context:** DEC-2026-02-09-001 established the business rule -- one strategy instance per account -- and implemented it in `alembic/versions/20260209_add_unique_constraint_strategy_assignments.py`. **No runtime invokes Alembic.** Every path that creates a schema calls `Base.metadata.create_all()`, so the constraint has never existed in any running database. The rule was documented, implemented, referenced from the decision log, and enforced by nothing, for six months.
+- **Rationale:**
+  - **The model is where the constraint has to be, because the model is what builds the schema.** A migration is the right place for a constraint in a project that runs its migrations. This one does not. Until that changes -- and it is a separate decision whether it should -- `create_all()` is the schema authority and anything absent from the model is absent from production.
+  - **The test named for the protection could not fail.** It added a duplicate, called `db_session.commit()`, and asserted nothing, under a comment reading "This may or may not fail depending on constraints" and a TODO. It appeared in every CI run as a passing constraint-violation test. That is worse than no test: an absent test prompts someone to write one, a vacuous test tells them it is already covered.
+  - **Mutation-tested.** Removing the constraint from the model produces `DID NOT RAISE <class 'sqlalchemy.exc.IntegrityError'>`. Restoring it returns to green. The test now discriminates.
+  - **The assertion checks the survivor, not just the exception.** A rejected duplicate that also rolled back the original would satisfy `pytest.raises` and be a data-loss bug. Asserting that exactly one row remains, and that it is the first one, costs three lines.
+  - **One existing test was silently depending on the absence.** `test_assignment_status_enum` looped over all three `AssignmentStatus` values creating an assignment for the same `(account, strategy)` each time -- three duplicates -- while claiming to test enum round-tripping. It passed only because nothing enforced uniqueness. Rewritten to use a distinct strategy per status, which is what it meant to do. Finding a test that depends on a missing constraint is itself evidence the constraint was load-bearing and absent.
+- **Alternatives Considered:**
+  - **Run Alembic at deploy time instead:** REJECTED for this change, not on the merits. Making Alembic the schema authority is a real option and a bigger decision -- it needs a migration for every model change made in the last six months, and an upgrade path for the existing Neon database. Declaring the constraint on the model fixes the enforcement gap today without pre-empting that.
+  - **Delete the migration as dead:** REJECTED - it is correct, and it becomes live the moment the chain is run. Deleting it would also delete the record of when the rule was introduced.
+  - **Leave the test asserting nothing and add a new one:** REJECTED - the misleading name is the problem. A test called `test_duplicate_strategy_assignment_rejected` that does not test rejection should either test it or not exist.
+- **Status:** ACTIVE
+- **Date Decided:** 2026-08-21
+- **Implemented By:** Phase 1 structural guards (group 1.4)
+- **Affected Files:** `src/data/models/strategy_assignment.py`, `tests/integration/test_real_world_scenarios.py`, `tests/unit/data/test_models_signal_assignment.py`, `alembic/versions/20260209_add_unique_constraint_strategy_assignments.py` (batch mode, so the chain can apply on SQLite at all).
+- **Measured:** mutation-tested at 1 failure; full suite green.
+- **References:** DEC-2026-02-09-001 (the rule this finally enforces), `docs/PRODUCTION_READINESS_ASSESSMENT.md` row 16, `docs/ARCHITECTURE.md` "How the schema is actually created".
+
+---
+
+### DEC-2026-08-21-005: The migration chain is asserted against the ORM models in CI
+- **Decision:** `tests/integration/test_migrations.py` applies the whole Alembic chain to an empty database and asserts that `alembic.autogenerate.compare_metadata` reports **zero** differences against `Base.metadata`. A dedicated `migrations` CI job runs the alembic CLI as an operator would, then that test. A catch-up revision (`621b6ee74fd9`) adds the four objects that existed only in the models. `alembic/env.py` now honours `DATABASE_URL` and `-x sqlalchemy.url=`. `alembic/` is added to the ruff gate.
+- **Context:** Nothing had ever applied this chain. Two failures were sitting in it:
+  1. **It aborted at revision two of six.** `op.create_unique_constraint` raises `NotImplementedError: No support for ALTER of constraints in SQLite dialect` -- four revisions had never run. Fixed under DEC-2026-08-21-004 with batch mode.
+  2. **Four schema objects existed only in the models:** the `paper_trading_sessions` and `symbols` tables, the `ix_symbols_symbol` index, and the `signals.symbol` column. Six months of drift.
+
+  `paper_trading_sessions` is the consequential one. Despite the name it is where `scripts/run_live_trading.py` persists live position state, keyed by a `live_` session-id prefix. A database built from this chain would have had no table for live trading to write to.
+
+  A third defect surfaced while wiring the CI job: `alembic.ini` hardcodes `sqlalchemy.url = sqlite:///data/trading.db` and `env.py` read neither the environment nor `-x`. Running `alembic upgrade head` on a host configured for PostgreSQL would have migrated a local SQLite file and exited 0, leaving the real database untouched. Production is PostgreSQL on Neon.
+- **Rationale:**
+  - **`compare_metadata`, not a table-name comparison.** It is the function `alembic revision --autogenerate` uses to decide what a migration should contain, so an empty result is exactly the statement "autogenerate would emit nothing", which covers columns, types, nullability, indexes and constraints. A table-name diff would have caught the two missing tables and missed `signals.symbol` entirely. Mutation-testing confirms the split: removing a table fails two tests, changing one column's type from `Integer` to `String` fails only the `compare_metadata` one.
+  - **The CLI leg of the CI job is not redundant with the pytest leg.** The test exercises the Python API. A broken `alembic.ini`, a wrong `script_location`, or an `env.py` that ignores the environment all pass there and fail for a human at a terminal. The third defect above was found precisely because the job runs the CLI.
+  - **`downgrade()` is exercised too.** Every revision had one, written alongside its `upgrade()`, and none had ever run. A chain that cannot be reversed cannot be rolled back, which is the situation you discover during an incident. Downgrading to base and back is two lines and covers all six.
+  - **`test_the_chain_is_not_empty` guards the guard.** Every other assertion is about the result of applying revisions. An empty directory or a wrong `script_location` would make them all pass against a schema built from nothing -- the same shape of vacuous-success failure this file exists to catch, so it must not be possible here.
+  - **The Alembic config is built without `alembic.ini` in the test.** `env.py` calls `fileConfig(config.config_file_name)`, which reconfigures logging process-wide and disables existing loggers, including structlog, for every test running afterwards. Leaving `config_file_name` as None skips that branch.
+  - **A temporary server default on `signals.symbol`.** `ALTER TABLE ... ADD COLUMN NOT NULL` with no default fails against a table holding rows, and SQLite refuses it outright. The default is dropped immediately after, because leaving it would itself be a difference the comparison reports.
+  - **`alembic/` joins the lint gate.** It was outside `ruff check` and carried two unused imports. A directory that is now CI-tested for behaviour should not be exempt from the checks everything else gets.
+- **Alternatives Considered:**
+  - **Make Alembic the deployment schema authority now:** DEFERRED, and it is the real question this exposes. The chain and the models now agree, which is the precondition. Switching `create_all()` for `alembic upgrade head` in the deployment path needs a stamped baseline for the existing Neon database, and is its own decision.
+  - **Compare table names only:** REJECTED - misses `signals.symbol`, which is the drift most likely to recur.
+  - **Autogenerate a migration in CI and fail if non-empty:** REJECTED - equivalent in effect, slower, and writes a file to assert a property. `compare_metadata` gives the same answer directly.
+  - **Delete the chain as dead code:** REJECTED - it is the only upgrade path an existing database can ever have, and `create_all()` cannot alter an existing table. Deleting it would make the drift permanent rather than fixing it.
+  - **Leave `alembic.ini`'s hardcoded URL:** REJECTED - a migration tool that silently migrates the wrong database is worse than one that fails.
+- **Status:** ACTIVE
+- **Date Decided:** 2026-08-21
+- **Implemented By:** Phase 1 structural guards (group 1.4)
+- **Affected Files:** `tests/integration/test_migrations.py` (new, 7 tests), `alembic/versions/20260821_catch_up_schema_to_models.py` (new), `alembic/env.py`, `alembic/versions/20260209_*.py` and `20260222_*.py` (unused imports), `.github/workflows/ci.yml` (new `migrations` job, `alembic/` added to lint).
+- **Measured:** chain applies all seven revisions; `compare_metadata` reports 0 differences, down from 5; mutation-tested at 2 failures (missing table) and 1 (column type drift).
+- **References:** DEC-2026-08-21-004 (the batch-mode fix without which the chain could not be measured), `docs/PRODUCTION_READINESS_ASSESSMENT.md` row 15, `docs/ARCHITECTURE.md` "How the schema is actually created".
+
+---
+
+### DEC-2026-08-21-006: Secret scanning is a CI gate, not a config file
+- **Decision:** A `secrets` job in `.github/workflows/ci.yml` runs `gitleaks git . --config .gitleaks.toml --log-opts="--all"` over the whole history on every push and pull request, with `fetch-depth: 0` and the gitleaks binary pinned to 8.30.1.
+- **Context:** `.gitleaks.toml` has existed since `b4cb1b8` ("security: clear git history with gitleaks and trufflehog, add a scan config"). The scan it records was real and one-off. Nothing has run gitleaks since, in CI or in a hook. A configuration file sitting in a repository implies a gate to anyone who finds it, and this one implied a gate over a repository whose `.env` holds live exchange credentials.
+- **Rationale:**
+  - **This is the same defect class as the rest of this group.** A unique constraint that lives only in an unrun migration, a risk package the live loop never reaches, a migration chain nobody applies, and a lint config nobody enforces all fail the same way: the artifact exists, so the protection is assumed, and nothing establishes that the assumption is true. The remedy in each case is the same -- run it, and fail the build when it fails.
+  - **Verified in both directions before shipping, which the `audit` job was not.** DEC-2026-08-16-001 added `pip-audit` with a note that it had never been observed passing, because the machine could not reach PyPI. That was honest and it left an unproven gate on a public repository. Here the binary was fetched through PowerShell -- which reaches the network where pip's CA bundle does not -- and run locally: the clean repository scans 156 commits and exits 0, and a scratch directory holding a planted AWS key exits 1. A gate that has only been observed passing is half-tested; the half that matters is that it fails.
+  - **`fetch-depth: 0` is load-bearing and easy to get wrong.** `actions/checkout` defaults to a shallow clone of one commit. `--log-opts="--all"` against a shallow clone scans that single commit and reports "no leaks found" -- a green tick over a scan that examined almost nothing. This is the failure mode of a gate that silently does nothing, and it would have looked identical to a working one.
+  - **History, not the working tree.** `gitleaks dir .` walks `node_modules/` and `.venv/` and reports 298 findings in third-party test fixtures, which is the kind of noise that trains people to ignore a channel -- the argument DEC-2026-08-14-005 makes about flaky tests. The history scan is 10 MB and 6 seconds and answers the question actually being asked: has a secret ever been committed.
+  - **Pinned, for the reason `requirements-dev.txt` argues at length.** A gate whose meaning depends on the date of the install is not a gate. 8.30.1 is the version the allowlist was verified against.
+  - **The config's own header now says CI runs it.** It previously documented two commands and left the reader to assume something invoked them.
+- **Alternatives Considered:**
+  - **`gitleaks/gitleaks-action@v2`:** REJECTED - it requires a `GITLEAKS_LICENSE` for organisation-owned repositories, which is a dependency on a licensing rule that can change, and it pins less transparently than fetching a released binary by version.
+  - **Scan only the pull-request diff:** REJECTED - faster, and blind to anything already in the history, including a secret introduced by a force-push. Six seconds does not justify the narrower question.
+  - **A pre-commit hook instead of CI:** REJECTED as a replacement, worth adding later as an addition. A hook is opt-in per clone and can be skipped with `--no-verify`; CI cannot be.
+  - **Add a SAST scanner in the same commit:** REJECTED - `pip-audit` covers dependencies and nothing analyses first-party code, which remains open as finding 31. It is a separate gate with its own noise profile and deserves its own decision.
+- **Status:** ACTIVE
+- **Date Decided:** 2026-08-21
+- **Implemented By:** Phase 1 structural guards (group 1.4)
+- **Affected Files:** `.github/workflows/ci.yml` (new `secrets` job), `.gitleaks.toml` (header), `README.md` (CI table).
+- **Measured:** clean history 156 commits, 10.26 MB, 6 seconds, exit 0; planted AWS key exits 1 with the same config.
+- **References:** `b4cb1b8` (the one-off scan this makes recurring), DEC-2026-08-16-001 (`pip-audit`, the gate that shipped unverified), `docs/PRODUCTION_READINESS_ASSESSMENT.md` row 31, `SECURITY.md`.
+
+---
+
+### DEC-2026-08-21-007: Signal generators must be shown capable of signalling
+- **Decision:** `tests/unit/test_generator_liveness.py` walks each generator forward across nine synthetic market shapes and asserts it emits at least one signal. Parameters are derived from `config/templates/*.yaml` defaults, not written by hand. Four generators that do not yet fire are named in an `UNPROVEN` allowlist that cannot grow silently and fails if an entry starts firing. The tautological assertion in `test_signal_generators.py` is replaced with an unconditional one.
+- **Context:** The only test in the suite that called `generate()` on real-shaped data was:
+  ```python
+  result = gen.generate(series, params, "BTCUSDT")
+  if result is not None:
+      assert isinstance(result, TradingSignal)
+  ```
+  Every assertion sat behind a conditional that a generator returning `None` forever satisfies completely, under a docstring reading "may or may not signal". The remaining coverage across 29 generators was `template_id` equality, `min_bars_required > 0`, and `repr()` being truthy -- which is why they sit at 13-21% line coverage.
+
+  This matters more here than it would elsewhere. The repository's headline result is that 29 generators produced no validated edge, and every rejection carries a `FUNDAMENTAL` tag asserting "the mechanism failed, not the implementation". A suite that cannot distinguish a failed mechanism from a generator that never fired is not evidence for that claim.
+- **Rationale:**
+  - **Demonstrated, not argued.** Making `macd_pullback`'s entry condition unsatisfiable fails the new file and leaves `test_signal_generators.py` at 24 passed. That is the gap, measured.
+  - **Liveness, not correctness.** The test establishes that a generator *can* fire, which is what the old one appeared to cover. Asserting that each fires on the *right* market would require a specification of correct behaviour per generator that does not exist, and would be a bigger claim than the evidence supports.
+  - **The fixture was wrong three times before it was right, and distinguishing that from a real finding was the work.** Smooth sine curves with 0.4% wobble: 11 of 14 emitted nothing. A seeded random walk at realistic volatility: still 11, but a *different* 11 -- the signature of a sample measuring the draw rather than the generators. Sweeping five seeds: 8. Walking the series forward instead of evaluating only its last bar: 4. Each widening moved generators out of the failing set, which is what a fixture problem looks like; a genuinely dead generator would have stayed. Reporting the first result as "11 dead generators" would have been wrong and loud.
+  - **Walking forward is also what the system does.** `generate()` inspects only the last bar of the series it is handed. Calling it once on 500 bars asks whether bar 500 happened to be a setup -- for a strategy requiring price within 0.5% of an EMA, a low and largely accidental probability. The live loop calls it once per poll and the backtest walks forward; the test now matches.
+  - **Parameters are derived.** All 14 templates in `config/templates/` declare a default for every parameter, so the params come from the repository rather than from a hand-written table that would drift. A generator that gains a template is covered the day it does.
+  - **An allowlist, not a skip.** `UNPROVEN` names four generators whose setups these nine shapes do not produce. `test_the_allowlist_has_not_gone_stale` fails when one starts firing, forcing the entry out rather than letting it rot -- the idiom `test_governance_sync.py` already uses for known duplicate decision IDs. `test_most_generators_are_proven_alive` fails if the exemption list grows to swallow the test.
+  - **Determinism is asserted separately.** A generator reading a clock or a global random state would make every backtest in this repository unreproducible, and nothing else checked. Running each generator twice and comparing is three lines.
+- **Alternatives Considered:**
+  - **Hand-write a triggering fixture per generator:** REJECTED - 29 bespoke fixtures encoding one author's belief about each entry condition, which is a restatement of the implementation rather than an independent check, and which rots the moment a threshold moves.
+  - **Assert an exact signal count or direction:** REJECTED - that is a claim about correctness the repository has no specification to support, and it would fail on every legitimate parameter change.
+  - **Delete the tautological test:** REJECTED - the name describes something worth testing. A test whose name promises coverage should provide it or not exist.
+  - **Skip the four unproven generators:** REJECTED - a skip is invisible and permanent. An allowlist with a staleness check is visible and self-removing.
+  - **Widen the fixture until all fourteen fire:** REJECTED for now - tuning synthetic data until a specific generator fires risks producing a fixture shaped to the implementation, which is how a test stops being independent. Ten of fourteen on generic shapes is a stronger claim than fourteen of fourteen on shapes built to satisfy them.
+- **Status:** ACTIVE
+- **Date Decided:** 2026-08-21
+- **Implemented By:** Phase 1 structural guards (group 1.4)
+- **Affected Files:** `tests/unit/test_generator_liveness.py` (new, 48 tests), `tests/unit/test_signal_generators.py` (the tautology), `docs/PRODUCTION_READINESS_ASSESSMENT.md` row 19.
+- **Measured:** 10 of 14 templated generators proven to emit signals; 4 allowlisted; 48 tests in 27s after caching the walk. Mutation-tested: an unsatisfiable entry condition fails this file and passes the old one.
+- **Known gap:** 15 of the 29 generators have no template in `config/templates/` and are therefore not covered here. Their parameters live in the paper and live trading scripts. Recorded in row 19 rather than hidden.
+- **References:** `docs/PRODUCTION_READINESS_ASSESSMENT.md` row 19, `docs/RESEARCH_FINDINGS.md` (the `FUNDAMENTAL` tag this makes checkable), DEC-2026-02-08-003 (timezone-aware timestamps, asserted on every emitted signal).
+
+---
+
+### DEC-2026-08-21-008: Remove /system/start and /system/stop; keep orchestrator.py
+- **Decision:** Delete the `/system/start` and `/system/stop` endpoints, `set_orchestrator()`, and the now-unreferenced `ActionResponse` model from `src/api/routes/system.py`. Keep `/system/status`, which degrades gracefully. **Keep `src/core/orchestrator.py` in full.** Do not wire it.
+- **Context:** Both endpoints required an orchestrator instance. `main.py` calls `init_system_routes(store=..., event_bus=...)` without one, and `set_orchestrator()` was invoked nowhere, so the module handle was permanently `None` and both endpoints returned 503 in every environment they ever ran in. Removing them leaves `orchestrator.py` -- 1,850 lines, 68% covered -- entirely unreferenced by application code.
+- **Rationale:**
+  - **Wiring it would have moved which loop is unwired, not fixed it.** `orchestrator.py` has zero `circuit_breaker`, `time_filter`, `event_filter`, `volatility` or `PositionSizer` references of its own. Promoting it would not have delivered the risk package. Two independently coherent implementations had each omitted the same integration.
+  - **It would promote a loop that has never executed over one that has.** `scripts/run_live_trading.py` has run and produced trades, including losses that are recorded in its own comments. The `Orchestrator` class has never run once. Choosing the untested implementation over the one with a track record, on no evidence, while the live deployment may still be up, is the wrong direction.
+  - **The file is not one orphan; it is five classes and only one is orphaned.** `StartupChecklist`, `EntryCoordinator`, `HealthChecker` and `DegradationManager` are working, tested components the deployed loop lacks -- `run_live_trading.py` performs no startup validation at all, and its degradation handling is a consecutive-failure counter. Deleting the file to remove one dead class would take four useful ones with it. Treating the file as a unit was itself a small instance of the error it documents.
+  - **The status belongs on the front page, not two links away.** Group 1.2 found `audit/AUDIT.md` had correctly disclosed the risk-layer gap on 2026-08-08 while `README.md` kept the wrong diagram for thirteen days -- the owning document was right and the front page contradicted it. A reviewer who greps and finds 1,850 orphaned lines with no explanation on the front page has found a defect; one who reads the README first has found an exhibit. The known-limitations section now states it directly and points at `AI_ASSISTED_DEVELOPMENT.md` section 4.2, which is the owning write-up.
+  - **Removing dead controls is not the same as fixing the system.** These endpoints were a control surface that could not work. Deleting them makes the API honest about what it offers; it does not close the gap between the risk package and the deployed loop, and the README says so.
+- **Found while doing this, and worth more than the removal:**
+  - **The tests for these endpoints passed by constructing a state production never reaches.** Both supplied a mock orchestrator through `init_system_routes(orchestrator=...)`. They were correct about behaviour that existed in no environment. That is a sharper failure than "tests scoped to a module do not see integration" -- the test *did* cross the module boundary, into a configuration nothing produces.
+  - **`src/api/main.py` freezes `ENVIRONMENT` at import, so whichever test imports it first configures the application for the whole session.** Several tests legitimately set `ENVIRONMENT=production` before importing it, to assert startup aborts without an API key. When one of those ran first, the app held `ALLOWED_ORIGINS_PROD` -- empty -- and `test_401_carries_cors_headers` failed while passing in isolation. Order dependence with no symptom in the test that caused it. `tests/conftest.py` now pins the environment and imports the API module before collection, which makes it deterministic. This is a workaround; the underlying split -- `main.py` reading at import, `auth.py` reading at call time -- is finding S-4.
+  - **`test_all_checks_pass` read the host's free disk space** and began failing when a drive filled to 0.56GB. Nothing in the code or the test had changed. The memory check in the same test was already mocked for this exact reason; the disk check now is too.
+- **Alternatives Considered:**
+  - **Wire the orchestrator and refactor:** REJECTED - see rationale. It is a 1,850-line behaviour change that delivers no risk coverage, and it presupposes a decision about whether this system trades again that has not been taken.
+  - **Delete `orchestrator.py`:** REJECTED - four of five classes are useful, and `StartupChecklist` is the near-term win. The deployed loop validates nothing at startup; a disk check would have caught the condition that surfaced during this very change.
+  - **Leave the endpoints returning 503:** REJECTED - two endpoints in the OpenAPI schema that cannot work in any environment are a claim the API does not honour.
+  - **Say nothing on the front page and rely on the case study:** REJECTED explicitly, on the group 1.2 precedent.
+- **Status:** ACTIVE
+- **Date Decided:** 2026-08-21
+- **Implemented By:** Phase 1 structural guards (group 1.4)
+- **Affected Files:** `src/api/routes/system.py`, `tests/integration/test_api.py`, `tests/unit/api/test_auth.py`, `tests/unit/test_orchestrator.py`, `tests/conftest.py`, `README.md`, `docs/PROJECT_CONTEXT.md` (4.3), `docs/ARCHITECTURE.md`, `docs/AI_ASSISTED_DEVELOPMENT.md` (4.2), `docs/PRODUCTION_READINESS_ASSESSMENT.md` (row 33).
+- **Measured:** API surface 63 -> 61 endpoints, 21 -> 19 state-mutating; 14 documented mentions of those counts updated across seven files, two of them spelled as words because they quote a superseded finding. Suite green.
+- **References:** `docs/AI_ASSISTED_DEVELOPMENT.md` 4.2 (the owning write-up), `docs/PRODUCTION_READINESS_ASSESSMENT.md` rows 13 and 33 and finding S-4, DEC-2026-08-14-001 (the auth gate whose call-time reads contrast with `main.py`'s import-time ones).
+
+---
+
 ---
 
 **End of Decisions Log**
 
-**Total Decisions:** 107 active, 0 superseded, 5 locked (1 amended); DEC-2026-06-04-013 amended
-**Last Updated:** 2026-08-13
-**Next Decision ID:** DEC-2026-08-13-004
+**Total Decisions:** 139 active, 0 superseded, 5 locked (1 amended); DEC-2026-06-04-013 amended
+**Last Updated:** 2026-08-21
+**Next Decision ID:** DEC-2026-08-21-009
+
+> Count corrected 2026-08-14. This footer read "107 active" while the file held
+> 124 real decision entries -- the count had drifted as decisions were appended
+> without updating it. It is now asserted by
+> `tests/unit/test_governance_sync.py::test_footer_decision_count_matches_reality`
+> so it cannot drift again silently. The count excludes the
+> `DEC-YYYY-MM-DD-XXX` template near the top of this file.
+>
+> **Known defect, not yet resolved:** `DEC-2026-02-15-001` and
+> `DEC-2026-02-15-002` each appear TWICE, in two separate transcriptions. The
+> pairs agree on substance; the later copies cite stale paths
+> (`src/paper/engine.py` rather than `src/core/strategy/paper/`). The duplicate
+> IDs make any cross-reference to them ambiguous. They are allowlisted in
+> `test_decision_ids_are_unique` so the test still catches NEW duplicates while
+> this one awaits an owner decision on which copy is canonical.
+>
+> See DEC-2026-08-14-002, Rule 1.3: a number in a document is a claim, and a
+> confidently wrong one is a worse failure than a dated one.
 
 ## Phase 5 Decisions (Backtesting & Simulation)
 
@@ -3186,3 +3424,229 @@ parameters:
 - **Affected Files:** `docs/research/LLM_HYPOTHESIS_EVAL_SPEC.md`, `docs/research/LLM_EVAL_SESSION_PROMPT.md`
 - **Expected outcome, recorded before the fact:** null. The LLM is expected to score at or above the human median on the rubric while proposing predominantly exhausted mechanism classes. A positive result is to be treated as a suspected defect until leakage and trial accounting are re-checked.
 - **References:** DEC-2026-06-04-008 (DSR floor), DEC-2026-06-04-001 (one-way dependency), `docs/research/HYPOTHESIS_QUALITY_GATE.md`, `docs/research/NEGATIVE_SPACE_MAP.md`, `docs/RESEARCH_FINDINGS.md` section 4.
+
+---
+
+### DEC-2026-08-14-001: API Key on State-Mutating Endpoints, Enforced by Method-Based Middleware
+- **Decision:** All 21 state-mutating endpoints (`POST`/`PUT`/`PATCH`/`DELETE`) require a shared secret in an `X-API-Key` header, configured via `PARAVANT_API_KEY`. Enforcement is a single `ApiKeyAuthMiddleware` keyed on HTTP method (`src/api/auth.py`), NOT a `Depends` on each route. The 42 read endpoints remain ungated. Outside `ENVIRONMENT=development` a missing key aborts startup; a key under 32 characters is rejected in every environment.
+- **Context:** Finding #1 of `docs/PRODUCTION_READINESS_ASSESSMENT.md` and plan item 3.1. Every endpoint was open, including order placement, position closure, system start/stop, and kill-switch activation and deactivation. It was the top-ranked gap and it hard-blocked item 3.8 (public read-only demo), since a public URL would have exposed order placement and the kill switch to anyone who found it.
+- **Rationale:**
+  - **Method-based middleware is fail-closed; a per-route dependency is fail-open.** The assessment specified "a static API key validated by a FastAPI dependency". That is the idiomatic approach and it was rejected on inspection: protection would depend on the author of every future endpoint remembering to attach it, and nothing fails when they forget -- the endpoint simply ships unauthenticated. Gating by HTTP method covers a mutating endpoint added tomorrow on the day it is written. This matches the fail-closed posture already used for the min-notional guard (DEC-2026-05-31-003), the promotion gate (DEC-2026-06-01-001) and `SubRegimeDetector` on UNKNOWN (DEC-2026-05-28-003).
+  - **The OpenAPI cost is paid down by a contract test.** Middleware does not appear in the generated schema. `tests/unit/api/test_auth.py::TestMutatingRouteCoverage` enumerates `app.routes`, derives every mutating route, and asserts each returns 401 without a key -- with a guard test asserting the enumeration is non-empty so the parametrised cases cannot pass vacuously. Verified to fail when the middleware is removed: `POST /api/v1/orders` reached its handler and another route attempted a live Binance call.
+  - **Reads stay open deliberately.** The dashboard is a read-only browser client. Gating GET would break it for no safety gain, since reads cannot place orders. The cost -- full trading state is readable by anyone who can reach the port -- is documented in `SECURITY.md` rather than hidden.
+  - **A single static key is the honest size of the problem.** One operator, one client. JWT or OAuth would be theatre: more surface, more code, no more security for a single-user system. The assessment made this point and it holds.
+  - **Middleware ordering is load-bearing.** Starlette makes the last-added middleware outermost. The gate is added BEFORE `CORSMiddleware` so it sits inside it; an auth layer outside CORS returns 401s stripped of CORS headers, which a browser reports as an opaque network error rather than an authentication failure. `TestMiddlewareOrdering` guards this. `X-API-Key` was added to `allow_headers` or the preflight would reject it.
+  - **Weak keys are rejected, not warned about.** A short key produces the appearance of protection while remaining brute-forceable, which is worse than none. `secrets.compare_digest` is used so response timing does not leak key content, and the 401 body is identical for a missing and an incorrect key so the response is not an oracle -- the distinction is kept in the log.
+- **Alternatives Considered:**
+  - **Per-route `Depends`:** REJECTED - fail-open by omission, as above. This is a deliberate deviation from the assessment's own wording.
+  - **Gating every endpoint including reads:** REJECTED - breaks the read-only dashboard and blocks item 3.8 for no safety gain.
+  - **JWT / OAuth2:** REJECTED - over-engineering for one operator; a reviewer respects a justified simple choice more.
+  - **Reverse proxy auth only (nginx basic auth):** REJECTED - moves the control outside the repository, so nothing in the codebase or its tests can assert it holds.
+  - **Rejecting mutating requests with 503 instead of aborting startup:** REJECTED - a half-serving system is harder to notice than a crash-loop. Loud failure was chosen.
+- **Status:** ACTIVE
+- **Date Decided:** 2026-08-14
+- **Implemented By:** Assessment plan item 3.1
+- **Affected Files:** `src/api/auth.py` (new), `src/api/main.py` (middleware registration + startup validation + `allow_headers`), `tests/unit/api/test_auth.py` (new, 26 tests), `tests/conftest.py` (`PARAVANT_API_KEY` added to the hermetic strip list), `.env.example`, `SECURITY.md`, `README.md`, `DEPLOYMENT.md`, `docs/ARCHITECTURE.md` (new section 8.1), `docs/API_CONTRACT.md`, `docs/PROJECT_CONTEXT.md`, `docs/PRODUCTION_READINESS_ASSESSMENT.md`.
+- **Known limits, recorded deliberately:** one shared key with no identities, rotation or expiry; no rate limiting (item 3.2); open reads; plaintext header requiring TLS termination in front; development bypass when the variable is unset. All enumerated in `SECURITY.md` rather than implied to be solved.
+- **Operational consequence:** any deployment with `ENVIRONMENT` set to something other than `development` will crash-loop until `PARAVANT_API_KEY` is set. This is intended. `DEPLOYMENT.md` carries the upgrade note.
+- **References:** DEC-2026-02-08-004 (explicit CORS origins - the ordering constraint here interacts with it), `docs/PRODUCTION_READINESS_ASSESSMENT.md` sections 2.5 and 3.2 finding #1, `SECURITY.md`.
+
+---
+
+### DEC-2026-08-14-002: Documentation Freshness Is Part of the Change, Not a Follow-Up
+- **Decision:** A change that makes any sentence in a tracked `.md` file untrue must update that sentence in the same commit. Enforced by `.claude/rules/documentation-freshness.md` and `.agent/rules/documentation-freshness.md`, referenced from section 4A of `.claude/CLAUDE.md` and `.agent/SYSTEM.md`, with the post-implementation checklist extended accordingly. `docs/archive/` is exempt as a deliberate historical record.
+- **Context:** Implementing DEC-2026-08-14-001 invalidated claims in eight tracked documents, several of which stated flatly that "no authentication exists". The repository had already accumulated this failure independently: `.agent/rules/mvp-scope-control.md` was missing the DEC-2026-05-28-001 market-type amendment that `.claude/` carried, so non-Claude agents were reading a scope rule forbidding futures backtesting that had in fact been permitted since 2026-05-28.
+- **Rationale:**
+  - **Stale documentation is worse than absent documentation.** Absent docs make a reader go and check. Stale docs make a reader trust a false claim. In this repository the false claims include security posture and trading safety, which a reader may act on with real money.
+  - **Discovery must be mechanical, not remembered.** The rule requires grepping for the OLD claim rather than recalling which files mention a concept. The old claim is what is now wrong and it is what the search must target. Memory is exactly what failed for `mvp-scope-control.md`.
+  - **Partial fixes are the dangerous case.** Rule 7 forbids deleting a documented limitation when only partially fixing it. A partial fix that reads as complete is worse than the original warning, because the reader stops looking. This is why `SECURITY.md` now enumerates what the API key does NOT give rather than simply removing the warning.
+  - **Wrong and outdated are different failures.** Rule 6 keeps the existing practice of marking corrections visibly (as `RESEARCH_FINDINGS.md` and section 2.8 of the assessment already do) while allowing merely-outdated facts to be updated in place. Silently deleting an error destroys the record of having made it, which in a research repository is itself a finding.
+  - **The rule extends dual-file sync beyond DECISIONS.md.** `decision-consistency.md` Rule 0 covered only the decision logs. The observed drift was in a rules file, so Rule 4 here covers every paired `.claude/` and `.agent/` artifact.
+- **Alternatives Considered:**
+  - **A CI job asserting doc freshness:** REJECTED for now - "is this sentence still true" is not mechanically checkable in general. A grep-based linter for a fixed list of forbidden stale phrases was considered and deferred; it would catch a narrow class and give false confidence about the rest.
+  - **A periodic documentation audit:** REJECTED - a scheduled sweep means documents are knowingly wrong between sweeps, which is the failure being fixed.
+  - **Folding it into `zero-technical-debt.md`:** REJECTED - that file is about code. A separate file is discoverable by name and can be cited on its own.
+- **Status:** ACTIVE
+- **Date Decided:** 2026-08-14
+- **Implemented By:** This decision; applied immediately to DEC-2026-08-14-001's documentation.
+- **Affected Files:** `.claude/rules/documentation-freshness.md` (new), `.agent/rules/documentation-freshness.md` (new, identical), `.claude/CLAUDE.md` (section 4A + checklist + quick reference), `.agent/SYSTEM.md` (identical), `.agent/rules/mvp-scope-control.md` (drift corrected against `.claude/`).
+- **References:** `.claude/rules/decision-consistency.md` Rule 0 (dual-file sync, extended here), `.claude/rules/zero-technical-debt.md` Rule 13.2 (explicit change summary, extended here to name updated documents), DEC-2026-05-28-001 (the amendment that had drifted).
+
+---
+
+### DEC-2026-08-14-003: Rate Limiting on State-Mutating Endpoints -- Reuse the TokenBucket Primitive, Invert the Policy
+- **Decision:** State-mutating requests are capped by two independent token buckets in `src/api/rate_limit.py`: per-client (`API_RATE_LIMIT_PER_MINUTE`, default 30, keyed on the leftmost `X-Forwarded-For` else peer IP) and global (`API_RATE_LIMIT_GLOBAL_PER_MINUTE`, default 120, keyed on nothing). Exceeding either returns `429` with `Retry-After`. Read endpoints are not limited. The `TokenBucket` primitive from `src/brokers/binance/rate_limiter.py` (DEC-2026-02-10-002) is reused; the `RateLimiter` class from that module is deliberately NOT.
+- **Context:** Item 3.2 of `docs/PRODUCTION_READINESS_ASSESSMENT.md`, and the gap `SECURITY.md` named after DEC-2026-08-14-001 landed: "a leaked key can be used as fast as the process will serve it". The assessment offered `slowapi` or a custom dependency reusing the existing token bucket.
+- **Rationale:**
+  - **Reuse the primitive, invert the policy.** `RateLimiter.acquire()` blocks with `await asyncio.sleep()` until tokens are available. That is correct for OUTBOUND calls to Binance, where waiting beats being banned. It is wrong INBOUND: a held request occupies a connection and a coroutine, so 10,000 excess requests would become 10,000 sleeping tasks -- the limiter would amplify the flood it exists to absorb. Inbound must reject immediately. `TestRejectionIsNotBlocking` asserts this: 20 rejections against a 2/minute bucket must complete in under 5 seconds.
+  - **No new dependency.** `slowapi` was rejected under zero-technical-debt Rule 2.3: an in-repo, already-tested primitive solves the problem. `TokenBucket` has two dedicated test files and needed no modification.
+  - **Per-client alone does not work, and this is the crux.** Behind a proxy the real client address arrives in `X-Forwarded-For`, a header the CLIENT sets. An attacker rotates it and evades a per-IP bucket completely, while also filling the identity map with junk keys. Per-client is therefore fairness only, explicitly best-effort. The global bucket trusts no client-supplied value and is the actual security control. `test_global_limit_applies_across_distinct_identities` asserts rotation does not evade it.
+  - **Bounded storage is a security property, not housekeeping.** Because identities are attacker-controlled, an unbounded map is a memory-exhaustion vector. Storage is an LRU capped at 1,024 entries with identities truncated to 64 characters. Evicting a bucket resets that client's allowance, which is an accepted trade: bounded memory beats perfect accounting for a client idle longer than 1,023 others.
+  - **This layer sits INSIDE the auth layer.** Unauthenticated requests are rejected by `ApiKeyAuthMiddleware` first, for a cheap 401, and consume no rate budget. Placed outside auth, an anonymous flood could exhaust the global bucket and lock the operator out of their own kill switch -- precisely when they most need it. `test_unauthenticated_flood_yields_401_not_429` asserts the ordering holds in the real application stack.
+  - **Limits are generous on purpose.** A human operator clicking buttons never approaches 30/minute; a runaway script exceeds it in seconds. The operator must never be rate-limited away from the kill switch, so the defaults separate human from machine rather than being set as tight as possible.
+  - **Gate on HTTP method, consistent with DEC-2026-08-14-001.** A mutating endpoint added later is covered the day it is written rather than depending on an author remembering a decorator.
+  - **Fail toward applying a limit.** An unparseable value in either env var logs a warning and falls back to the default rather than raising. A typo must not take the API down, and the fallback direction applies a limit rather than removing one.
+- **Alternatives Considered:**
+  - **`slowapi`:** REJECTED - a new dependency for a problem an existing, tested in-repo primitive solves.
+  - **Reusing `RateLimiter` as-is:** REJECTED - its blocking policy is a DoS amplifier inbound. This is the single most important distinction in the decision.
+  - **Per-client bucket only:** REJECTED - evaded entirely by rotating `X-Forwarded-For`, which is the realistic attack.
+  - **Global bucket only:** REJECTED - one abusive client would deny service to the operator, including access to the kill switch.
+  - **Limiting read endpoints too:** REJECTED - reads cannot place orders, and the dashboard polls them.
+  - **Redis or another shared store for cross-process state:** REJECTED - a new infrastructure dependency for a single-worker deployment. The per-process limitation is documented rather than engineered around.
+  - **Trusting `X-Forwarded-For` only from a configured proxy allowlist:** DEFERRED - correct in principle, but it requires knowing Railway's egress ranges and would silently degrade if they changed. The global bucket achieves the security goal without that fragility.
+- **Status:** ACTIVE
+- **Date Decided:** 2026-08-14
+- **Implemented By:** Assessment plan item 3.2
+- **Affected Files:** `src/api/rate_limit.py` (new), `src/api/main.py` (middleware registration + stack-order comment), `tests/unit/api/test_rate_limit.py` (new, 27 tests), `.env.example`, `SECURITY.md`, `README.md`, `DEPLOYMENT.md`, `docs/ARCHITECTURE.md` (new section 8.2), `docs/API_CONTRACT.md`, `docs/PROJECT_CONTEXT.md`, `docs/PRODUCTION_READINESS_ASSESSMENT.md`, `.claude/rules/documentation-freshness.md` + `.agent/` copy (Rule 7 example extended).
+- **Known limits, recorded deliberately:** per-client identity is spoofable; buckets are per process, so limits multiply by uvicorn worker count and reset on restart; a leaked key can still be used indefinitely within the global cap. This bounds the RATE of damage, not the TOTAL. All enumerated in `SECURITY.md`.
+- **Governance side-effect:** writing the tests for this change produced `tests/unit/test_governance_sync.py`, which mechanically enforces DEC-2026-08-14-002 (`.claude`/`.agent` parity, decision-ID uniqueness, footer count accuracy, every env var the code reads being present in `.env.example`). It immediately found three pre-existing defects: the footer count was wrong by 18, `DEC-2026-02-15-001` and `DEC-2026-02-15-002` are each duplicated in two transcriptions, and the corrected count committed earlier that day was itself off by one because it counted the `DEC-YYYY-MM-DD-XXX` template. The duplicate IDs are allowlisted pending an owner decision on which copy is canonical.
+- **References:** DEC-2026-02-10-002 (TokenBucket primitive reused here), DEC-2026-08-14-001 (auth layer this sits inside), DEC-2026-08-14-002 (documentation freshness applied to this change), `.claude/rules/zero-technical-debt.md` Rule 2.3 (dependency discipline), `docs/PRODUCTION_READINESS_ASSESSMENT.md` item 3.2.
+
+---
+
+### DEC-2026-08-14-004: Coverage Is Measured Over the Whole Suite, Not a Subset
+- **Decision:** The CI coverage job runs `pytest tests/` rather than `pytest tests/unit tests/research`, and the floor moves from 62% to 72% against a measured 74%. Assessment finding #11 (`data/store.py` at 28%) is closed as a MEASUREMENT defect, not a coverage gap: the module was at 100% the whole time. Separately, 36 tests in `tests/unit/data/test_store_queries.py` close the `DataStore` paths that genuinely had no coverage from any suite.
+- **Context:** Item 2.10 asked to raise `data/store.py` from 28% to 80%. Measuring before writing showed 28% under `tests/unit + tests/research` and 79% under `tests/`. `DataStore` is tested from `tests/integration/test_datastore_crud.py` and `test_datastore_extended.py`, which the CI `test` job runs on every commit while the CI `coverage` job excluded them. The same artifact affected `src/api/main.py` (42% vs 86%).
+- **Rationale:**
+  - **The finding was an artifact of the instrument, so the instrument is what gets fixed.** Writing unit tests to move 28% to 80% would have duplicated coverage that already existed, purely to move a number. That is the precise failure this repository's research layer exists to catch -- optimising a metric rather than the thing the metric proxies -- and doing it to test coverage while publishing a paper about not doing it to Sharpe ratios would be indefensible.
+  - **The integration tests were never the problem.** They run in CI, they pass, they are deterministic since DEC-2026-08-11-004 made network tests opt-in. There was no remaining reason to exclude them from measurement; the exclusion most likely predates that fix, when they errored without connectivity.
+  - **A subset-scoped floor is worse than no floor.** It reports a number that is precise, official, enforced, and wrong in a specific direction: it systematically understates any module whose tests live in `tests/integration/`. That is how a fully-covered 1,332-line data facade came to be ranked as a finding in a document that was otherwise careful.
+  - **The genuine gaps were real but small.** 93 of 436 statements had no coverage from any suite: the order query variants (`get_orders_by_status`, `get_orders_by_account_and_status`, `count_open_orders`, `get_order_by_external_id`), the `update_order` / `update_position` field validators, the symbol registry, and the whole paper-session persistence block. That last one matters most -- `upsert_paper_session` runs every poll cycle and `get_paper_session` on startup, so a break there silently resets the paper history that the promotion gate (DEC-2026-06-01-001) reads as evidence.
+  - **New tests live under `tests/unit/`, not `tests/integration/`.** They are fast, hermetic and use the function-scoped SQLite fixture, so they belong there regardless of the scope change. This also means they would have counted even if the job scope had been left alone.
+  - **Floor set to 72 against 74.** Two points of headroom for ordinary variation, consistent with the previous 62-against-63 convention. Ratchet up, never down.
+- **Alternatives Considered:**
+  - **Write unit tests duplicating the integration coverage to reach 80%:** REJECTED - metric-gaming, and it would add maintenance burden for zero real assurance.
+  - **Leave the job scope and accept the misleading number:** REJECTED - it had already produced one wrong finding in a document intended to be authoritative, and would produce more.
+  - **Add a second coverage job for integration only:** REJECTED - two numbers to reconcile, and neither would be the answer to "how much of this code is covered".
+  - **Keep the floor at 62 after widening scope:** REJECTED - a floor 12 points below the measured value enforces nothing.
+- **Status:** ACTIVE
+- **Date Decided:** 2026-08-14
+- **Implemented By:** Assessment plan items 2.9 and 2.10
+- **Affected Files:** `.github/workflows/ci.yml` (coverage job scope + floor), `tests/unit/data/test_store_queries.py` (new, 36 tests), `README.md`, `docs/PROJECT_CONTEXT.md`, `docs/PRODUCTION_READINESS_ASSESSMENT.md` (section 2.2 correction, finding #11, items 2.9 and 2.10).
+- **Measured before and after:** `src/data/store.py` 28% -> 100%; `src/api/main.py` 42% -> 86%; project total 67% -> 74%; suite 1,981 -> 2,017 passing, 0 failing.
+- **Generalisation worth carrying:** a number that is enforced is not the same as a number that is true. The coverage floor, the `DECISIONS.md` footer count (DEC-2026-08-14-002) and the Stage-1 hypothesis rubric (DEC-2026-08-13-003) are three instances of the same failure in this repository within one week. Where a claim is mechanically checkable, check it mechanically.
+- **References:** DEC-2026-08-11-004 (network tests opt-in, which made whole-suite measurement deterministic), DEC-2026-08-14-002 (documentation freshness; numbers are claims), DEC-2026-02-08-006 (eager loading, exercised by the new query tests), DEC-2026-06-01-001 (promotion gate that consumes paper-session state), `docs/PRODUCTION_READINESS_ASSESSMENT.md` finding #11.
+
+---
+
+### DEC-2026-08-14-005: Timing Tests Control the Clock; They Do Not Sleep on It
+- **Decision:** A test asserting time-dependent behaviour drives a controlled clock rather than calling `time.sleep` and asserting against wall-clock elapsed time. Applied to `test_bucket_refill_partial_second` in `tests/unit/test_rate_limiter_edge_cases.py`.
+- **Context:** During the whole-suite verification for DEC-2026-08-14-004 the suite failed once on that test, then passed ten consecutive times in isolation. It slept 10ms and asserted `tokens <= 50.15`, allowing 15ms of refill -- roughly 5ms of slack against a default Windows timer granularity of about 15.6ms. Under full-suite load the sleep overshoots and the assertion fails. The test had presumably been intermittently failing since it was written; nothing had made it visible because it usually ran on an unloaded machine.
+- **Rationale:**
+  - **A flaky test is worse than no test.** It teaches readers that a red suite means "re-run CI" rather than "read the failure". That habit is what allows a genuine regression to be waved through, and this repository depends on its suite being trustworthy: the promotion gate and the demotion guardrail both read from data the suite is supposed to protect.
+  - **The assertion was testing the wrong thing.** With a real sleep, the subject under test is partly the OS scheduler. Driving the clock isolates the refill arithmetic, which is the actual contract, and lets the assertion be exact (`== approx(50.1)`) rather than a tolerance band. A tighter assertion on a smaller surface is strictly better.
+  - **Widening the tolerance was the tempting fix and the wrong one.** It would have hidden the flake at the cost of a test that no longer distinguishes correct refill from roughly-correct refill, and the next contributor under heavier load would widen it again.
+  - **`last_refill` needs explicit handling.** `TokenBucket.last_refill` uses `field(default_factory=time.time)`, which binds the real function at class-definition time and is therefore unaffected by patching `time.time` afterwards. The test sets it onto the controlled clock explicitly, and says so in a comment, because this is a genuine trap for the next person who patches the clock here.
+  - **Scope was checked before generalising.** The other four sleep sites in the suite were inspected: `tests/unit/test_rate_limiter.py` sleeps 1.1s with an explicit jitter allowance or asserts a capacity-capped value, and `tests/unit/data/test_base.py` asserts only that a mechanism exists. None has slack narrower than timer granularity, so none was changed. One fragile test was fixed rather than five rewritten -- this is not a licence to churn passing tests.
+- **Alternatives Considered:**
+  - **Widen the tolerance to 50.5:** REJECTED - hides the flake, weakens the assertion, recurs under heavier load.
+  - **Mark the test `flaky` / add a retry plugin:** REJECTED - institutionalises the problem and adds a dependency.
+  - **Delete the test:** REJECTED - sub-second refill is real behaviour worth asserting; the bug was in how it was asserted, not that it was.
+  - **Inject a clock into `TokenBucket` as a constructor parameter:** REJECTED for now - it is the cleaner long-term design and matches the injectable clock already used in `orchestrator.py`, but it changes production code to suit a test. Deferred until something in production needs it.
+- **Status:** ACTIVE
+- **Date Decided:** 2026-08-14
+- **Implemented By:** Whole-suite verification for DEC-2026-08-14-004
+- **Affected Files:** `tests/unit/test_rate_limiter_edge_cases.py` only. `src/brokers/binance/rate_limiter.py` is UNCHANGED -- the defect was in the test, not the subject.
+- **Verification:** ran ten consecutive times in isolation and once in the full 2,054-test suite; deterministic in all eleven.
+- **References:** DEC-2026-02-10-002 (the TokenBucket under test), DEC-2026-08-14-004 (the whole-suite run that exposed this), DEC-2026-08-11-004 (hermetic tests -- same principle applied to environment rather than time).
+
+---
+
+### DEC-2026-08-15-001: `docker compose up` Must Work on a Fresh Clone, and Must Not Inherit Live Configuration
+- **Decision:** `docker-compose.yml` declares every variable inline with `${VAR:-default}` instead of requiring `env_file: .env`, runs `scripts/init_db.py` before handing off to uvicorn, and **hardcodes** `LIVE_TRADING_ENABLED=false` and `BINANCE_TESTNET=true` rather than interpolating them. Dependabot is enabled for pip, npm, github-actions and docker. The README carries CI, Python and licence badges.
+- **Context:** Pre-publication review of what a reviewer meets in the first five minutes. `docker compose up` is the most likely "let me try this" command and it failed outright on a clean clone.
+- **Rationale:**
+  - **Two independent failures, both the same class as the `init_db.py` Windows crash (DEC-2026-08-11-003): a documented path nobody had walked.** First, `env_file: .env` made a gitignored file a hard requirement, so the command errored before starting anything. Second, nothing created the schema -- `init_db()` in `src/data/database.py` is a function only `scripts/init_db.py` calls, so the API would have booted and failed every query with "no such table". A reviewer would have concluded the system does not work, and been right about the evidence available to them.
+  - **The mainnet leak is the serious finding.** `BINANCE_TESTNET: ${BINANCE_TESTNET:-true}` looks safe and is not. Compose reads a local `.env` for `${VAR}` substitution independently of `env_file`, so on a developer machine whose `.env` sets `BINANCE_TESTNET=false`, `docker compose config` resolved to `"false"` -- a local demo container pointed at real markets. This is the same leak the test suite had before its hermetic fixture (DEC-2026-08-11-004), arriving through a different door, which is why it is recorded rather than quietly fixed. Live-affecting settings are now hardcoded, and no `BINANCE_API_KEY` or `BINANCE_SECRET_KEY` is passed into the container, so it cannot reach a funded account even if a setting were wrong.
+  - **Pinning and Dependabot are two halves of one trade.** Exact pins (requirements.txt, 2026-08-13) removed surprise upgrades but moved the burden of noticing advisories onto a human who will not reliably notice. Dependabot makes upgrades visible while pins keep them deliberate. Updates are grouped and rate-limited because an unbounded stream of single-dependency PRs on a solo project gets ignored, and an ignored alert is worse than none -- the same reasoning as the flaky test in DEC-2026-08-14-005.
+  - **The CI badge is the highest signal-per-character item in the repository.** Seven CI jobs existed and the front page did not say so.
+- **Alternatives Considered:**
+  - **`env_file: [{path: .env, required: false}]`:** REJECTED - correct, but needs Compose 2.24+, and inline defaults are readable without knowing that.
+  - **Committing a working `.env`:** REJECTED - trains the habit of committing a file that holds credentials.
+  - **Calling `init_db()` from the API startup event:** REJECTED - schema creation is a deployment step, not a request-serving concern, and it would silently create a schema against a misconfigured production `DATABASE_URL`.
+  - **Adding Postgres and the frontend now:** DEFERRED to item 4.1 proper. Fixing the broken path is separable from widening it, and mixing them would violate one-change-one-intent.
+- **Status:** ACTIVE
+- **Date Decided:** 2026-08-15
+- **Implemented By:** Assessment plan item 4.1 (partial)
+- **Affected Files:** `docker-compose.yml`, `.github/dependabot.yml` (new), `README.md` (badges), `DEVELOPMENT_SETUP.md`, `docs/PRODUCTION_READINESS_ASSESSMENT.md`.
+- **Verification status, stated honestly:** `docker compose config` validates and `scripts/init_db.py` was confirmed to succeed and to be idempotent across restarts. **The container was NOT observed serving `/health`** -- the Docker daemon was not running on the machine where this landed. Item 4.1 stays marked partial until someone watches it come up. Recording an unverified claim as verified would be the precise failure this repository's research layer exists to prevent.
+- **References:** DEC-2026-08-11-003 (pre-publication hygiene; same defect class), DEC-2026-08-11-004 (hermetic environment; same leak, different door), DEC-2026-05-27-001 (kill switch defaults OFF), DEC-2026-08-14-001 (API key gate the compose file leaves optional in development), DEC-2026-08-14-005 (an ignored signal is worse than none).
+
+---
+
+### DEC-2026-08-16-001: Frontend Test Infrastructure First, Then the Dependency Upgrades It Made Safe
+- **Decision:** Add Vitest + React Testing Library + jsdom with 59 tests covering the shared formatters, the regime hook, `PositionsTable`'s gain/loss handling, `EmergencyPanel`'s typed confirmation gate, and a router API contract test. Wire `npm test` into CI as a blocking job with **no coverage floor**. Then, with that net in place, upgrade `react-router-dom` 6.30.3 -> 7.18.2 and add a blocking `pip-audit` job. Vitest runs test files sequentially (`fileParallelism: false`).
+- **Context:** Assessment items 3.7 and 3.2. The operator declined item 3.4 (wiring pages to real data) out of concern for breaking the frontend, which was the correct call and identified the real blocker: the frontend had **zero** tests. CI ran `tsc -b`, which proves types line up and says nothing about behaviour, so 17,000 lines of UI were unverifiable.
+- **Rationale:**
+  - **The assessment's ordering was wrong and the operator caught it.** It lists 3.4 (rewire) before 3.7 (tests). Tests are what make rewiring safe, so they come first. This decision inverts that order and the react-router upgrade is the immediate proof: the upgrade was performed against a green baseline of 59 tests rather than against nothing.
+  - **The canary was written before the change, not after.** `src/App.routing.test.tsx` exercises exactly the seven react-router symbols the app imports and was confirmed green on 6.30.3 **before** the bump. A test written after a migration only proves the migration's end state is self-consistent; written before, it proves behaviour did not change.
+  - **The upgrade was safe because the app had already opted in.** `BrowserRouter` carried `future={{ v7_startTransition, v7_relativeSplatPath }}`, which are precisely the v6->v7 behaviour changes. In v7 both are the default and the prop no longer exists, so `tsc -b` failed on it and the fix was a deletion with no runtime change.
+  - **Sequential test execution is a correctness fix, not a performance tuning.** Vitest defaults to one worker per core, each with its own jsdom; the combined heap footprint produced a FATAL out-of-memory that killed a DIFFERENT test file on each run -- 47 of 59 tests one run, 15 the next. A non-deterministic OOM in CI is indistinguishable from a real failure and trains everyone to hit re-run, the same failure mode as DEC-2026-08-14-005. The react-router bump added the module weight that surfaced it; the cause was always the worker count.
+  - **No frontend coverage floor, deliberately.** Five test files over a prototype would report a number either meaningless or immediately blocking. A gate that is routinely overridden teaches people to override gates. Add one when the suite covers a defensible surface.
+  - **Two known defects are documented by test rather than fixed.** `useRegimeState` discards the last good regime on any failed poll, because the guard in its catch block reads a `regime` captured from the first render and therefore always null. `PositionsTable` falls back to hardcoded equity positions (NVDA, MSFT, TSLA) when `data` is undefined, in a crypto-only system. Both are labelled KNOWN ISSUE / KNOWN FOOTGUN in the tests, with instructions to delete the test when fixed. Fixing them here would have mixed behaviour changes into a test-infrastructure commit.
+    - **AMENDED 2026-08-16:** both were fixed the same day in DEC-2026-08-16-003, and the two KNOWN ISSUE / KNOWN FOOTGUN tests were converted into regression guards. The reasoning above stands as the reason they were not fixed *in this commit*; it is no longer a description of the code.
+  - **pip-audit blocks rather than advises.** An advisory security job is a job people learn to scroll past. It audits `requirements.txt` only: a CVE in a linter that never sees untrusted input is not a reason to block a merge.
+- **Alternatives Considered:**
+  - **Wiring pages to real data first (item 3.4):** REJECTED by the operator, correctly. Refactoring untested UI is how a working prototype quietly stops working.
+  - **Rendering `App` itself in the routing test:** REJECTED - it mounts four providers and ten lazy pages, several fetching on mount. It would fail for reasons unrelated to routing. `App.tsx`'s own route table is covered by `tsc -b` and the production build.
+  - **Asserting the confirmation dialog disappears after EXECUTE:** REJECTED - `AnimatePresence` keeps the exiting node mounted for its transition, so that assertion races framer-motion. The tests assert the outcome (the action fired / did not fire) instead.
+  - **Raising the V8 heap via `NODE_OPTIONS` instead of serialising:** DEFERRED - it hides the growth rather than bounding it, and the suite runs in ~41s sequentially. It is the next lever if that stops being true.
+  - **`npm audit fix --force`:** REJECTED - it performs semver-major bumps unattended. The upgrade was done deliberately, with a baseline and a verification pass.
+- **Status:** ACTIVE
+- **Date Decided:** 2026-08-16
+- **Implemented By:** Assessment plan items 3.7 and 3.2
+- **Affected Files:** `frontend/vitest.config.ts` (new), `frontend/src/test/setup.ts` (new), `frontend/src/lib/utils.test.ts` (new), `frontend/src/hooks/useRegimeState.test.ts` (new), `frontend/src/components/dashboard/PositionsTable.test.tsx` (new), `frontend/src/components/dashboard/EmergencyPanel.test.tsx` (new), `frontend/src/App.routing.test.tsx` (new), `frontend/package.json`, `frontend/src/App.tsx` (future prop removed), `requirements-dev.txt`, `.github/workflows/ci.yml` (frontend-test and audit jobs).
+- **Measured:** frontend 0 -> 59 tests, deterministic across three consecutive runs; `npm audit --omit=dev` 3 moderate -> **0** vulnerabilities; production bundle 416.74 kB -> 435.81 kB (+19 kB, the v7 cost); eslint unchanged at 0 errors / 80 warnings; `tsc -b` and `vite build` green.
+- **Verification gap, stated honestly:** the `pip-audit` job has never been observed running. The machine it landed on could not reach pypi.org (TLS chain failure), so its baseline is unknown and it may be red on first CI run. Triage the findings rather than reaching for `--ignore-vuln`.
+- **References:** DEC-2026-08-14-005 (a non-deterministic signal trains people to ignore the channel -- the reasoning behind serialising the runner), DEC-2026-08-15-001 (Dependabot; pip-audit is the blocking half of the same trade), `docs/PRODUCTION_READINESS_ASSESSMENT.md` items 3.2, 3.4 and 3.7.
+
+---
+
+### DEC-2026-08-16-002: The Project Is a Validation System That Returns `no`, Not a System Built to Fail -- and Cross-Document Consistency Is Enforced by Test
+- **Decision:** Reframe the headline from "a validation layer built to prove its own strategies don't work" to "a validation layer that decides whether a strategy has a real edge, and is built to return `no` when the evidence is not there". The null result stays in the second line, bold and unqualified. Separately, extend `documentation-freshness.md` with Rules 10-13 (one owner per claim, repeated numbers derived and asserted, correction style by informativeness, one concept one name) and add `tests/unit/test_doc_consistency.py` to enforce them mechanically.
+- **Context:** Raised by the operator: the previous framing "might give the wrong idea about building a system that doesn't work". Separately, they asked that documentation stop drifting and stop saying different things in different places.
+- **Rationale:**
+  - **The old framing was inaccurate, which is the real objection.** Nobody builds a trading system *in order to* prove its strategies fail. The project was built to find out whether edge existed, with honest validation so the answer would mean something. The null result is the OUTCOME, not the design goal. Stating it as the goal misdescribes the artifact, and a reviewer who notices that discounts everything else.
+  - **The artifact is the harness, and it is reusable.** "Point it at a strategy and it tells you whether the result survives multiple-comparisons correction and realistic costs" describes something with standing value. "We proved ours don't work" describes a postmortem. The first is true and more useful.
+  - **The positioning follows from the accuracy, not the other way round.** Evaluation engineering -- pre-registration, multiple-comparisons correction, holdout hygiene, Goodhart resistance, negative-space tracking -- is directly the skill set LLM evals work requires, and the repository genuinely contains it. The reframe is not spin toward that; it is a more accurate description that happens to land there.
+  - **The null result must not soften, and that is the specific risk this change carried.** A reviewer who finds the headline hedged distrusts everything else, and the honesty is the differentiator. `TestNarrativeConsistency` asserts "None has a validated edge" survives in `README.md` and its counterpart in `RESEARCH_FINDINGS.md`, and fails on phrases that would contradict the null result. The framing may change again; the result may not quietly.
+  - **Cross-document consistency is a distinct failure mode from staleness.** Rules 1-9 keep a document true against the code. They do nothing about five documents that are each individually plausible and collectively contradictory. Every restatement of a claim is an independent thing to remember, so the rule is: the owning document states it, others link.
+  - **The rule was written against a real instance, not a hypothetical.** `PROJECT_CONTEXT.md` and the readiness assessment claimed "14 route modules"; `ARCHITECTURE.md` said 13. Ground truth was 13 -- including at `622ac49`, the commit the assessment was written against. It was wrong when written and had been copied twice. Ground truth for a repeated count must be the code, never another document.
+  - **Rule 12 sharpens Rule 6 rather than replacing it.** "Mark, do not erase" was producing pressure to annotate trivia. The line is now whether the error is informative: a withdrawn research result gets marked because "we got this wrong and caught it" is part of the document's value; a miscount of files gets fixed inline, with the history in the commit message where it belongs.
+- **Alternatives Considered:**
+  - **Leave the framing alone:** REJECTED - it is inaccurate, which is a stronger objection than it being unflattering.
+  - **Drop or soften the null result while reframing:** REJECTED, and actively guarded against by test. It would trade the repository's one genuinely distinguishing property for a marginally better first impression.
+  - **A separate `documentation-consistency.md` rules file:** REJECTED - four rules files already exist and the domain is the same ("documentation must be true"). Freshness is truth against the code; consistency is truth against other documents.
+  - **Asserting test counts and coverage across documents:** REJECTED per Rule 11.3 - they churn every commit, so the test would fail on unrelated work and would be deleted. Stated once, dated, in the owning document.
+  - **A general prose-similarity or LLM-based consistency check:** REJECTED - unfalsifiable and unmaintainable. Narrow regex claims with computed ground truth fail loudly and for one legible reason.
+- **Status:** ACTIVE
+- **Date Decided:** 2026-08-16
+- **Implemented By:** Operator request, 2026-08-16
+- **Affected Files:** `README.md` (headline), `docs/PROJECT_CONTEXT.md` (section 1 framing, route-module count x2), `docs/PRODUCTION_READINESS_ASSESSMENT.md` (route-module count), `.claude/rules/documentation-freshness.md` + `.agent/` copy (Rules 10-13), `tests/unit/test_doc_consistency.py` (new, 19 tests).
+- **Defects found while writing the enforcement:** the "14 route modules" error in three places across two documents, wrong since it was first written. Two test-design errors of my own were caught by the same run and are recorded because both are traps for the next person: a pattern matching `(\d+) endpoints` also matched "21 endpoints mutate state", reporting a contradiction between two correct claims about different things; and asserting a literal phrase against raw text failed because the repository hard-wraps prose at ~80 columns and a newline sat inside the phrase.
+- **References:** DEC-2026-08-14-002 (documentation freshness, extended here), DEC-2026-08-14-004 (a number that is enforced is not the same as a number that is true -- the same lesson, applied to prose), `.claude/rules/zero-technical-debt.md` Rule 3 (naming drift in code; Rule 13 is its prose counterpart), `docs/RESEARCH_FINDINGS.md` (the owning document for the null result).
+
+---
+
+### DEC-2026-08-16-003: Fix the Two Frontend Defects the New Tests Exposed
+- **Decision:** Fix both defects DEC-2026-08-16-001 documented rather than fixed. `useRegimeState` now falls back to `REGIME_DEFAULTS` via the updater form `setRegime((current) => current ?? REGIME_DEFAULTS)`, so a failed poll preserves the last good reading. `PositionsTable` loses its hardcoded mock-position fallback entirely; `data` defaults to `[]`, so omitting it shows the empty state. Both KNOWN ISSUE / KNOWN FOOTGUN tests become regression guards.
+- **Context:** The tests added in DEC-2026-08-16-001 documented both defects deliberately, to keep behaviour changes out of a test-infrastructure commit. With that commit landed, they are their own change.
+- **Rationale:**
+  - **Discarding a good regime on a transient failure is the worse of two failure modes.** The router reads regime state to decide whether strategies activate, and `UNKNOWN` means `regime_tags`-tagged strategies do not fire (DEC-2026-05-28-003). One network blip therefore silenced strategy activation until the next successful poll. A stale reading with the error still surfaced is strictly better than a wrong one: the operator sees both the last known regime and the fact that the last fetch failed.
+  - **The updater form is the fix, not a `regime` dependency.** Adding `regime` to the dependency array would have re-created the interval on every regime change, which is what the original comment was avoiding. `setRegime((current) => ...)` reads the current value without making the effect depend on it, so the empty dependency array becomes genuinely correct rather than suppressed -- the `eslint-disable react-hooks/exhaustive-deps` was removed and eslint's warning count did not change, which confirms it.
+  - **The fallback stays for the case it was written for.** A first poll that fails still yields `unknown`, because there is nothing to preserve. Both branches are now asserted separately; the previous single test could not distinguish them.
+  - **Fabricated positions are a hazard, not seed data, once a real fetch exists.** `PositionsTable` rendered NVDA, MSFT, TSLA, AAPL and GOOGL -- equities a crypto-only system cannot trade -- whenever `data` was undefined, with plausible quantities and P&L. Harmless while every caller passed data; a silent falsification the moment a fetch returns undefined. Removing it now, before item 3.4 wires real data, means the wiring cannot inherit it.
+  - **Verified safe by checking callers, not by assuming.** `CockpitPage`, `PortfolioPage` and `Dev2Page` all pass `data` explicitly; the only call without it is `<PositionsTable isLoading />`, which renders the skeleton. No page's appearance changed.
+  - **Both fixes were mutation-tested.** Reverting the `useRegimeState` change fails exactly one test and leaves the first-poll test passing, confirming the two discriminate. Reintroducing a mock fallback in `PositionsTable` fails three. A fix whose test does not fail without it is not protected.
+  - **`tsc -b` caught a real slip.** Removing the mock left `within` unused in the test file, which `noUnusedLocals` rejected and the build refused. Worth recording as evidence the type gate earns its place on test files too, which is why they are inside `tsconfig.app.json`'s include rather than excluded from it.
+- **Alternatives Considered:**
+  - **Add `regime` to the effect's dependency array:** REJECTED - re-creates the polling interval on every regime change, the exact thing the original code avoided.
+  - **Keep the mock behind an explicit `demo` prop:** REJECTED - no caller wants it, and a prop that fabricates holdings is a footgun with a longer fuse rather than a removed one.
+  - **Leave both until item 3.4:** REJECTED - the operator asked for them, and removing the fallback before the wiring is strictly easier than removing it afterwards.
+- **Status:** ACTIVE
+- **Date Decided:** 2026-08-16
+- **Implemented By:** Operator request following DEC-2026-08-16-001
+- **Affected Files:** `frontend/src/hooks/useRegimeState.ts`, `frontend/src/hooks/useRegimeState.test.ts`, `frontend/src/components/dashboard/PositionsTable.tsx`, `frontend/src/components/dashboard/PositionsTable.test.tsx`, `README.md` (CI table and the stale advisory-lint claim), `.claude/DECISIONS.md` + `.agent/` copy (amendment to DEC-2026-08-16-001).
+- **Documentation swept in the same change:** DEC-2026-08-16-001's "documented by test rather than fixed" bullet became untrue the moment these landed and carries a dated amendment. The README's CI table was also stale on three counts found by the same grep -- it omitted the `audit` and `frontend-test` jobs added earlier the same day, described frontend lint as "advisory-only" when it has been blocking since 2026-08-13, and cited "84 known issues" against an actual 80. All corrected inline per Rule 12: a miscount and an outdated status carry no information worth marking.
+- **Measured:** frontend 59 -> 62 tests, all passing; `tsc -b` and `vite build` green; eslint unchanged at 0 errors / 80 warnings; no change to any page's rendered output.
+- **References:** DEC-2026-08-16-001 (added the tests that exposed both, amended here), DEC-2026-05-28-003 (SubRegime routing -- why a spuriously `UNKNOWN` regime suppresses strategy activation), DEC-2026-08-14-002 Rule 12 (correct inline when the error is not informative), `docs/PRODUCTION_READINESS_ASSESSMENT.md` item 3.4 (the wiring this clears the way for).

@@ -28,7 +28,7 @@ Git history: 102 commits, 2026-02-08 through 2026-06-11, single author.
 
 ### 1.2 Backend application (`src/`)
 
-**API layer** — FastAPI, 14 route modules, 63 endpoints (21 state-mutating).
+**API layer** — FastAPI, 13 route modules, 61 endpoints (19 state-mutating).
 `accounts`, `backtest`, `dashboard`, `events`, `execution`, `orders`,
 `paper_trading`, `pnl`, `positions`, `regime`, `risk`, `strategies`, `system`.
 Middleware: structured request logging, global error handler. Explicit CORS
@@ -164,6 +164,16 @@ The 9 failures are genuine and fall into three groups:
 
 ### 2.2 Coverage
 
+> **CORRECTED 2026-08-14.** The figures below are measured over `tests/unit`
+> and `tests/research` only, which is what the CI coverage job scoped to. That
+> scope was itself the defect: any module tested from `tests/integration/`
+> reported near-zero coverage while being fully exercised on every commit.
+> `data/store.py` read 28% against a real 100%, and finding #11 was raised on
+> the strength of that number. The coverage job now measures the whole suite
+> (DEC-2026-08-14-004). Current: **74% overall, `store.py` 100%,
+> `api/main.py` 86%.** The weak-module list below is not reliable and is
+> retained only as the record of what was believed.
+
 63% overall across `src/` + `research/` (unit + research suites; 15,784
 statements, 5,828 uncovered).
 
@@ -210,8 +220,21 @@ mock the strategy engine rather than exercising the real signature.
 
 ### 2.5 Security posture
 
-No authentication exists on the API. All 63 endpoints are open, including
-21 mutating endpoints: place order, cancel order, close position, activate and
+> **UPDATED 2026-08-14.** The finding below described the state at `622ac49`.
+> Item 3.1 has since been implemented (DEC-2026-08-14-001): the 19 mutating
+> endpoints now require a shared `X-API-Key`, enforced by method-based
+> middleware in `src/api/auth.py` and asserted route-by-route by
+> `tests/unit/api/test_auth.py::TestMutatingRouteCoverage`. Outside development
+> a missing key aborts startup. The 42 read endpoints remain open, and there is
+> no per-user identity, and no key rotation. Rate limiting followed on the same
+> day (item 3.2, DEC-2026-08-14-003): mutating requests are capped per client
+> and globally, though the per-client identity is spoofable and the buckets are
+> per process. Finding #1 below is downgraded from Critical to Medium
+> accordingly.
+
+No authentication exists on the API. All sixty-three endpoints are open,
+including twenty-one mutating endpoints: place order, cancel order, close
+position, activate and
 deactivate the kill switch, start and stop paper trading sessions, mutate
 strategy parameters, and change system configuration.
 
@@ -275,38 +298,134 @@ more valuable one.
 
 ---
 
+### 2.9 Audit findings, 2026-08-20
+
+A read-only audit of the whole repository was run on 2026-08-20. Most of what it
+found is recorded as rows 13-31 in the table in 3.2. Four findings need more than
+a table row, because each is a class rather than an instance.
+
+**The risk package is not connected to the loop that places orders.** The live
+loop enforces three of the twelve controls in `src/core/risk/` -- kill switch,
+daily loss, max drawdown -- and reaches those three by reimplementing them inline
+in `_check_risk_guards` (`scripts/run_live_trading.py:945`) rather than by
+importing them. Circuit breakers, dead man's switch, time, event and volatility
+filters, `PositionSizer`, weekly loss, concentration and `RiskController` itself
+are unreachable:
+
+```bash
+grep -cE "RiskController|circuit_breaker|dead_man|time_filter|event_filter|VolatilityAnalyzer|PositionSizer|concentration|weekly" scripts/run_live_trading.py
+# 0
+```
+
+Position size is a flat 25% of equity; `calculate_quantity(current_equity,
+price)` takes no stop-loss argument, so risk per trade is unbounded by stop
+width, while the `PositionSizer` that derives size from stop distance sits at
+100% coverage and is never called. `audit/AUDIT.md` raised this on 2026-08-08
+and ranked it the most serious item for a trading role. It stayed open, and the
+README, `ARCHITECTURE.md` and this document's companion all continued to draw
+the designed pipeline as though it were the live path until 2026-08-21. The
+diagrams are now corrected; the wiring is not.
+
+**The kill switch is a trading halt, not a flat button.** `_check_risk_guards`
+runs before every order including the one that closes a position, and the exit
+paths at lines 1325 and 1399 branch on `"kill_switch" in block_reason` and skip
+the close. Activating it while a position is open disables the stop-loss and
+leaves the position running, re-alerting every poll. This matters most in the
+scenario the control exists for, and it is not covered by any test.
+
+**Nothing reconciles the database against the exchange.** `submit_market_order`
+writes no database row; the record appears later, in `save_state`. A process
+death or an HTTP timeout between the fill and that write leaves a position on the
+exchange with no record of it. The inverse also exists: an exit that fills and is
+not recorded leaves the database holding a position that is already closed. No
+startup routine compares the two, and `grep -c reconcile scripts/run_live_trading.py`
+returns 0. Live state is written to `paper_trading_sessions` with a `live_`
+session-id prefix; the `orders` and `positions` tables are not written by the
+live path at all.
+
+**Paper and live are separate implementations.** They are two scripts of 2,110
+and 946 lines sharing exactly one module-level function name, `main`.
+`run_paper_trading.py` contains zero `kill_switch` references. They share the
+signal path -- fetcher, indicators, generators, regime detection -- and diverge
+across the whole of execution and risk. This matters because the promotion gate
+uses paper results to predict live behaviour, and its stated justification was
+that the two share a code path.
+
+**Not carried forward.** The audit also reported SQLite write contention across
+three processes with no WAL mode or busy timeout. That finding is void: the
+production database is PostgreSQL on Neon, not SQLite. The connection-pool
+finding it sat next to survives and is strengthened -- see row 21.
+
+---
+
 ## 3. Assessment
 
 ### 3.1 What is genuinely production-grade
 
-- The risk subsystem: layered checks, circuit breakers, kill switch, dead man's
-  switch, near-total test coverage.
+- The risk subsystem *as a library*: layered checks, circuit breakers, kill
+  switch, dead man's switch, near-total test coverage. The qualifier is
+  load-bearing -- the deployed live loop reaches three of its twelve controls
+  and reimplements those three inline. See 2.9 and row 13. This entry carried
+  no qualifier until 2026-08-21, in the section a reader checks for confidence.
 - The live capital model: fails closed on the min-notional guard, enforces a
   reserve, caps concurrency, and gates promotion on measured paper performance.
 - The research validation layer: DSR, effective-K, pre-registered gates,
   cost modelling, negative-space tracking. This is stronger than what most
   retail quant projects attempt, and it is the differentiator.
-- The decision log: 113 dated decisions with rationale and alternatives.
+- The decision log: 139 dated decisions with rationale and alternatives.
 - The indicator library and data models: well typed, well tested, well factored.
 
 ### 3.2 What blocks a "production ready" verdict
 
-Ordered by how quickly a senior reviewer will find it:
+Rows 1-12 are ordered by how quickly a senior reviewer will find them, which
+was the original framing. Rows 13-35 come from the 2026-08-20 audit (2.9) and
+are ordered by severity instead -- the two orderings are not the same, and
+pretending otherwise would make the list harder to act on.
 
 | # | Finding | Severity |
 |---|---|---|
-| 1 | No API authentication on 21 mutating endpoints incl. order placement and kill switch | Critical |
-| 2 | No CI — nothing verifies any commit | Critical |
-| 3 | 9 failing tests on `master` | High |
-| 4 | Orchestrator startup check calls a function with 4 wrong kwargs; error swallowed | High |
-| 5 | Tests read the developer's real `.env`; the leaked value selects live mode | High |
-| 6 | 50 mypy + 76 ruff errors against a config that claims strict typing | Medium |
-| 7 | Frontend is a static prototype presented as a dashboard | Medium |
-| 8 | No LICENSE despite two MIT claims | Medium |
-| 9 | 35 AI prompt files + 17 scratch scripts at repo root | Medium (presentation) |
-| 10 | README describes a system two quarters out of date | Medium (presentation) |
-| 11 | `data/store.py` at 28% coverage | Low |
-| 12 | Integration tests error rather than skip without network | Low |
+Status column added 2026-08-14. "Resolved" means verified against the current
+`master`, not merely attempted.
+
+| # | Finding | Severity | Status |
+|---|---|---|---|
+| 1 | No API authentication on twenty-one mutating endpoints incl. order placement and kill switch | ~~Critical~~ Medium | Partly resolved 2026-08-14 — mutating endpoints gated (DEC-2026-08-14-001) and rate-capped (DEC-2026-08-14-003); reads still open, no identities, no key rotation |
+| 2 | No CI — nothing verifies any commit | Critical | Resolved — 7 jobs in `.github/workflows/ci.yml` |
+| 3 | 9 failing tests on `master` | High | Resolved — 1,899 pass, 0 fail, 0 errors |
+| 4 | Orchestrator startup check calls a function with 4 wrong kwargs; error swallowed | High | Resolved — check is read-only; `TypeError`/`AttributeError` now propagate |
+| 5 | Tests read the developer's real `.env`; the leaked value selects live mode | High | Resolved — `hermetic_environment` fixture in `tests/conftest.py` |
+| 6 | 50 mypy + 76 ruff errors against a config that claims strict typing | Medium | Resolved — 0 and 0, both gated in CI |
+| 7 | Frontend is a static prototype presented as a dashboard | Medium | **Open** — still 3 network calls (item 3.4) |
+| 8 | No LICENSE despite two MIT claims | Medium | Resolved — MIT `LICENSE` added |
+| 9 | 35 AI prompt files + 17 scratch scripts at repo root | Medium (presentation) | Resolved — 0 and 0 |
+| 10 | README describes a system two quarters out of date | Medium (presentation) | Resolved — rewritten |
+| 11 | ~~`data/store.py` at 28% coverage~~ **Measurement defect, not a coverage gap** | Low | Resolved 2026-08-14 — the module was at 100% all along; the CI coverage job excluded `tests/integration/`. Job scope fixed, floor 62→72 (DEC-2026-08-14-004) |
+| 12 | Integration tests error rather than skip without network | Low | Resolved — skip on `PARAVANT_RUN_NETWORK_TESTS` |
+| 13 | Live loop reaches 3 of 12 risk controls; circuit breakers, dead man's switch, filters, `PositionSizer` unreachable | Critical | **Open** — see 2.9. Diagrams corrected 2026-08-21; wiring untouched |
+| 14 | SHORT signals emit spot SELL orders against a long-only locked decision | Critical | **Open** — PARA-01. 2 of 4 live tiers construct `SignalDirection.SHORT`; `run_live_trading.py:1494` maps it to `"sell"` |
+| 15 | No migration path: 6 Alembic revisions, no runtime invokes any; `create_all()` never emits `ALTER` | High | **Partly resolved 2026-08-21** — the chain now applies (it aborted at revision 2 of 6 on SQLite) and is asserted equal to the ORM models by a CI job; four objects existed only in the models and now have a migration (DEC-2026-08-21-005). Still **open**: no deployment path runs `alembic upgrade head`, so `create_all()` remains the runtime mechanism and an existing database still receives no `ALTER` |
+| 16 | Unique constraint on `strategy_assignments (account_id, strategy_id)` exists only in an unrun migration, not on the model | High | Resolved 2026-08-21 — declared in `__table_args__`, so `create_all()` builds it; `test_duplicate_strategy_assignment_rejected` now asserts `IntegrityError` and that the original row survives, mutation-tested (DEC-2026-08-21-004). One existing test was found to be depending on the constraint's absence |
+| 17 | Every real-money control variable is undocumented | High | **Open** — `MAX_DAILY_LOSS_PCT`, `MAX_DRAWDOWN_PCT`, `LIVE_CAPITAL_USDT`, `LIVE_SYMBOL`, `LIVE_TEMPLATE`, `LIVE_STATE_FILE`, `MAX_CONCURRENT_SAME_DIRECTION` appear in no file. `.env.example` documents `DAILY_LOSS_LIMIT_PCT`, which no code reads as an env var |
+| 18 | Paper and live are separate implementations; the promotion gate's justification assumes they are not | High | **Open** — see 2.9 |
+| 19 | 29 signal generators at 13-21% coverage; the only generation test guards every assertion behind `if result is not None:` | High | **Partly resolved 2026-08-21** — the tautology is gone, and 10 of the 14 generators with templates are proven to emit signals on generic market shapes; 4 are allowlisted with a staleness check (DEC-2026-08-21-007). Still **open**: 15 generators have no template in `config/templates/`, so their parameters are not derivable and they are not covered |
+| 20 | Kill switch blocks exits as well as entries | Medium | **Open** — see 2.9. No test covers it |
+| 21 | No `pool_pre_ping` or `pool_recycle` on the engine | Medium | Resolved 2026-08-21 — `engine_options()` in `src/data/database.py`, 18 tests, mutation-tested (DEC-2026-08-21-002). Predicted by audit, then found to have already occurred: `psycopg2.OperationalError: SSL connection has been closed unexpectedly` took down regime persistence on 2026-08-15 |
+| 22 | Auth middleware raises `TypeError` on a non-ASCII `X-API-Key` byte, returning 500 instead of 401 | Medium | **Open** — `secrets.compare_digest` rejects non-ASCII `str`. Distinguishes a malformed key from a wrong one by status code, which `_unauthorized()` documents itself as avoiding. Not reachable from the test client, which refuses to encode the header |
+| 23 | `_check_risk_guards` and `_check_stops_and_tp` have no tests | Medium | **Open** — the live loop's entire risk enforcement and stop/take-profit logic; 0 references in `tests/` |
+| 24 | Telegram is the only alert channel, at 22% coverage, and fails silently when unconfigured | Medium | **Open** — `send_alert` returns early with no log when the token or chat ID is unset. Three skipped tests claim "tested via integration tests"; no such tests exist |
+| 25 | Equity-curve points that fail to deserialise are dropped silently | Medium | **Open** — `paper/engine.py:468`, no log, no count. The curve determines max drawdown and Sharpe, which determine `READY_FOR_LIVE` |
+| 26 | Read endpoints are unauthenticated *and* unrate-limited | Medium | **Open** — `RateLimitMiddleware` gates `MUTATING_METHODS` only. An anonymous 401 flood is also unbounded and writes a log line per request |
+| 27 | Order placed before any record is written; no reconciliation exists | Medium | **Open** — see 2.9 |
+| 28 | `.pre-commit-config.yaml` pins ruff 0.8.4 / mypy 1.14.1; CI pins 0.15.0 / 1.19.1 | Medium | **Open** — the file states it exists so failures are found before the push; it cannot do that at a different version. Its mypy hook also runs without the project's dependencies |
+| 29 | `pyproject.toml` dependencies diverge from `requirements.txt` | Medium | **Open** — omits `psutil`, `scipy`, `requests`, `aiohttp`, `psycopg2-binary`, so `pip install .` is broken. Separately, `scipy` is pinned in production and imported by no production module |
+| 30 | `RESEARCH_FIXLIST.md` marks 1 of 13 defects resolved; `SECURITY.md` names 6 as open | Medium | **Open** — status lives only in the pointing document. A reader following the link cannot tell which entries are live |
+| 31 | `.gitleaks.toml` exists and no CI job or hook runs it; no SAST; Docker image never built; migrations never exercised | Medium | **Partly resolved 2026-08-21** — gitleaks now runs over the whole history on every push, pinned to 8.30.1 and verified to fail on a planted key (DEC-2026-08-21-006); migrations exercised by the `migrations` job (DEC-2026-08-21-005). Still **open**: no SAST over first-party code, and the Docker image is still never built in CI |
+| 32 | 7 dashboard components fabricate P&L, equity, drawdown and win/loss with `Math.random()` | Medium | Resolved 2026-08-21 — all seven render a fail-closed "Sample data" badge; `provenance.test.tsx` enumerates dashboard sources and fails on any fabricating component that is not provenance-aware (DEC-2026-08-21-003). The generators remain until item 3.4 wires the pages |
+| 33 | `set_orchestrator()` is defined and called nowhere, so `/system/start` and `/system/stop` return 503 in every environment | Medium | Resolved 2026-08-21 — both endpoints and the setter removed; `orchestrator.py` deliberately kept and its unreferenced status stated in the README rather than only in the case study (DEC-2026-08-21-008). API surface 63 -> 61 endpoints, 21 -> 19 mutating |
+| 34 | `test_unhandled_exception_returns_500` is `pass  # TODO` | Low | **Open** — a named test for the 500 path that contains no test, counted in the passing total |
+| 36 | `src/api/main.py` freezes `ENVIRONMENT` at import while `src/api/auth.py` reads it at call time | Medium | **Open** — the two can disagree, and in tests whichever module imports `main` first configured the app for the session. `tests/conftest.py` now pins it before collection, which is a workaround, not a fix. See finding S-4 |
+| 37 | `test_all_checks_pass` read the host's real free disk space | Low | Resolved 2026-08-21 — began failing when a drive filled to 0.56GB, with no change to code or test. `shutil.disk_usage` is now mocked, as `psutil.virtual_memory` already was in the same test |
+| 35 | Three per-machine assistant config files were tracked, leaking a foreign username and a predecessor project path | Low | Resolved 2026-08-21 — untracked and ignored; history deliberately not rewritten (DEC-2026-08-21-001) |
 
 ### 3.3 Positioning note
 
@@ -335,10 +454,48 @@ positioning work.
 
 **Goal:** nothing embarrassing or dangerous becomes public.
 
-- [ ] 0.1 Scan full git history for secrets, not just the working tree
-      (`gitleaks detect --log-opts="--all"` or `trufflehog git file://.`).
-      `.env` was never committed, but verify keys were never pasted into a
-      markdown file or a notebook.
+- [x] 0.1 **DONE 2026-08-20 with both named tools. Git history is clean.**
+
+      The earlier blocker was misdiagnosed: the tools could not be installed
+      because Python and curl use a bundled CA bundle that this machine's
+      chain breaks, not because there is no network. PowerShell, which uses the
+      Windows certificate store, reaches the internet normally. Both tools were
+      fetched as release binaries and run without installing anything
+      system-wide.
+
+      | Scanner | Scope | Result |
+      |---|---|---|
+      | gitleaks 8.30.1 | 147 commits, `--log-opts="--all"` | **no leaks found**, exit 0 |
+      | TruffleHog 3.97.0 | full history, 3,091 chunks / 11.1 MB | **0 verified, 0 unverified**, exit 0 |
+
+      gitleaks initially reported two findings. Both were read line by line and
+      are fabricated, and both come from the same feature — the credential
+      *masking* utility and its test:
+
+      - `src/utils/logging.py:76` — the docstring example
+        `"sk_live_1234567890abcdef" -> "**************cdef"`, illustrating what
+        `mask_sensitive_data` does to a key. Flagged as a Stripe token; it is
+        the digits 1-0 followed by `abcdef`.
+      - `tests/unit/core/test_errors.py:457` — the fixture exercising that
+        function, adjacent to `"password": "mysecretpassword"`.
+
+      Both are allowlisted by exact value in `.gitleaks.toml`, with the reason
+      recorded there, so gitleaks now exits 0 and can be used as a gate. No
+      path-wide exclusion was used: a rule that hides a directory will
+      eventually hide a real key.
+
+      A working-tree scan (`gitleaks dir .`) reports 298 findings across
+      435 MB. **Every one is in an untracked file**: 287 in `.venv`, 6 in the
+      vendored third-party skill packs under `.claude/skills` and
+      `.agent/skills`, and 3 in `.env` itself — which is the correct result for
+      a gitignored file holding live credentials.
+
+      **What this does and does not certify.** It certifies that nothing
+      published by this repository contains a credential. It says nothing about
+      whether the credentials themselves are safe: gitleaks confirmed a
+      real-shaped `telegram-bot-api-token` in the working-tree `.env`, on a
+      machine that has run with `BINANCE_TESTNET=false`. Item 0.2 is
+      independent and still open.
 - [ ] 0.2 Rotate the Binance API keys and the Telegram bot token regardless of
       scan result. They exist in a local `.env` on a machine that has run
       `BINANCE_TESTNET=false`.
@@ -418,10 +575,22 @@ and how to run it, without opening a second file.
 - [ ] 2.8 Add `.github/workflows/ci.yml`: matrix on Python 3.11/3.12, running
       `ruff check`, `mypy src/`, `pytest --cov`, and `cd frontend && npm ci &&
       npm run build && npm run lint`. Fail the build on any of them.
-- [ ] 2.9 Add coverage reporting to CI and a real badge. Set a floor
-      (start at the current 63%, ratchet up) and fail below it.
-- [ ] 2.10 Raise `data/store.py` from 28%. It is the widest-blast-radius module
-      in the codebase and the least tested. Target 80%.
+- [x] 2.9 Coverage job added with an enforced floor. Note the scope correction
+      in 2.10 below: the job originally measured only `tests/unit` +
+      `tests/research`, which made the floor a misleading number. It now
+      measures the whole suite; floor is 72%.
+- [x] 2.10 **DONE 2026-08-14** (DEC-2026-08-14-004), but not as written. The
+      premise was wrong: `data/store.py` was never at 28%. It was at 100%,
+      measured over the whole suite — the CI coverage job scoped itself to
+      `tests/unit` + `tests/research` while `DataStore` is tested from
+      `tests/integration/`, which the `test` job runs on every commit. Writing
+      unit tests to move 28% → 80% would have duplicated existing coverage to
+      move a number, which is the same error this repository's research layer
+      exists to catch. **Fixed the measurement instead:** the coverage job now
+      runs `pytest tests/` and the floor moved 62 → 72. Separately, 36 tests in
+      `tests/unit/data/test_store_queries.py` close the paths that genuinely
+      had no coverage from any suite (order query variants, partial-update
+      validators, symbol registry, paper session persistence).
 - [ ] 2.11 Add `.pre-commit-config.yaml` wiring ruff, black, and mypy.
       `pre-commit` is already declared in `requirements-dev.txt` but unused.
 
@@ -433,17 +602,28 @@ coverage floor enforced.
 **Goal:** the dashboard shows real system state. This is the largest gap between
 what the repo looks like and what it is.
 
-- [ ] 3.1 Add API authentication. For a single-operator system, a static API key
-      in an `X-API-Key` header validated by a FastAPI dependency is sufficient
-      and honest — document the choice and its limits in `ARCHITECTURE.md`.
-      Apply it to all mutating routes at minimum. Do not ship JWT/OAuth theatre
-      for a single-user system; a reviewer respects a justified simple choice
-      more than an over-engineered one.
-- [ ] 3.2 Add rate limiting on mutating endpoints (`slowapi` or a small custom
-      dependency reusing the existing token-bucket in the Binance adapter).
+- [x] 3.1 **DONE 2026-08-14** (DEC-2026-08-14-001). Static `X-API-Key` on all 21
+      mutating routes. Implemented as method-based middleware
+      (`src/api/auth.py`) rather than the per-route FastAPI dependency
+      originally specified here: a per-route dependency is fail-open, since
+      protection would depend on the author of every future endpoint
+      remembering it. Gating by HTTP method is fail-closed.
+      `tests/unit/api/test_auth.py::TestMutatingRouteCoverage` enumerates
+      `app.routes` and asserts the property for all 21, so a regression is a
+      test failure. Limits documented in `docs/ARCHITECTURE.md` section 8.1 and
+      `SECURITY.md`. **Blocks 3.8** — a public demo could not have shipped
+      before this.
+- [x] 3.2 **DONE 2026-08-14** (DEC-2026-08-14-003). Took the second option:
+      reuses the `TokenBucket` primitive from the Binance adapter rather than
+      adding `slowapi`, per the dependency-discipline rule. It reuses the
+      primitive but **not** the `RateLimiter` policy — that one blocks with
+      `asyncio.sleep`, which is right outbound and would be a DoS amplifier
+      inbound. Two buckets: per-client (fairness, spoofable) and global (the
+      un-evadable cap). Sits inside the auth layer so anonymous floods consume
+      no rate budget. 27 tests in `tests/unit/api/test_rate_limit.py`.
 - [ ] 3.3 Generate a typed API client for the frontend from the OpenAPI schema
       (`openapi-typescript`). This kills an entire class of drift between the
-      63 endpoints and the UI types.
+      61 endpoints and the UI types.
 - [ ] 3.4 Replace hardcoded page data with real queries, in priority order:
       1. `CockpitPage` — positions, PnL, activity, system status
       2. `PortfolioPage` — real equity curve from `equity_snapshots`
@@ -470,9 +650,18 @@ what the repo looks like and what it is.
 
 **Goal:** make "production ready" a demonstrable claim rather than an adjective.
 
-- [ ] 4.1 Add `docker-compose.yml` that brings up API + Postgres + frontend with
-      one command, seeded with demo data. This is the single highest-leverage
-      thing for a reviewer who wants to try it.
+- [~] 4.1 **PARTIAL 2026-08-15.** `docker compose up --build` now brings up the
+      API on a fresh clone. It previously failed outright: `env_file: .env`
+      made a gitignored file a hard requirement, and nothing created the
+      database schema, so the API would have booted and failed every query.
+      Both fixed, plus `LIVE_TRADING_ENABLED` and `BINANCE_TESTNET` hardcoded
+      rather than interpolated — Compose reads a local `.env` for `${VAR}`
+      substitution, which had a demo container resolving to mainnet.
+      **Still outstanding:** Postgres, the frontend, and seeded demo data
+      (item 4.2). **Runtime not yet verified end to end** — the Docker daemon
+      was unavailable when this landed; `docker compose config` validates and
+      `scripts/init_db.py` was verified idempotent, but nobody has watched the
+      container serve `/health`. Do that before claiming this item complete.
 - [ ] 4.2 Add a seed script producing a realistic demo dataset so a fresh clone
       is not an empty dashboard.
 - [ ] 4.3 Add `/metrics` (Prometheus format) exposing the metrics the
@@ -562,4 +751,46 @@ grep -rn "fetch(\|axios" frontend/src --include=*.ts --include=*.tsx | wc -l
 # Hygiene
 ls .github 2>/dev/null; ls LICENSE* 2>/dev/null
 git ls-files "*.md" | grep -v "/" | grep -cE "SESSION_|PHASE_"
+```
+
+Added 2026-08-21, for the findings in 2.9 and rows 13-35:
+
+```bash
+# Row 13 -- risk controls the live loop can reach. Expect 0.
+grep -cE "RiskController|circuit_breaker|dead_man|time_filter|event_filter|VolatilityAnalyzer|PositionSizer|concentration|weekly" scripts/run_live_trading.py
+
+# Row 14 -- live tiers that can emit SHORT, which becomes a spot SELL.
+grep -n "SignalDirection.SHORT" src/core/strategy/generators/macd_pullback.py src/core/strategy/generators/ichimoku_cloud_trend.py
+
+# Row 15 -- runtimes that invoke Alembic. Expect no output.
+grep -rn "alembic" --include="*.py" --include="*.yml" scripts/ .github/ Dockerfile Procfile railway.toml
+
+# Row 16 -- the constraint is in a migration, not on a model. Expect symbol.py only.
+grep -rn "UniqueConstraint\|unique=True" src/data/models/
+
+# Row 17 -- env vars the live loop reads, to diff against .env.example.
+grep -oE "os\.(getenv|environ\.get)\(\s*\"[A-Z_]+\"" scripts/run_live_trading.py | sort -u
+
+# Row 18 -- module-level functions shared by the paper and live loops. Expect "main".
+comm -12 <(grep -oE "^(async )?def [a-z_]+" scripts/run_live_trading.py | sed 's/async //' | sort -u) <(grep -oE "^(async )?def [a-z_]+" scripts/run_paper_trading.py | sed 's/async //' | sort -u)
+
+# Rows 19, 23 -- coverage of the code that actually trades.
+.venv/Scripts/python.exe -m pytest tests/ -q --tb=no --cov=scripts --cov-report=term
+grep -rn "_check_risk_guards\|_check_stops_and_tp" tests/
+
+# Row 20 -- the kill switch skipping an exit.
+grep -n 'kill_switch" in block_reason' scripts/run_live_trading.py
+
+# Rows 21, 27 -- connection recycling and reconciliation. Both expect no output.
+grep -rn "pool_pre_ping\|pool_recycle" src/
+grep -rn "reconcile" scripts/run_live_trading.py
+
+# Row 31 -- secret scanning that is configured but never run. Expect no output.
+grep -rn "gitleaks\|trufflehog\|bandit\|semgrep" .github/ .pre-commit-config.yaml
+
+# Row 32 -- frontend files fabricating data.
+grep -rl "Math.random" frontend/src --include="*.ts" --include="*.tsx"
+
+# Row 33 -- the orchestrator setter. Expect the definition and no call site.
+grep -rn "set_orchestrator" --include="*.py" src/ scripts/ tests/
 ```

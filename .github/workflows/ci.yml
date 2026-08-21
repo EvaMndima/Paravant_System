@@ -30,7 +30,7 @@ jobs:
           cache: pip
       - run: pip install -r requirements-dev.txt
       - name: ruff check
-        run: ruff check src/ research/ scripts/ tests/
+        run: ruff check src/ research/ scripts/ tests/ alembic/
 
   typecheck:
     name: Type check (mypy)
@@ -48,6 +48,69 @@ jobs:
         # research/features/ is included: it is the point-in-time feature
         # store, where a type error is a correctness risk, not a style one.
         run: mypy src/ research/features/
+
+  audit:
+    name: Dependency audit (pip-audit)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - run: pip install -r requirements-dev.txt
+      - name: pip-audit
+        # Audits the pinned production set against the PyPI advisory database.
+        #
+        # Blocking rather than advisory. An advisory security job is a job
+        # people learn to scroll past, which is the failure mode called out for
+        # flaky tests in DEC-2026-08-14-005 -- a signal that is always present
+        # and never actionable trains you to ignore the channel.
+        #
+        # requirements.txt only: a CVE in a linter that never runs against
+        # untrusted input is not a reason to block a merge, and including dev
+        # tooling would generate exactly the noise this is trying to avoid.
+        #
+        # NOTE: the baseline was never established locally -- the machine this
+        # landed on could not reach pypi.org (TLS chain failure), so this job
+        # has not been observed passing. If it is red on first run, triage the
+        # findings; do not reach for --ignore-vuln without reading them.
+        # Decision: DEC-2026-08-16-001
+        run: pip-audit -r requirements.txt --progress-spinner off
+
+  secrets:
+    # Added 2026-08-21. .gitleaks.toml has existed since b4cb1b8 and nothing
+    # ran it. A one-off scan cleared the history; a config file sitting in the
+    # repository then implied ongoing protection that did not exist, which is
+    # the same defect class as a constraint that lives only in an unrun
+    # migration.
+    #
+    # This repository's .env holds live exchange credentials. The cost of the
+    # gate is 30 seconds; the cost of the gap is a rotated key at best.
+    # Decision: DEC-2026-08-21-006
+    name: Secret scan (gitleaks)
+    runs-on: ubuntu-latest
+    steps:
+      # fetch-depth: 0 is load-bearing. actions/checkout defaults to a shallow
+      # clone of one commit, and --log-opts="--all" against a shallow clone
+      # scans that single commit and reports "no leaks found" -- a green tick
+      # for a scan that examined almost nothing.
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # Pinned, for the reason requirements-dev.txt gives at length: a gate
+      # whose meaning depends on the date of the install is not a gate. The
+      # version below is the one the config was verified against locally.
+      - name: Install gitleaks
+        env:
+          GITLEAKS_VERSION: 8.30.1
+        run: |
+          curl -sSfL             "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"             | tar -xz -C /usr/local/bin gitleaks
+          gitleaks version
+
+      - name: Scan the whole history
+        run: gitleaks git . --config .gitleaks.toml --log-opts="--all" --redact --verbose
 
   test:
     name: Tests (py${{ matrix.python-version }})
@@ -82,13 +145,74 @@ jobs:
           cache: pip
       - run: pip install -r requirements.txt -r requirements-dev.txt
       - name: pytest --cov
-        # Floor set just below the measured 63% so ordinary variation does not
+        # Measures the WHOLE suite, not just tests/unit + tests/research.
+        #
+        # It previously measured only those two directories while the `test`
+        # job ran everything. The effect was that any module tested from
+        # tests/integration/ reported near-zero coverage despite being fully
+        # exercised on every commit: src/data/store.py read 28% against a real
+        # 100%, and was ranked as finding #11 in the readiness assessment on
+        # the strength of that number. The measurement was the defect, not the
+        # tests. Narrowing this scope again would re-introduce it.
+        # Decision: DEC-2026-08-14-004
+        #
+        # Network-dependent tests skip unless PARAVANT_RUN_NETWORK_TESTS=1
+        # (DEC-2026-08-11-004), so this is deterministic on a clean runner.
+        #
+        # Floor sits just below the measured 74% so ordinary variation does not
         # break the build. Ratchet it up; never down.
         run: |
-          pytest tests/unit tests/research -q --tb=no \
+          pytest tests/ -q --tb=no \
             --cov=src --cov=research \
             --cov-report=term-missing:skip-covered \
-            --cov-fail-under=62
+            --cov-fail-under=72
+
+  migrations:
+    # Added 2026-08-21. Before this, nothing had ever applied the migration
+    # chain. It aborted at revision two of six on SQLite -- "No support for
+    # ALTER of constraints in SQLite dialect" -- and four revisions had never
+    # run. Separately, four schema objects existed only in the ORM models and
+    # in no migration, including `paper_trading_sessions`, which is where the
+    # live trading loop persists position state.
+    #
+    # None of that was visible, because no runtime invokes Alembic: every path
+    # calls Base.metadata.create_all(). A migration chain and a set of models
+    # are two descriptions of one schema and nothing forces them to agree
+    # unless something checks.
+    #
+    # This runs the alembic CLI as an operator would, then the test suite's
+    # programmatic comparison. The CLI leg is not redundant: `pytest tests/`
+    # exercises the Python API, and a broken alembic.ini or script_location
+    # would pass there and fail for a human.
+    # Decision: DEC-2026-08-21-005
+    name: Migrations match the models
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - run: pip install -r requirements.txt -r requirements-dev.txt
+
+      # DATABASE_URL, not alembic.ini. env.py honours it as of
+      # DEC-2026-08-21-005; before that it read the hardcoded ini value, so
+      # pointing alembic at a different database was not possible and doing so
+      # would have silently migrated the wrong one.
+      - name: Apply the whole chain to an empty database
+        env:
+          DATABASE_URL: sqlite:///ci_migrations.db
+        run: alembic upgrade head
+
+      - name: Downgrade to base and back, so downgrade() is not fiction
+        env:
+          DATABASE_URL: sqlite:///ci_migrations.db
+        run: |
+          alembic downgrade base
+          alembic upgrade head
+
+      - name: Assert the migrated schema equals the ORM models
+        run: pytest tests/integration/test_migrations.py -q --tb=short
 
   quickstart:
     name: Quickstart (${{ matrix.os }})
@@ -164,6 +288,37 @@ jobs:
         # `npm run build` runs `tsc -b` before vite, so this is a real type gate
         # for the frontend as well as a build check.
         run: npm run build
+
+  frontend-test:
+    # Added 2026-08-16. Before this the frontend had no test of any kind: CI
+    # ran `tsc -b`, which proves the types line up and says nothing about
+    # behaviour. 17,000 lines of UI were unverifiable, which is why wiring
+    # pages to real data (item 3.4) was deferred until this existed.
+    #
+    # Scope is the parts where a silent regression is costly: the shared
+    # formatters, the regime hook (one of only three real API calls), the
+    # positions table's gain/loss handling, and EmergencyPanel's typed
+    # confirmation gate.
+    #
+    # No coverage floor here on purpose. A handful of tests over a prototype
+    # would report a number low enough to be either meaningless or immediately
+    # blocking, and a gate that is routinely overridden teaches the team to
+    # override gates. Add one when the suite covers a defensible surface.
+    # Decision: DEC-2026-08-16-001
+    name: Frontend tests
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci
+      - run: npm test
 
   frontend-lint:
     # A real gate as of 2026-08-13: eslint reports 0 errors.
