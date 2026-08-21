@@ -354,7 +354,7 @@ Deeper detail: **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)** ·
 | Layer | Files | Lines | Notes |
 |---|---|---|---|
 | `src/` application | 169 `.py` | 49,831 | API, risk, execution, indicators, strategies |
-| `tests/` | 141 `.py` | 39,162 | 2,104 tests: 2,067 pass, 37 skip, 0 fail |
+| `tests/` | 142 `.py` | 39,580 | 2,152 tests: 2,115 pass, 37 skip, 0 fail |
 | `frontend/src/` | 101 `.ts`/`.tsx` | 18,503 | React 19 dashboard — see caveat below |
 | `scripts/` | 25 | 12,064 | Live loop, paper loop, sweeps, reporting |
 | `research/` | 32 `.py` | 6,493 | DSR, effective-K, cost model, feature store |
@@ -388,7 +388,7 @@ Highlights:
   with the caveat that the generators themselves sit at 13-21% line coverage, so
   the suite does not independently establish that a null result came from the
   mechanism rather than the implementation.
-- **137 dated architectural decisions** with rationale and rejected
+- **138 dated architectural decisions** with rationale and rejected
   alternatives, referenced by 77 distinct IDs from source comments.
 
 ---
@@ -512,7 +512,7 @@ Stated plainly, because a reviewer will find all of it anyway.
 **Engineering**
 
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) · [docs/API_CONTRACT.md](docs/API_CONTRACT.md) · [docs/INDICATOR_SPECIFICATION.md](docs/INDICATOR_SPECIFICATION.md)
-- [.claude/DECISIONS.md](.claude/DECISIONS.md) — 137 decisions with rationale and rejected alternatives
+- [.claude/DECISIONS.md](.claude/DECISIONS.md) — 138 decisions with rationale and rejected alternatives
 - [docs/operations/](docs/operations/) — kill-switch runbook, scheduled jobs
 - [docs/PRODUCTION_READINESS_ASSESSMENT.md](docs/PRODUCTION_READINESS_ASSESSMENT.md) — measured gaps and the plan
 

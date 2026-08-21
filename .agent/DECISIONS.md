@@ -3105,13 +3105,48 @@ parameters:
 
 ---
 
+### DEC-2026-08-21-007: Signal generators must be shown capable of signalling
+- **Decision:** `tests/unit/test_generator_liveness.py` walks each generator forward across nine synthetic market shapes and asserts it emits at least one signal. Parameters are derived from `config/templates/*.yaml` defaults, not written by hand. Four generators that do not yet fire are named in an `UNPROVEN` allowlist that cannot grow silently and fails if an entry starts firing. The tautological assertion in `test_signal_generators.py` is replaced with an unconditional one.
+- **Context:** The only test in the suite that called `generate()` on real-shaped data was:
+  ```python
+  result = gen.generate(series, params, "BTCUSDT")
+  if result is not None:
+      assert isinstance(result, TradingSignal)
+  ```
+  Every assertion sat behind a conditional that a generator returning `None` forever satisfies completely, under a docstring reading "may or may not signal". The remaining coverage across 29 generators was `template_id` equality, `min_bars_required > 0`, and `repr()` being truthy -- which is why they sit at 13-21% line coverage.
+
+  This matters more here than it would elsewhere. The repository's headline result is that 29 generators produced no validated edge, and every rejection carries a `FUNDAMENTAL` tag asserting "the mechanism failed, not the implementation". A suite that cannot distinguish a failed mechanism from a generator that never fired is not evidence for that claim.
+- **Rationale:**
+  - **Demonstrated, not argued.** Making `macd_pullback`'s entry condition unsatisfiable fails the new file and leaves `test_signal_generators.py` at 24 passed. That is the gap, measured.
+  - **Liveness, not correctness.** The test establishes that a generator *can* fire, which is what the old one appeared to cover. Asserting that each fires on the *right* market would require a specification of correct behaviour per generator that does not exist, and would be a bigger claim than the evidence supports.
+  - **The fixture was wrong three times before it was right, and distinguishing that from a real finding was the work.** Smooth sine curves with 0.4% wobble: 11 of 14 emitted nothing. A seeded random walk at realistic volatility: still 11, but a *different* 11 -- the signature of a sample measuring the draw rather than the generators. Sweeping five seeds: 8. Walking the series forward instead of evaluating only its last bar: 4. Each widening moved generators out of the failing set, which is what a fixture problem looks like; a genuinely dead generator would have stayed. Reporting the first result as "11 dead generators" would have been wrong and loud.
+  - **Walking forward is also what the system does.** `generate()` inspects only the last bar of the series it is handed. Calling it once on 500 bars asks whether bar 500 happened to be a setup -- for a strategy requiring price within 0.5% of an EMA, a low and largely accidental probability. The live loop calls it once per poll and the backtest walks forward; the test now matches.
+  - **Parameters are derived.** All 14 templates in `config/templates/` declare a default for every parameter, so the params come from the repository rather than from a hand-written table that would drift. A generator that gains a template is covered the day it does.
+  - **An allowlist, not a skip.** `UNPROVEN` names four generators whose setups these nine shapes do not produce. `test_the_allowlist_has_not_gone_stale` fails when one starts firing, forcing the entry out rather than letting it rot -- the idiom `test_governance_sync.py` already uses for known duplicate decision IDs. `test_most_generators_are_proven_alive` fails if the exemption list grows to swallow the test.
+  - **Determinism is asserted separately.** A generator reading a clock or a global random state would make every backtest in this repository unreproducible, and nothing else checked. Running each generator twice and comparing is three lines.
+- **Alternatives Considered:**
+  - **Hand-write a triggering fixture per generator:** REJECTED - 29 bespoke fixtures encoding one author's belief about each entry condition, which is a restatement of the implementation rather than an independent check, and which rots the moment a threshold moves.
+  - **Assert an exact signal count or direction:** REJECTED - that is a claim about correctness the repository has no specification to support, and it would fail on every legitimate parameter change.
+  - **Delete the tautological test:** REJECTED - the name describes something worth testing. A test whose name promises coverage should provide it or not exist.
+  - **Skip the four unproven generators:** REJECTED - a skip is invisible and permanent. An allowlist with a staleness check is visible and self-removing.
+  - **Widen the fixture until all fourteen fire:** REJECTED for now - tuning synthetic data until a specific generator fires risks producing a fixture shaped to the implementation, which is how a test stops being independent. Ten of fourteen on generic shapes is a stronger claim than fourteen of fourteen on shapes built to satisfy them.
+- **Status:** ACTIVE
+- **Date Decided:** 2026-08-21
+- **Implemented By:** Phase 1 structural guards (group 1.4)
+- **Affected Files:** `tests/unit/test_generator_liveness.py` (new, 48 tests), `tests/unit/test_signal_generators.py` (the tautology), `docs/PRODUCTION_READINESS_ASSESSMENT.md` row 19.
+- **Measured:** 10 of 14 templated generators proven to emit signals; 4 allowlisted; 48 tests in 27s after caching the walk. Mutation-tested: an unsatisfiable entry condition fails this file and passes the old one.
+- **Known gap:** 15 of the 29 generators have no template in `config/templates/` and are therefore not covered here. Their parameters live in the paper and live trading scripts. Recorded in row 19 rather than hidden.
+- **References:** `docs/PRODUCTION_READINESS_ASSESSMENT.md` row 19, `docs/RESEARCH_FINDINGS.md` (the `FUNDAMENTAL` tag this makes checkable), DEC-2026-02-08-003 (timezone-aware timestamps, asserted on every emitted signal).
+
+---
+
 ---
 
 **End of Decisions Log**
 
-**Total Decisions:** 137 active, 0 superseded, 5 locked (1 amended); DEC-2026-06-04-013 amended
+**Total Decisions:** 138 active, 0 superseded, 5 locked (1 amended); DEC-2026-06-04-013 amended
 **Last Updated:** 2026-08-21
-**Next Decision ID:** DEC-2026-08-21-007
+**Next Decision ID:** DEC-2026-08-21-008
 
 > Count corrected 2026-08-14. This footer read "107 active" while the file held
 > 124 real decision entries -- the count had drifted as decisions were appended

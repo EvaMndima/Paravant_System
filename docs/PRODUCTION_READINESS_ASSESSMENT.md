@@ -371,7 +371,7 @@ finding it sat next to survives and is strengthened -- see row 21.
 - The research validation layer: DSR, effective-K, pre-registered gates,
   cost modelling, negative-space tracking. This is stronger than what most
   retail quant projects attempt, and it is the differentiator.
-- The decision log: 137 dated decisions with rationale and alternatives.
+- The decision log: 138 dated decisions with rationale and alternatives.
 - The indicator library and data models: well typed, well tested, well factored.
 
 ### 3.2 What blocks a "production ready" verdict
@@ -406,7 +406,7 @@ Status column added 2026-08-14. "Resolved" means verified against the current
 | 16 | Unique constraint on `strategy_assignments (account_id, strategy_id)` exists only in an unrun migration, not on the model | High | Resolved 2026-08-21 — declared in `__table_args__`, so `create_all()` builds it; `test_duplicate_strategy_assignment_rejected` now asserts `IntegrityError` and that the original row survives, mutation-tested (DEC-2026-08-21-004). One existing test was found to be depending on the constraint's absence |
 | 17 | Every real-money control variable is undocumented | High | **Open** — `MAX_DAILY_LOSS_PCT`, `MAX_DRAWDOWN_PCT`, `LIVE_CAPITAL_USDT`, `LIVE_SYMBOL`, `LIVE_TEMPLATE`, `LIVE_STATE_FILE`, `MAX_CONCURRENT_SAME_DIRECTION` appear in no file. `.env.example` documents `DAILY_LOSS_LIMIT_PCT`, which no code reads as an env var |
 | 18 | Paper and live are separate implementations; the promotion gate's justification assumes they are not | High | **Open** — see 2.9 |
-| 19 | 29 signal generators at 13-21% coverage; the only generation test guards every assertion behind `if result is not None:` | High | **Open** — the suite cannot distinguish a failed mechanism from a generator that never signals |
+| 19 | 29 signal generators at 13-21% coverage; the only generation test guards every assertion behind `if result is not None:` | High | **Partly resolved 2026-08-21** — the tautology is gone, and 10 of the 14 generators with templates are proven to emit signals on generic market shapes; 4 are allowlisted with a staleness check (DEC-2026-08-21-007). Still **open**: 15 generators have no template in `config/templates/`, so their parameters are not derivable and they are not covered |
 | 20 | Kill switch blocks exits as well as entries | Medium | **Open** — see 2.9. No test covers it |
 | 21 | No `pool_pre_ping` or `pool_recycle` on the engine | Medium | Resolved 2026-08-21 — `engine_options()` in `src/data/database.py`, 18 tests, mutation-tested (DEC-2026-08-21-002). Predicted by audit, then found to have already occurred: `psycopg2.OperationalError: SSL connection has been closed unexpectedly` took down regime persistence on 2026-08-15 |
 | 22 | Auth middleware raises `TypeError` on a non-ASCII `X-API-Key` byte, returning 500 instead of 401 | Medium | **Open** — `secrets.compare_digest` rejects non-ASCII `str`. Distinguishes a malformed key from a wrong one by status code, which `_unauthorized()` documents itself as avoiding. Not reachable from the test client, which refuses to encode the header |
