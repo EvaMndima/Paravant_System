@@ -1,8 +1,17 @@
 # gitleaks configuration.
 #
-# Run:
-#   gitleaks detect --source . --log-opts="--all"   # full history
-#   gitleaks dir .                                  # working tree only
+# Enforced by the `secrets` job in .github/workflows/ci.yml, which runs the
+# whole-history scan below on every push and pull request. Between b4cb1b8 and
+# 2026-08-21 this file existed and nothing ran it, which is worse than not
+# having it: a config in the repository implies a gate.
+#
+# Run locally (gitleaks 8.30.1, the version CI pins):
+#   gitleaks git . --config .gitleaks.toml --log-opts="--all"   # full history
+#   gitleaks dir . --config .gitleaks.toml                      # working tree
+#
+# Note that `gitleaks dir .` walks node_modules/ and .venv/ and reports
+# hundreds of findings in third-party test fixtures. The history scan is the
+# meaningful one, and it is what CI runs.
 #
 # This extends the default rule set rather than replacing it. Two findings are
 # allowlisted, both inspected line by line before being suppressed, and both

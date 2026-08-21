@@ -3081,13 +3081,37 @@ parameters:
 
 ---
 
+### DEC-2026-08-21-006: Secret scanning is a CI gate, not a config file
+- **Decision:** A `secrets` job in `.github/workflows/ci.yml` runs `gitleaks git . --config .gitleaks.toml --log-opts="--all"` over the whole history on every push and pull request, with `fetch-depth: 0` and the gitleaks binary pinned to 8.30.1.
+- **Context:** `.gitleaks.toml` has existed since `b4cb1b8` ("security: clear git history with gitleaks and trufflehog, add a scan config"). The scan it records was real and one-off. Nothing has run gitleaks since, in CI or in a hook. A configuration file sitting in a repository implies a gate to anyone who finds it, and this one implied a gate over a repository whose `.env` holds live exchange credentials.
+- **Rationale:**
+  - **This is the same defect class as the rest of this group.** A unique constraint that lives only in an unrun migration, a risk package the live loop never reaches, a migration chain nobody applies, and a lint config nobody enforces all fail the same way: the artifact exists, so the protection is assumed, and nothing establishes that the assumption is true. The remedy in each case is the same -- run it, and fail the build when it fails.
+  - **Verified in both directions before shipping, which the `audit` job was not.** DEC-2026-08-16-001 added `pip-audit` with a note that it had never been observed passing, because the machine could not reach PyPI. That was honest and it left an unproven gate on a public repository. Here the binary was fetched through PowerShell -- which reaches the network where pip's CA bundle does not -- and run locally: the clean repository scans 156 commits and exits 0, and a scratch directory holding a planted AWS key exits 1. A gate that has only been observed passing is half-tested; the half that matters is that it fails.
+  - **`fetch-depth: 0` is load-bearing and easy to get wrong.** `actions/checkout` defaults to a shallow clone of one commit. `--log-opts="--all"` against a shallow clone scans that single commit and reports "no leaks found" -- a green tick over a scan that examined almost nothing. This is the failure mode of a gate that silently does nothing, and it would have looked identical to a working one.
+  - **History, not the working tree.** `gitleaks dir .` walks `node_modules/` and `.venv/` and reports 298 findings in third-party test fixtures, which is the kind of noise that trains people to ignore a channel -- the argument DEC-2026-08-14-005 makes about flaky tests. The history scan is 10 MB and 6 seconds and answers the question actually being asked: has a secret ever been committed.
+  - **Pinned, for the reason `requirements-dev.txt` argues at length.** A gate whose meaning depends on the date of the install is not a gate. 8.30.1 is the version the allowlist was verified against.
+  - **The config's own header now says CI runs it.** It previously documented two commands and left the reader to assume something invoked them.
+- **Alternatives Considered:**
+  - **`gitleaks/gitleaks-action@v2`:** REJECTED - it requires a `GITLEAKS_LICENSE` for organisation-owned repositories, which is a dependency on a licensing rule that can change, and it pins less transparently than fetching a released binary by version.
+  - **Scan only the pull-request diff:** REJECTED - faster, and blind to anything already in the history, including a secret introduced by a force-push. Six seconds does not justify the narrower question.
+  - **A pre-commit hook instead of CI:** REJECTED as a replacement, worth adding later as an addition. A hook is opt-in per clone and can be skipped with `--no-verify`; CI cannot be.
+  - **Add a SAST scanner in the same commit:** REJECTED - `pip-audit` covers dependencies and nothing analyses first-party code, which remains open as finding 31. It is a separate gate with its own noise profile and deserves its own decision.
+- **Status:** ACTIVE
+- **Date Decided:** 2026-08-21
+- **Implemented By:** Phase 1 structural guards (group 1.4)
+- **Affected Files:** `.github/workflows/ci.yml` (new `secrets` job), `.gitleaks.toml` (header), `README.md` (CI table).
+- **Measured:** clean history 156 commits, 10.26 MB, 6 seconds, exit 0; planted AWS key exits 1 with the same config.
+- **References:** `b4cb1b8` (the one-off scan this makes recurring), DEC-2026-08-16-001 (`pip-audit`, the gate that shipped unverified), `docs/PRODUCTION_READINESS_ASSESSMENT.md` row 31, `SECURITY.md`.
+
+---
+
 ---
 
 **End of Decisions Log**
 
-**Total Decisions:** 136 active, 0 superseded, 5 locked (1 amended); DEC-2026-06-04-013 amended
+**Total Decisions:** 137 active, 0 superseded, 5 locked (1 amended); DEC-2026-06-04-013 amended
 **Last Updated:** 2026-08-21
-**Next Decision ID:** DEC-2026-08-21-006
+**Next Decision ID:** DEC-2026-08-21-007
 
 > Count corrected 2026-08-14. This footer read "107 active" while the file held
 > 124 real decision entries -- the count had drifted as decisions were appended

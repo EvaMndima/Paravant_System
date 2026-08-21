@@ -388,7 +388,7 @@ Highlights:
   with the caveat that the generators themselves sit at 13-21% line coverage, so
   the suite does not independently establish that a null result came from the
   mechanism rather than the implementation.
-- **136 dated architectural decisions** with rationale and rejected
+- **137 dated architectural decisions** with rationale and rejected
   alternatives, referenced by 77 distinct IDs from source comments.
 
 ---
@@ -512,7 +512,7 @@ Stated plainly, because a reviewer will find all of it anyway.
 **Engineering**
 
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) · [docs/API_CONTRACT.md](docs/API_CONTRACT.md) · [docs/INDICATOR_SPECIFICATION.md](docs/INDICATOR_SPECIFICATION.md)
-- [.claude/DECISIONS.md](.claude/DECISIONS.md) — 136 decisions with rationale and rejected alternatives
+- [.claude/DECISIONS.md](.claude/DECISIONS.md) — 137 decisions with rationale and rejected alternatives
 - [docs/operations/](docs/operations/) — kill-switch runbook, scheduled jobs
 - [docs/PRODUCTION_READINESS_ASSESSMENT.md](docs/PRODUCTION_READINESS_ASSESSMENT.md) — measured gaps and the plan
 
@@ -537,13 +537,14 @@ run them against Binance testnet.
 
 `.github/workflows/ci.yml` gates every push and pull request:
 
-Ten jobs. Every one of them blocks — none is advisory.
+Eleven jobs. Every one of them blocks — none is advisory.
 
 | Job | Enforces |
 |---|---|
 | Lint | `ruff` over `src`, `research`, `scripts`, `tests` **and** `alembic` |
 | Type check | `mypy` over `src/` and `research/features/` |
 | Dependency audit | `pip-audit` against the pinned production set |
+| **Secret scan** | `gitleaks` over the **whole history**, pinned to 8.30.1 |
 | Tests | Python 3.11, 3.12, 3.13 |
 | Coverage | Floor at 72% (measured 74%), over the **whole** suite |
 | **Migrations** | Apply the whole Alembic chain to an empty database, downgrade to base and back, then assert the resulting schema equals the ORM models |
